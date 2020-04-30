@@ -25,28 +25,28 @@
 ## 为了更好的使用该库，推荐阅读下面的文章:
 ### [GT库官方教程入口](https://blog.csdn.net/qq_39799899/category_9956339.html)
 
-#### [第一章：GT库依赖篇]
-#### [第二章：日志(log)篇(常用推荐)]
-#### [第三章：吐司(Toast)篇]
-#### [第四章：对话框(AlertDialog)篇]
-#### [第五章：通知栏(Notification)篇]
-#### [第六章：sp存储(SharedPreferences)篇(常用推荐)]
-#### [第七章：IO 与 File篇]
-#### [第八章：网络请求(OkGo/OkHttp3)篇]
-#### [第九章：加载 PC 网页篇]
-#### [第十章：ApplicationUtils篇(常用推荐)]
-#### [第十一章：APP 迭代类篇]
-#### [第十二章：App存储池篇(常用推荐)]
-#### [第十三章：加密 与 权限篇]
-#### [第十四章：Android动画篇]
-#### [第十五章：窗体类篇]
-#### [第十六章：Game 游戏类篇]
-#### [第十七章：DeviceListening  设备监听类篇]
-#### [第十八章：多媒体类篇]
-#### [第十九章：线程类篇(常用推荐)]
-#### [第二十章：随机类篇]
+#### [第一章：GT库依赖篇](https://blog.csdn.net/qq_39799899/article/details/105819914)
+#### [第二章：日志(log)篇(常用推荐)](https://blog.csdn.net/qq_39799899/article/details/105820384)
+#### [第三章：吐司(Toast)篇](https://blog.csdn.net/qq_39799899/article/details/105845905)
+#### [第四章：对话框(AlertDialog)篇](https://blog.csdn.net/qq_39799899/article/details/105846700)
+#### [第五章：通知栏(Notification)篇](https://blog.csdn.net/qq_39799899/article/details/105848605)
+#### [第六章：sp存储(SharedPreferences)篇(常用推荐)](https://blog.csdn.net/qq_39799899/article/details/105849289)
+#### [第七章：IO 与 File篇](https://blog.csdn.net/qq_39799899/article/details/105849346)
+#### [第八章：网络请求(OkGo/OkHttp3)篇](https://blog.csdn.net/qq_39799899/article/details/105849520)
+#### [第九章：加载 PC 网页篇](https://blog.csdn.net/qq_39799899/article/details/105849651)
+#### [第十章：ApplicationUtils篇(常用推荐)](https://blog.csdn.net/qq_39799899/article/details/105849722)
+#### [第十一章：APP 迭代类篇](https://blog.csdn.net/qq_39799899/article/details/105850939)
+#### [第十二章：App存储池篇(常用推荐)](https://blog.csdn.net/qq_39799899/article/details/105851165)
+#### [第十三章：加密 与 权限篇](https://blog.csdn.net/qq_39799899/article/details/105851221)
+#### [第十四章：Android动画篇](https://blog.csdn.net/qq_39799899/article/details/105851308)
+#### [第十五章：窗体类篇](https://blog.csdn.net/qq_39799899/article/details/105851423)
+#### [第十六章：Game 游戏类篇](https://blog.csdn.net/qq_39799899/article/details/105851465)
+#### [第十七章：DeviceListening  设备监听类篇](https://blog.csdn.net/qq_39799899/article/details/105851553)
+#### [第十八章：多媒体类篇](https://blog.csdn.net/qq_39799899/article/details/105851586)
+#### [第十九章：线程类篇(常用推荐)](https://blog.csdn.net/qq_39799899/article/details/105851643)
+#### [第二十章：随机类篇](https://blog.csdn.net/qq_39799899/article/details/105851774)
 
-#### [GSLS_TOOL库：待更新]
+#### [GSLS_TOOL库：待更新]()
 
 # 如何使用
 ### 注意：以下为android的使用方式
