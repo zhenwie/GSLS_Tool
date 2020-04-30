@@ -1,5 +1,6 @@
 [![CSDN](https://img.shields.io/badge/Android%20Arsenal-Fragmentation-brightgreen.svg?style=flat)](https://blog.csdn.net/qq_39799899)
 [![Github](https://travis-ci.org/YoKeyword/Fragmentation.svg?branch=master)](https://github.com/1079374315)
+[![](https://jitpack.io/v/1079374315/GSLS_Tool.svg)](https://jitpack.io/#1079374315/GSLS_Tool)
 
 
 # 最新版本: 1.1.6
@@ -8,8 +9,6 @@
 ## 此次版本更新： 
 ````
 更新时间:2020.4.30（大爆料：更新 Hibernate 数据库）
- <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
- <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  更新内容：（1.1.6 版本）
  1.新增 LOG 日志类 分 Logcat 与 本地打印 用于打更加详细的日志。(最终效果 以最新教程为主)
  (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
@@ -23,17 +22,8 @@
  7.优化一下代码，默认不开启Util工具包
 ````
 
-[使用教程请关注楼主博客](https://blog.csdn.net/qq_39799899/article/details/98891256)
-
-![](/gif/logo.png)
-
-
-### 为了更好的使用该库，推荐阅读下面的文章:
-
-#### （当前章节有问题的或发现有bug的请各位在当前章节下的评论指出来，楼主会及时的进行修复与给予当事人答复。）
-
-
-
+## 为了更好的使用该库，推荐阅读下面的文章:
+### [GT库官方教程：](https://blog.csdn.net/qq_39799899/category_9956339.html)
 
 
 
@@ -68,7 +58,7 @@ dependencies {
 }
 ````
 
-## [当前 GT 最新版本 查看地址](https://jitpack.io/#1079374315/GT/v1.1.6)
+
 
 ## LICENSE
 ````
