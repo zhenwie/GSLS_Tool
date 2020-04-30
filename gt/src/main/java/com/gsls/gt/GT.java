@@ -197,31 +197,20 @@ import okhttp3.RequestBody;
  * 工具类说明：
  * GSLS_Tool
  * <p>
- * //GT全部功能 需要添加的包
- * //GT基础功能
- * implementation 'com.github.1079374315:GT:v1.1.5'//如果不需要使用全部功能，可以只添加GT基础依赖。
- * //GT全部功能 需要添加的包
- * implementation 'com.google.code.gson:gson:2.8.5'  //JSON 数据解析
- * implementation 'com.lzy.net:okgo:3.0.4' //OkGo 网络框架
- * implementation 'com.squareup.okhttp3:okhttp:3.12.0'//OkHttp 网络框架
- * implementation 'com.github.bumptech.glide:glide:4.9.0'//加载图片的 glide
- * implementation 'org.jsoup:jsoup:1.10.3'//Jsoup格式化html数据
- * implementation 'com.blankj:utilcodex:1.25.9'//集成 AndroidUtilCode 工具包
- * implementation 'org.jetbrains.kotlin:kotlin-reflect:1.3.50'//Kotlin 反射依赖
  * <p>
  * <p>
- * <p>
- 更新时间:2020.4.30（大爆料：更新 GT_SQL 数据库）
+ 更新时间:2020.4.30（大爆料：更新 Hibernate 数据库）
  <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- 更新内容：（1.6 版本）
+ 更新内容：（1.1.6 版本）
  1.新增 LOG 日志类 分 Logcat 与 本地打印 用于打更加详细的日志。(最终效果 以最新教程为主)
-    (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
-    (2)新增两种打印   本地普通打印：logs("****");   本地错误打印：errs("****");  （默认不开启本地打印，若需要开启请参考官网教程）
+ (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
+ (2)新增两种打印   本地普通打印：logs("****");   本地错误打印：errs("****");
+ （默认不开启本地打印，若需要开启请参考官网教程）
  2.新增 TOAST 吐司类 用于专门管理 吐司变量,将自定义吐司的类移至 TOAST 类中。
  3.AnnotationActivity、BaseActivity 类中增加 initFragment() 操作方法
  4.权限类(AppAuthorityManagement)中添加上申请白名单权限。
- 5.更新 GT_SQL 数据库类，依照 J2EE 的模式，根据实体类 映射出 数据库与字段，实现无SQL代码实现SQL逻辑的效果。（具体使用教程，请参考官网教程）
+ 5.更新 Hibernate 数据库类，依照 J2EE 的模式，根据实体类 映射出 数据库与字段，实现无SQL代码实现SQL逻辑的效果。（具体使用教程，请参考官网教程）
  6.优化的数据池的外部数据池代码
  7.优化一下代码，默认不开启Util工具包
  * <p>
@@ -1775,14 +1764,14 @@ public class GT {
     }
 
     /**
-     * @GT_SQL SQL
+     * @Hibernate SQL
      */
-    public static class GT_SQL {
+    public static class Hibernate {
 
-        //=============================== 实例化 GT_SQL 对象 ====================================
+        //=============================== 实例化 Hibernate 对象 ====================================
         private Context context;
 
-        public GT_SQL() {
+        public Hibernate() {
             Context context = getGT().getCONTEXT();
             if (context != null) {
                 this.context = context;
@@ -1791,7 +1780,7 @@ public class GT {
             }
         }
 
-        public GT_SQL(Context context) {
+        public Hibernate(Context context) {
             this.context = context;
         }
 
@@ -2013,7 +2002,7 @@ public class GT {
          *
          * @return
          */
-        public GT_SQL close() {
+        public Hibernate close() {
             if (sqLiteDatabase2 != null) {
                 sqLiteDatabase2.close();
             }
@@ -2022,7 +2011,7 @@ public class GT {
 
         /**
          * @param sqLiteDatabase2
-         * @设置GT_SQL数据库的SQL管理对象
+         * @设置Hibernate数据库的SQL管理对象
          */
         public void setSqLiteDatabase(SQLiteDatabase sqLiteDatabase2) {
             this.sqLiteDatabase2 = sqLiteDatabase2;
@@ -2197,7 +2186,7 @@ public class GT {
          * @return
          * @修改表名称
          */
-        public GT_SQL updateTableName(String oldTableName, String NewTableName) {
+        public Hibernate updateTableName(String oldTableName, String NewTableName) {
             String sql = "ALTER TABLE " + oldTableName + " RENAME TO " + NewTableName;
             sqLiteDatabase2.execSQL(sql);
             return this;
@@ -2230,7 +2219,7 @@ public class GT {
          * @return
          * @删除表
          */
-        public GT_SQL deleteTable(String tableName) {
+        public Hibernate deleteTable(String tableName) {
             String sql = "DROP TABLE " + tableName;
             sqLiteDatabase2.execSQL(sql);
             return this;
@@ -2271,7 +2260,7 @@ public class GT {
          * @return
          * @导入表的数据 (自动匹配相同表字段自动导入数据)
          */
-        public GT_SQL inputTableData(String oldTable, String newTable) {
+        public Hibernate inputTableData(String oldTable, String newTable) {
 
             List<String> tempSQLTableValue = getTableAllValue(oldTable);//获取上个版本表所有字段
             List<String> SQLTableValue = getTableAllValue(newTable);//获取当前最新版本数据库表所有字段
@@ -2304,7 +2293,7 @@ public class GT {
          * @return
          * @导入表的数据 (指定匹配相同表字段自动导入数据)
          */
-        public GT_SQL inputTableData(String oldTable, List<String> oldTableList, String newTable, List<String> newTableList) {
+        public Hibernate inputTableData(String oldTable, List<String> oldTableList, String newTable, List<String> newTableList) {
 
             if (isTable(oldTable) && isTable(newTable)) {//如果当前数据库存在该表
 
@@ -2362,7 +2351,7 @@ public class GT {
          * @return
          * @保存
          */
-        public GT_SQL save(String tableName, ContentValues contentValues) {
+        public Hibernate save(String tableName, ContentValues contentValues) {
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "保存的表不存在，操作失败");
                 status = false;
@@ -2387,7 +2376,7 @@ public class GT {
          * @return
          * @修改
          */
-        public GT_SQL update(String tableName, ContentValues contentValues, String condition, String[] valuesArray) {
+        public Hibernate update(String tableName, ContentValues contentValues, String condition, String[] valuesArray) {
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "修改的表不存在，操作失败");
                 status = false;
@@ -2411,7 +2400,7 @@ public class GT {
          * @return
          * @删除
          */
-        public GT_SQL delete(String tableName, String condition, String[] valuesArray) {
+        public Hibernate delete(String tableName, String condition, String[] valuesArray) {
             //进行删除
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "删除的表不存在，操作失败");
@@ -2432,7 +2421,7 @@ public class GT {
          * @return
          * @删除所有表
          */
-        public GT_SQL deleteAll(String tableName) {
+        public Hibernate deleteAll(String tableName) {
 
             //判断这个表是否存在
             if (!isTable(tableName)) {
@@ -2481,7 +2470,7 @@ public class GT {
          * @return
          * @保存数据
          */
-        public GT_SQL save(Object bean) {
+        public Hibernate save(Object bean) {
 
             if (bean == null) {
                 err(getLineInfo(2), "保存的对象为null，操作失败！");
@@ -2607,7 +2596,7 @@ public class GT {
          * @return
          * @更新表
          */
-        public GT_SQL update(Class<?> tableClass, Object bean, Object conditions, Object values) {
+        public Hibernate update(Class<?> tableClass, Object bean, Object conditions, Object values) {
 
             if (tableClass == null || bean == null || conditions == null || values == null) {
                 err(getLineInfo(2), "修改的数据为null，操作失败");
@@ -2752,7 +2741,7 @@ public class GT {
          * @return
          * @修改表
          */
-        public GT_SQL update(Class<?> tableClass, Object bean, Object keyValue) {
+        public Hibernate update(Class<?> tableClass, Object bean, Object keyValue) {
 
             //判空
             if (bean == null || keyValue == null || tableClass == null) {
@@ -2855,7 +2844,7 @@ public class GT {
          * @return
          * @更新这张表全部数据
          */
-        public GT_SQL updateAll(Class<?> tableClass, ContentValues contentValues) {
+        public Hibernate updateAll(Class<?> tableClass, ContentValues contentValues) {
 
             //判空
             if (contentValues == null || tableClass == null) {
@@ -2892,7 +2881,7 @@ public class GT {
          * @return
          * @删除表
          */
-        public GT_SQL delete(Class<?> beanClass, Object conditions, Object values) {
+        public Hibernate delete(Class<?> beanClass, Object conditions, Object values) {
 
             if (beanClass == null) {
                 err(getLineInfo(2), "删除的 beanClass 数据为null，操作失败");
@@ -2985,7 +2974,7 @@ public class GT {
          * @return
          * @更具ID删除
          */
-        public GT_SQL delete(Class<?> beanClass, Object keyValue) {
+        public Hibernate delete(Class<?> beanClass, Object keyValue) {
 
             if (beanClass == null) {
                 err(getLineInfo(2), "删除的 beanClass 数据为null，操作失败");
@@ -3033,7 +3022,7 @@ public class GT {
          * @return
          * @删除所有表
          */
-        public GT_SQL deleteAll(Class<?> tableClass) {
+        public Hibernate deleteAll(Class<?> tableClass) {
 
             //初始化与获取必要属性
             String simpleName = tableClass.getSimpleName();//获取表名
@@ -3061,17 +3050,17 @@ public class GT {
         private String orderByStr = "";//排序
         private String limitStr = "";//限量
 
-        public GT_SQL flashback(String orderByStr) {
+        public Hibernate flashback(String orderByStr) {
             this.orderByStr = orderByStr + " desc";
             return this;
         }
 
-        public GT_SQL limit(int limitStr) {
+        public Hibernate limit(int limitStr) {
             this.limitStr = limitStr + "";
             return this;
         }
 
-        public GT_SQL limit(int limitStart, int limitEnd) {
+        public Hibernate limit(int limitStart, int limitEnd) {
             this.limitStr = limitStart + "," + limitEnd;
             return this;
         }
@@ -4648,7 +4637,7 @@ public class GT {
          * @return
          * @初始化数据库名称
          */
-        public GT_SQL init_1_SqlName(String sqlName) {
+        public Hibernate init_1_SqlName(String sqlName) {
             if (sqlName != null) {
                 DATABASE_NAME = sqlName + ".db";
             }
@@ -4662,7 +4651,7 @@ public class GT {
          * @return
          * @初始化数据库版本号
          */
-        public GT_SQL init_2_SqlVersion(int sqlVersion) {
+        public Hibernate init_2_SqlVersion(int sqlVersion) {
             if (sqlVersion > 0) {
                 DATABASE_VERSION = sqlVersion;
             }
@@ -4680,7 +4669,7 @@ public class GT {
          * @2.实体类的class User.class
          * @3.实体类的 List/Set/Array ：List<Class<?>> 、 Set<Class<?>、 Class<?>[]
          */
-        public GT_SQL init_3_SqlTable(Object scanTable) {
+        public Hibernate init_3_SqlTable(Object scanTable) {
             isCreateTable = true;
             tableNameList.clear();
             creationTableNameList.clear();
@@ -4727,7 +4716,7 @@ public class GT {
             //检测扫描路径
             if (isReflect) {//如果需要反射就进行反射得到 class
                 if (!"".equals(EnityPackagePath)) {
-                    loadGT_SQLAnnotation(EnityPackagePath, context);
+                    loadHibernateAnnotation(EnityPackagePath, context);
                 } else {
                     errs("当前扫描数据库实体类的路径有错误！请检查该路径。EnityPackagePath = " + EnityPackagePath);
                     isCreateTable = false;
@@ -4758,7 +4747,7 @@ public class GT {
         private String sqlChar = "";//添加要创建表字段
 
         //解析 主键 与 字段 自动生成 SQL 语句
-        private GT_SQL analysisClassData() {
+        private Hibernate analysisClassData() {
 
             boolean isKey = false;//是否存在多个主键
 
@@ -4923,7 +4912,7 @@ public class GT {
         //====================================== 第四步：创建数据库对象 ======================================
         public static boolean isCreateTable = true;//是否创建数据库
 
-        public GT_SQL init_4_Sql() {
+        public Hibernate init_4_Sql() {
             if (isCreateTable) {//是否执行创建数据库代码
                 DatabaseHelper databaseHelper = new DatabaseHelper(context, DATABASE_NAME, null, DATABASE_VERSION);
                 try {
@@ -4936,7 +4925,7 @@ public class GT {
         }
 
         //====================================== 加载 包名扫描 SQL 注解 ======================================
-        private void loadGT_SQLAnnotation(String EnityPackagePath, Context context) {
+        private void loadHibernateAnnotation(String EnityPackagePath, Context context) {
             DexFile dexFile = null;
             try {
                 dexFile = new DexFile(context.getPackageCodePath());
@@ -11396,8 +11385,8 @@ public class GT {
          * @param sqlVersions 数据库版本
          * @初始化 SQL
          */
-        protected GT_SQL initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
-            return new GT_SQL()
+        protected Hibernate initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
+            return new Hibernate()
                     .init_1_SqlName(SQLName)            //设置SQL名称
                     .init_2_SqlVersion(sqlVersions)     //设置数据库版本
                     .init_3_SqlTable(tableClass)        //设置创建或更新升级的数据库表
@@ -11410,8 +11399,8 @@ public class GT {
          * @return
          * @用户自定义SQLCode
          */
-        protected GT_SQL initSQL(String SQLName, int sqlVersions) {
-            return new GT_SQL()
+        protected Hibernate initSQL(String SQLName, int sqlVersions) {
+            return new Hibernate()
                     .init_1_SqlName(SQLName)            //设置SQL名称
                     .init_2_SqlVersion(sqlVersions)     //设置数据库版本
                     .init_3_SqlTable(ApplicationUtils.getPackageName(this))        //设置创建或更新升级的数据库表
@@ -11424,8 +11413,8 @@ public class GT {
          * @param sqlVersions 数据库版本
          * @初始化 SQL
          */
-        protected GT_SQL initSQL(String SQLName, String tablePath, int sqlVersions) {
-            return new GT_SQL()
+        protected Hibernate initSQL(String SQLName, String tablePath, int sqlVersions) {
+            return new Hibernate()
                     .init_1_SqlName(SQLName)
                     .init_2_SqlVersion(sqlVersions)
                     .init_3_SqlTable(tablePath)
@@ -11438,8 +11427,8 @@ public class GT {
          * @param sqlVersions 数据库版本
          * @初始化 SQL
          */
-        protected GT_SQL initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
-            return new GT_SQL()
+        protected Hibernate initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
+            return new Hibernate()
                     .init_1_SqlName(SQLName)
                     .init_2_SqlVersion(sqlVersions)
                     .init_3_SqlTable(tableList)
@@ -11452,8 +11441,8 @@ public class GT {
          * @param sqlVersions 数据库版本
          * @初始化 SQL
          */
-        protected GT_SQL initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
-            return new GT_SQL()
+        protected Hibernate initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
+            return new Hibernate()
                     .init_1_SqlName(SQLName)
                     .init_2_SqlVersion(sqlVersions)
                     .init_3_SqlTable(tableSet)
@@ -11467,8 +11456,8 @@ public class GT {
          * @param sqlVersions 数据库版本
          * @初始化 SQL
          */
-        protected GT_SQL initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
-            return new GT_SQL()
+        protected Hibernate initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
+            return new Hibernate()
                     .init_1_SqlName(SQLName)
                     .init_2_SqlVersion(sqlVersions)
                     .init_3_SqlTable(tableArray)
@@ -13576,19 +13565,19 @@ public class GT {
                 Object classObject = null;//最终注入的值
 
                 //获取识别注解
-                GT_SQL.Build initView_GT_SQL = field.getAnnotation(GT_SQL.Build.class);
-                GT_SQL.GT_Entitys initView_Entitys = field.getAnnotation(GT_SQL.GT_Entitys.class);
-                GT_SQL.GT_Beans initView_Beans = field.getAnnotation(GT_SQL.GT_Beans.class);
+                Hibernate.Build initView_Hibernate = field.getAnnotation(Hibernate.Build.class);
+                Hibernate.GT_Entitys initView_Entitys = field.getAnnotation(Hibernate.GT_Entitys.class);
+                Hibernate.GT_Beans initView_Beans = field.getAnnotation(Hibernate.GT_Beans.class);
 
                 //初始化GT数据库
-                if (initView_GT_SQL != null) {
-                    String sqlName = initView_GT_SQL.sqlName();
-                    int sqlVersion = initView_GT_SQL.sqlVersion();
+                if (initView_Hibernate != null) {
+                    String sqlName = initView_Hibernate.sqlName();
+                    int sqlVersion = initView_Hibernate.sqlVersion();
                     if (getGT().getCONTEXT() == null) {
                         err(getLineInfo(2), "注入数据库失败！请在 Activity 中绑定GT注解");
                         return;
                     }
-                    classObject = new GT_SQL()
+                    classObject = new Hibernate()
                             .init_1_SqlName(sqlName)            //设置SQL名称
                             .init_2_SqlVersion(sqlVersion)     //设置数据库版本
                             .init_3_SqlTable(ApplicationUtils.getPackageName(getGT().getCONTEXT()))        //设置创建或更新升级的数据库表
@@ -13625,8 +13614,8 @@ public class GT {
 
                     /*List<Class<?>> classList = new ArrayList<>();//存储筛选过后的注解值
                     for(Class cla : classes){
-                        Annotation subAnnotation_GT_Bean = cla.getAnnotation(GT_SQL.GT_Bean.class);	//获取被 GT_Bean 注解过的类
-                        Annotation subAnnotation_GT_Entity = cla.getAnnotation(GT_SQL.GT_Entity.class);	//获取被 GT_Entity 注解过的类
+                        Annotation subAnnotation_GT_Bean = cla.getAnnotation(Hibernate.GT_Bean.class);	//获取被 GT_Bean 注解过的类
+                        Annotation subAnnotation_GT_Entity = cla.getAnnotation(Hibernate.GT_Entity.class);	//获取被 GT_Entity 注解过的类
 
                         //当前注解值的类是否被 SQL 注解标识过，如果被标识过就存储到集合中
                         if(subAnnotation_GT_Bean != null || subAnnotation_GT_Entity != null){
