@@ -107,7 +107,6 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
-import com.blankj.utilcode.util.AppUtils;
 import com.blankj.utilcode.util.Utils;
 import com.bumptech.glide.Glide;
 import com.google.gson.Gson;
@@ -193,6 +192,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 
+
 /**
  * 工具类说明：
  * GSLS_Tool
@@ -206,7 +206,6 @@ import okhttp3.RequestBody;
  1.新增 LOG 日志类 分 Logcat 与 本地打印 用于打更加详细的日志。(最终效果 以最新教程为主)
  (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
  (2)新增两种打印   本地普通打印：logs("****");   本地错误打印：errs("****");
- （默认不开启本地打印，若需要开启请参考官网教程）
  2.新增 TOAST 吐司类 用于专门管理 吐司变量,将自定义吐司的类移至 TOAST 类中。
  3.AnnotationActivity、BaseActivity 类中增加 initFragment() 操作方法
  4.权限类(AppAuthorityManagement)中添加上申请白名单权限。
@@ -8533,10 +8532,10 @@ public class GT {
             public static void init(Activity activity, Object passWord) {
                 gt_file = new GT_File();//创建 File 对象
                 gson = new Gson();
-                appPackage = AppUtils.getAppPackageName();
+                appPackage = ApplicationUtils.getPackageName(activity);
                 AppAuthorityManagement.readWritePermission(activity);//申请文件读写的6.0以上权限
                 External.passWord = Encryption.MD5.encryptMD5(appPackage + passWord);//将 密码 进行 MD5 加密
-                fileName = getAppName(AppUtils.getAppPackageName());
+                fileName = getAppName(ApplicationUtils.getPackageName(activity));
             }
 
             /**
@@ -8791,7 +8790,7 @@ public class GT {
                 if (externalDataPool != null && !externalDataPool.containsKey(key)) {
                     externalDataPool.clear();
                     String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                    gt_file.save(encryptData, fileSaveDataPath + AppUtils.getAppPackageName(), fileName);
+                    gt_file.save(encryptData, fileSaveDataPath + appPackage, fileName);
                     return true;
                 } else {
                     if (LOG.isGtLogTf()) {
@@ -12476,22 +12475,22 @@ public class GT {
             /**
              用法如下：
              //屏幕旋转监听 内部类
-                 class SV extends SpiritleveView{
+             class SV extends SpiritleveView{
              * *
-                     public SV(Context context) {
-                         super(context);
-                     }
+             public SV(Context context) {
+             super(context);
+             }
              * *
-                     @Override
-                     protected void getPosition(float xAngle, float yAngle) {
-                         super.getPosition(xAngle, yAngle);
-                         GT.log("X:" + (int)xAngle + "," + "Y:" + (int)yAngle);
-                     }
-                 }
-             * *
-                 最后再在方法中初始化
-                  new SV(activity);
-             * *
+             @Override
+             protected void getPosition(float xAngle, float yAngle) {
+             super.getPosition(xAngle, yAngle);
+             GT.log("X:" + (int)xAngle + "," + "Y:" + (int)yAngle);
+             }
+             }
+              * *
+             最后再在方法中初始化
+             new SV(activity);
+              * *
              */
             float[] acceleromterValues = new float[3];//加速度传感器的值
             float[] magneticValues = new float[3];//磁场传感器的值

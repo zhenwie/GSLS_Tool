@@ -200,20 +200,20 @@ import okhttp3.RequestBody;
  * <p>
  * <p>
  * <p>
- 更新时间:2020.4.30（大爆料：更新 Hibernate 数据库）
- <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
- <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- 更新内容：（1.1.6 版本）
- 1.新增 LOG 日志类 分 Logcat 与 本地打印 用于打更加详细的日志。(最终效果 以最新教程为主)
- (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
- (2)新增两种打印   本地普通打印：logs("****");   本地错误打印：errs("****");
- （默认不开启本地打印，若需要开启请参考官网教程）
- 2.新增 TOAST 吐司类 用于专门管理 吐司变量,将自定义吐司的类移至 TOAST 类中。
- 3.AnnotationActivity、BaseActivity 类中增加 initFragment() 操作方法
- 4.权限类(AppAuthorityManagement)中添加上申请白名单权限。
- 5.更新 Hibernate 数据库类，依照 J2EE 的模式，根据实体类 映射出 数据库与字段，实现无SQL代码实现SQL逻辑的效果。（具体使用教程，请参考官网教程）
- 6.优化的数据池的外部数据池代码
- 7.优化一下代码，默认不开启Util工具包
+ * 更新时间:2020.4.30（大爆料：更新 Hibernate 数据库）
+ * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
+ * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
+ * 更新内容：（1.1.6 版本）
+ * 1.新增 LOG 日志类 分 Logcat 与 本地打印 用于打更加详细的日志。(最终效果 以最新教程为主)
+ * (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
+ * (2)新增两种打印   本地普通打印：logs("****");   本地错误打印：errs("****");
+ * （默认不开启本地打印，若需要开启请参考官网教程）
+ * 2.新增 TOAST 吐司类 用于专门管理 吐司变量,将自定义吐司的类移至 TOAST 类中。
+ * 3.AnnotationActivity、BaseActivity 类中增加 initFragment() 操作方法
+ * 4.权限类(AppAuthorityManagement)中添加上申请白名单权限。
+ * 5.更新 Hibernate 数据库类，依照 J2EE 的模式，根据实体类 映射出 数据库与字段，实现无SQL代码实现SQL逻辑的效果。（具体使用教程，请参考官网教程）
+ * 6.优化的数据池的外部数据池代码
+ * 7.优化一下代码，默认不开启Util工具包
  * <p>
  * <p>
  * <p>
@@ -2353,6 +2353,10 @@ public class GT {
          * @保存
          */
         public Hibernate save(String tableName, ContentValues contentValues) {
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "保存的表不存在，操作失败");
                 status = false;
@@ -2366,6 +2370,7 @@ public class GT {
             } else {
                 status = true;
             }
+
             return this;
         }
 
@@ -2378,6 +2383,11 @@ public class GT {
          * @修改
          */
         public Hibernate update(String tableName, ContentValues contentValues, String condition, String[] valuesArray) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "修改的表不存在，操作失败");
                 status = false;
@@ -2402,14 +2412,19 @@ public class GT {
          * @删除
          */
         public Hibernate delete(String tableName, String condition, String[] valuesArray) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
             //进行删除
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "删除的表不存在，操作失败");
                 status = false;
                 return this;
             }
-            int update = sqLiteDatabase2.delete(tableName, condition, valuesArray);
-            if (update == 0) {
+            statusNumber = sqLiteDatabase2.delete(tableName, condition, valuesArray);
+            if (statusNumber == 0) {
                 status = false;
             } else {
                 status = true;
@@ -2423,6 +2438,10 @@ public class GT {
          * @删除所有表
          */
         public Hibernate deleteAll(String tableName) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             //判断这个表是否存在
             if (!isTable(tableName)) {
@@ -2450,6 +2469,10 @@ public class GT {
          */
         public Cursor query(String tableName, String condition, String[] valuesArray) {
 
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
             //判断这个表是否存在
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "查询的表不存在，操作失败");
@@ -2472,6 +2495,10 @@ public class GT {
          * @保存数据
          */
         public Hibernate save(Object bean) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (bean == null) {
                 err(getLineInfo(2), "保存的对象为null，操作失败！");
@@ -2598,6 +2625,10 @@ public class GT {
          * @更新表
          */
         public Hibernate update(Class<?> tableClass, Object bean, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableClass == null || bean == null || conditions == null || values == null) {
                 err(getLineInfo(2), "修改的数据为null，操作失败");
@@ -2744,6 +2775,10 @@ public class GT {
          */
         public Hibernate update(Class<?> tableClass, Object bean, Object keyValue) {
 
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
             //判空
             if (bean == null || keyValue == null || tableClass == null) {
                 err(getLineInfo(2), "修改的参数为null，操作失败");
@@ -2847,6 +2882,10 @@ public class GT {
          */
         public Hibernate updateAll(Class<?> tableClass, ContentValues contentValues) {
 
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
             //判空
             if (contentValues == null || tableClass == null) {
                 err(getLineInfo(2), "修改的参数为null，操作失败");
@@ -2883,6 +2922,10 @@ public class GT {
          * @删除表
          */
         public Hibernate delete(Class<?> beanClass, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (beanClass == null) {
                 err(getLineInfo(2), "删除的 beanClass 数据为null，操作失败");
@@ -2958,9 +3001,9 @@ public class GT {
             }
 
             //进行更新
-            int update = sqLiteDatabase2.delete(simpleName, condition, valuesArray);
+            statusNumber = sqLiteDatabase2.delete(simpleName, condition, valuesArray);
 
-            if (update == 0) {
+            if (statusNumber == 0) {
                 status = false;
             } else {
                 status = true;
@@ -2976,6 +3019,10 @@ public class GT {
          * @更具ID删除
          */
         public Hibernate delete(Class<?> beanClass, Object keyValue) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (beanClass == null) {
                 err(getLineInfo(2), "删除的 beanClass 数据为null，操作失败");
@@ -3007,9 +3054,9 @@ public class GT {
             }
 
             //进行更新
-            int update = sqLiteDatabase2.delete(simpleName, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});
+            statusNumber = sqLiteDatabase2.delete(simpleName, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});
 
-            if (update == 0) {
+            if (statusNumber == 0) {
                 status = false;
             } else {
                 status = true;
@@ -3024,6 +3071,10 @@ public class GT {
          * @删除所有表
          */
         public Hibernate deleteAll(Class<?> tableClass) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             //初始化与获取必要属性
             String simpleName = tableClass.getSimpleName();//获取表名
@@ -3074,6 +3125,10 @@ public class GT {
          * @根据表ID查询数据
          */
         public <T> T query(Class<T> tableNameClass, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null || values == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -3200,6 +3255,12 @@ public class GT {
                 cursor.close();//释放资源
             }
 
+            //初始化状态值
+            if(bean != null){
+                statusNumber = 1;
+                status = true;
+            }
+
             return bean;
         }
 
@@ -3212,6 +3273,10 @@ public class GT {
          * @查询一条数据
          */
         public <T> T query(Class<T> tableNameClass, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null || conditions == null || values == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -3373,6 +3438,12 @@ public class GT {
                 cursor.close();//释放资源
             }
 
+            //初始化状态值
+            if (bean != null){
+                statusNumber = 1;
+                status = true;
+            }
+
             return bean;
         }
 
@@ -3386,6 +3457,10 @@ public class GT {
          * @查询一条数据
          */
         public <T> T query(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -3555,6 +3630,12 @@ public class GT {
                 cursor.close();//释放资源
             }
 
+            if(bean != null){
+                //初始化状态值
+                statusNumber = 1;
+                status = true;
+            }
+
             return bean;
         }
 
@@ -3568,6 +3649,10 @@ public class GT {
          * @查询最后一条数据
          */
         public <T> T queryLast(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -3737,6 +3822,12 @@ public class GT {
                 cursor.close();//释放资源
             }
 
+            if(bean != null){
+                //初始化状态值
+                statusNumber = 1;
+                status = true;
+            }
+
             return bean;
         }
 
@@ -3750,6 +3841,10 @@ public class GT {
          * @查询第一条数据
          */
         public <T> T queryFirst(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -3919,8 +4014,389 @@ public class GT {
                 cursor.close();//释放资源
             }
 
+            if(bean != null){
+                //初始化状态值
+                statusNumber = 1;
+                status = true;
+            }
+
             return bean;
         }
+
+        /**
+         * @param tableNameClass
+         * @param returnValue
+         * @param conditions
+         * @param values
+         * @param <T>
+         * @return
+         * @查询最后一条数据
+         */
+        public <T> T queryLast(Class<T> tableNameClass, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
+            if (tableNameClass == null || conditions == null || values == null) {
+                err(getLineInfo(2), "查询的数据为 null，操作失败");
+                status = false;
+                return null;
+            }
+
+            //监测条件
+            String conditionsType = conditions.getClass().getSimpleName();
+            String valuesType = values.getClass().getSimpleName();
+
+            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
+                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
+                status = false;
+                return null;
+            }
+
+            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
+                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
+                status = false;
+                return null;
+            }
+
+            //解析查询条件 conditions （String）
+            String condition = "";//解析筛选条件
+            if (conditionsType.equals("String[]")) {
+                for (String str : (String[]) conditions) {
+                    condition += (str + " = ? and ");
+                }
+
+                //去掉最后一个多余 and
+                condition = condition.substring(0, condition.lastIndexOf("and"));
+            } else if (conditionsType.equals("String")) {
+                condition = (String) conditions;
+            }
+
+            //解析查询条件值
+            String[] valuesArray = new String[1];//解析筛选值
+            if (valuesType.equals("String[]")) {
+                valuesArray = (String[]) values;
+            } else if (valuesType.equals("String")) {
+                valuesArray[0] = (String) values;
+            }
+
+            //获取表名
+            String tableName = tableNameClass.getSimpleName();
+            //判断这个表是否存在
+            if (!isTable(tableName)) {
+                err(getLineInfo(2), "查询的表不存在，操作失败");
+                status = false;
+                return null;
+            }
+
+            //获取当前类的所有字段
+            String[] returnValue = null;
+            List<String> tableAllValue = getTableAllValue(tableName);
+            if (tableAllValue != null && tableAllValue.size() > 0) {
+                returnValue = new String[tableAllValue.size()];
+                for (int i = 0; i < tableAllValue.size(); i++) {
+                    returnValue[i] = tableAllValue.get(i);
+                }
+            }
+
+            T bean = null;//定义泛型
+            try {
+                bean = tableNameClass.newInstance();//实体化
+            } catch (IllegalAccessException e) {
+//                e.printStackTrace();
+                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
+                status = false;
+                return null;
+            } catch (InstantiationException e) {
+                e.printStackTrace();
+                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
+                status = false;
+                return null;
+            }
+
+            Field[] fields = bean.getClass().getDeclaredFields();
+
+            for (Field field : fields) {
+                String valueName = field.getName();
+                Class<?> type = field.getType();
+                field.setAccessible(true);
+
+                //反射生成对象并注入
+                Cursor cursor = sqLiteDatabase2.query(tableName, returnValue, condition, valuesArray, null, null, null);
+
+                if (cursor != null && cursor.getCount() > 0) {
+                    cursor.moveToLast();//移动到最后一位
+                    for (String str : (String[]) returnValue) {
+                        Object obj = null;
+                        if (str.equals(valueName)) {
+                            if (String.class == type) {
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (int.class == type || Integer.class == type) {
+                                int value = cursor.getInt(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (boolean.class == type || Boolean.class == type) {
+                                int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
+                                if (value == 1) {
+                                    obj = true;
+                                } else if (value == 0) {
+                                    obj = false;
+                                }
+                            } else if (double.class == type || Double.class == type) {
+                                double value = cursor.getDouble(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (float.class == type || Float.class == type) {
+                                float value = cursor.getFloat(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (Time.class == type) {
+                                String time = cursor.getString(cursor.getColumnIndex(valueName));
+                                if (time == null || time.length() == 0) {
+                                    time = new Time(System.currentTimeMillis()).toString();
+                                }
+                                SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
+                                Date d2 = null;
+                                try {
+                                    d2 = format2.parse(time);
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                }
+                                Time startTimeFmt = new Time(d2.getTime());
+                                obj = startTimeFmt;
+                            } else if (Date.class == type || java.sql.Date.class == type) {
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                try {
+                                    Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
+                                    obj = date;
+                                } catch (ParseException e) {
+                                    e.printStackTrace();
+                                }
+                            } else if (long.class == type || Long.class == type) {
+                                long value = cursor.getLong(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (short.class == type || Short.class == type) {
+                                short value = cursor.getShort(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (byte[].class.equals(type)) {
+                                byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (SQLValue.Text.class == type) {
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                obj = new SQLValue.Text<Object>(value);
+                            } else {
+                                err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                            }
+                        }
+
+                        if (obj != null) {
+                            try {
+                                field.set(bean, obj);
+                                continue;
+                            } catch (IllegalAccessException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                }
+                cursor.close();//释放资源
+            }
+
+            if(bean != null){
+                //初始化状态值
+                statusNumber = 1;
+                status = true;
+            }
+
+            return bean;
+        }
+
+        /**
+         * @param tableNameClass
+         * @param returnValue
+         * @param conditions
+         * @param values
+         * @param <T>
+         * @return
+         * @查询第一条数据
+         */
+        public <T> T queryFirst(Class<T> tableNameClass, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
+            if (tableNameClass == null || conditions == null || values == null) {
+                err(getLineInfo(2), "查询的数据为 null，操作失败");
+                status = false;
+                return null;
+            }
+
+            //监测条件
+            String conditionsType = conditions.getClass().getSimpleName();
+            String valuesType = values.getClass().getSimpleName();
+
+            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
+                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
+                status = false;
+                return null;
+            }
+
+            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
+                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
+                status = false;
+                return null;
+            }
+
+            //解析查询条件 conditions （String）
+            String condition = "";//解析筛选条件
+            if (conditionsType.equals("String[]")) {
+                for (String str : (String[]) conditions) {
+                    condition += (str + " = ? and ");
+                }
+
+                //去掉最后一个多余 and
+                condition = condition.substring(0, condition.lastIndexOf("and"));
+            } else if (conditionsType.equals("String")) {
+                condition = (String) conditions;
+            }
+
+            //解析查询条件值
+            String[] valuesArray = new String[1];//解析筛选值
+            if (valuesType.equals("String[]")) {
+                valuesArray = (String[]) values;
+            } else if (valuesType.equals("String")) {
+                valuesArray[0] = (String) values;
+            }
+
+            //获取表名
+            String tableName = tableNameClass.getSimpleName();
+            //判断这个表是否存在
+            if (!isTable(tableName)) {
+                err(getLineInfo(2), "查询的表不存在，操作失败");
+                status = false;
+                return null;
+            }
+
+            //获取当前类的所有字段
+            String[] returnValue = null;
+            List<String> tableAllValue = getTableAllValue(tableName);
+            if (tableAllValue != null && tableAllValue.size() > 0) {
+                returnValue = new String[tableAllValue.size()];
+                for (int i = 0; i < tableAllValue.size(); i++) {
+                    returnValue[i] = tableAllValue.get(i);
+                }
+            }
+
+            T bean = null;//定义泛型
+            try {
+                bean = tableNameClass.newInstance();//实体化
+            } catch (IllegalAccessException e) {
+//                e.printStackTrace();
+                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
+                status = false;
+                return null;
+            } catch (InstantiationException e) {
+                e.printStackTrace();
+                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
+                status = false;
+                return null;
+            }
+
+            Field[] fields = bean.getClass().getDeclaredFields();
+
+            for (Field field : fields) {
+                String valueName = field.getName();
+                Class<?> type = field.getType();
+                field.setAccessible(true);
+
+                //反射生成对象并注入
+                Cursor cursor = sqLiteDatabase2.query(tableName, returnValue, condition, valuesArray, null, null, null);
+
+                if (cursor != null && cursor.getCount() > 0) {
+                    cursor.moveToFirst();//移动到首位
+                    for (String str : (String[]) returnValue) {
+                        Object obj = null;
+                        if (str.equals(valueName)) {
+                            if (String.class == type) {
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (int.class == type || Integer.class == type) {
+                                int value = cursor.getInt(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (boolean.class == type || Boolean.class == type) {
+                                int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
+                                if (value == 1) {
+                                    obj = true;
+                                } else if (value == 0) {
+                                    obj = false;
+                                }
+                            } else if (double.class == type || Double.class == type) {
+                                double value = cursor.getDouble(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (float.class == type || Float.class == type) {
+                                float value = cursor.getFloat(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (Time.class == type) {
+                                String time = cursor.getString(cursor.getColumnIndex(valueName));
+                                if (time == null || time.length() == 0) {
+                                    time = new Time(System.currentTimeMillis()).toString();
+                                }
+                                SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
+                                Date d2 = null;
+                                try {
+                                    d2 = format2.parse(time);
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                }
+                                Time startTimeFmt = new Time(d2.getTime());
+                                obj = startTimeFmt;
+                            } else if (Date.class == type || java.sql.Date.class == type) {
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                try {
+                                    Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
+                                    obj = date;
+                                } catch (ParseException e) {
+                                    e.printStackTrace();
+                                }
+                            } else if (long.class == type || Long.class == type) {
+                                long value = cursor.getLong(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (short.class == type || Short.class == type) {
+                                short value = cursor.getShort(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (byte[].class.equals(type)) {
+                                byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
+                                obj = value;
+                            } else if (SQLValue.Text.class == type) {
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                obj = new SQLValue.Text<Object>(value);
+                            } else {
+                                err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                            }
+                        }
+
+                        if (obj != null) {
+                            try {
+                                field.set(bean, obj);
+                                continue;
+                            } catch (IllegalAccessException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                }
+                cursor.close();//释放资源
+            }
+
+            if(bean != null){
+                //初始化状态值
+                statusNumber = 1;
+                status = true;
+            }
+
+            return bean;
+        }
+
 
         //多个查询
 
@@ -3931,6 +4407,10 @@ public class GT {
          * @根据表查询出表中所有数据
          */
         public <T> List<T> queryAll(Class<T> tableNameClass) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -4059,174 +4539,11 @@ public class GT {
             }
             cursor.close();//释放资源
 
-            orderByStr = "";
-            limitStr = "";
-
-            return beanList;
-        }
-
-        /**
-         * @param tableNameClass
-         * @param condition
-         * @param values
-         * @param <T>
-         * @return
-         * @查询出指定条件的对应数据
-         */
-        public <T> List<T> queryAll(Class<T> tableNameClass, String condition, Object[] values) {
-
-            if (tableNameClass == null || condition == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
+            //初始化状态值
+            statusNumber = beanList.size();
+            if(statusNumber == 0){
                 status = false;
-                return null;
             }
-
-            //监测条件
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!valuesType.equals("Object[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            String[] returnValue = null;//获取当前类的所有字段
-            List<String> tableAllValue = getTableAllValue(tableName);
-            if (tableAllValue != null && tableAllValue.size() > 0) {
-                returnValue = new String[tableAllValue.size()];
-                for (int i = 0; i < tableAllValue.size(); i++) {
-                    returnValue[i] = tableAllValue.get(i);
-                }
-            }
-
-            //添加条件值
-            List<Object> valueList = new ArrayList<>();
-            for (Object obj : values) {
-                valueList.add(obj);
-            }
-
-            //反射生成对象并注入
-            Cursor cursor = sqLiteDatabase2.query(tableName, null, null, null, null, null, orderByStr, limitStr);
-            List<T> beanList = new ArrayList<T>();//创建容器
-            if (cursor != null && cursor.getCount() > 0) {
-                cursor.moveToFirst();//移动到首位
-                for (int i = 0; i < cursor.getCount(); i++) {
-                    T bean = null;//定义泛型
-                    try {
-                        bean = tableNameClass.newInstance();//实体化
-                    } catch (IllegalAccessException e) {
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    } catch (InstantiationException e) {
-                        e.printStackTrace();
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    }
-
-                    Field[] fields = bean.getClass().getDeclaredFields();
-                    for (Field field : fields) {
-                        String valueName = field.getName();
-                        Class<?> type = field.getType();
-                        field.setAccessible(true);
-                        for (String str : (String[]) returnValue) {
-                            Object obj = null;
-                            if (str.equals(valueName)) {
-                                if (String.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (int.class == type || Integer.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (boolean.class == type || Boolean.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                    if (value == 1) {
-                                        obj = true;
-                                    } else if (value == 0) {
-                                        obj = false;
-                                    }
-                                } else if (double.class == type || Double.class == type) {
-                                    double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (float.class == type || Float.class == type) {
-                                    float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (Time.class == type) {
-                                    String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (time == null || time.length() == 0) {
-                                        time = new Time(System.currentTimeMillis()).toString();
-                                    }
-                                    SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                    Date d2 = null;
-                                    try {
-                                        d2 = format2.parse(time);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                    Time startTimeFmt = new Time(d2.getTime());
-                                    obj = startTimeFmt;
-                                } else if (Date.class == type || java.sql.Date.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    try {
-                                        Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                        obj = date;
-                                    } catch (ParseException e) {
-                                        e.printStackTrace();
-                                    }
-                                } else if (long.class == type || Long.class == type) {
-                                    long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (short.class == type || Short.class == type) {
-                                    short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (byte[].class.equals(type)) {
-                                    byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (SQLValue.Text.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = new SQLValue.Text<Object>(value);
-                                } else {
-                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                }
-                            }
-
-                            if (obj != null) {
-                                try {
-                                    field.set(bean, obj);
-                                    continue;
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        }
-
-                    }
-                    //存储匹配的实体类
-                    try {
-                        Class<?> aClass = bean.getClass();
-                        Field declaredField = aClass.getDeclaredField(condition);
-                        declaredField.setAccessible(true); // 设置些属性是可以访问的
-                        Object o = declaredField.get(bean);
-                        if (valueList.contains(o)) {
-                            beanList.add(bean);//存入查询到的数据
-                        }
-                    } catch (NoSuchFieldException | IllegalAccessException e) {
-                        e.printStackTrace();
-                    }
-                    cursor.moveToNext();//移动到下一位
-                }
-            }
-            cursor.close();//释放资源
 
             orderByStr = "";
             limitStr = "";
@@ -4243,6 +4560,10 @@ public class GT {
          * @查询多条数据
          */
         public <T> List<T> queryAll(Class<T> tableNameClass, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null || conditions == null || values == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -4417,6 +4738,12 @@ public class GT {
             }
             cursor.close();//释放资源
 
+            //初始化状态值
+            statusNumber = beanList.size();
+            if(statusNumber == 0){
+                status = false;
+            }
+
             orderByStr = "";
             limitStr = "";
 
@@ -4433,6 +4760,10 @@ public class GT {
          * @查询多条数据
          */
         public <T> List<T> queryAll(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
 
             if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
                 err(getLineInfo(2), "查询的数据为 null，操作失败");
@@ -4613,6 +4944,11 @@ public class GT {
             }
             cursor.close();//释放资源
 
+            //初始化状态值
+            statusNumber = beanList.size();
+            if(statusNumber == 0){
+                status = false;
+            }
             orderByStr = "";
             limitStr = "";
 
@@ -4628,7 +4964,19 @@ public class GT {
          * @原生查询
          */
         public Cursor query(String sqlCode, String[] selectionArgs) {
-            return sqLiteDatabase2.rawQuery(sqlCode, selectionArgs);
+
+            //初始化状态值
+            statusNumber = 0;
+            status = false;
+
+            Cursor cursor = sqLiteDatabase2.rawQuery(sqlCode, selectionArgs);
+            statusNumber = cursor.getCount();
+            //初始化状态值
+            if(statusNumber == 0){
+                status = false;
+            }
+
+            return cursor;
         }
 
         //====================================== 第一步：设置数据库名称 ======================================
@@ -5014,7 +5362,7 @@ public class GT {
         }
 
         /**
-         清除本应用内部缓存(/data/data/com.xxx.xxx/cache) * *
+         * 清除本应用内部缓存(/data/data/com.xxx.xxx/cache) * *
          *
          * @param context
          */
@@ -5023,7 +5371,7 @@ public class GT {
         }
 
         /**
-         清除本应用所有数据库(/data/data/com.xxx.xxx/databases) * *
+         * 清除本应用所有数据库(/data/data/com.xxx.xxx/databases) * *
          *
          * @param context
          */
@@ -5033,7 +5381,7 @@ public class GT {
         }
 
         /**
-         清除本应用SharedPreference(/data/data/com.xxx.xxx/shared_prefs) *
+         * 清除本应用SharedPreference(/data/data/com.xxx.xxx/shared_prefs) *
          *
          * @param context
          */
@@ -5043,7 +5391,7 @@ public class GT {
         }
 
         /**
-         按名字清除本应用数据库 * *
+         * 按名字清除本应用数据库 * *
          *
          * @param context
          * @param dbName
@@ -5053,7 +5401,7 @@ public class GT {
         }
 
         /**
-         清除/data/data/com.xxx.xxx/files下的内容 * *
+         * 清除/data/data/com.xxx.xxx/files下的内容 * *
          *
          * @param context
          */
@@ -5062,7 +5410,7 @@ public class GT {
         }
 
         /**
-         清除外部cache下的内容(/mnt/sdcard/android/data/com.xxx.xxx/cache)
+         * 清除外部cache下的内容(/mnt/sdcard/android/data/com.xxx.xxx/cache)
          *
          * @param context
          */
@@ -5074,7 +5422,7 @@ public class GT {
         }
 
         /**
-         清除自定义路径下的文件，使用需小心，请不要误删。而且只支持目录下的文件删除 * *
+         * 清除自定义路径下的文件，使用需小心，请不要误删。而且只支持目录下的文件删除 * *
          *
          * @param filePath
          */
@@ -5083,7 +5431,7 @@ public class GT {
         }
 
         /**
-         清除本应用所有的数据 * *
+         * 清除本应用所有的数据 * *
          *
          * @param context
          * @param filepath
@@ -5103,7 +5451,7 @@ public class GT {
         }
 
         /**
-         删除方法 这里只会删除某个文件夹下的文件，如果传入的directory是个文件，将不做处理 * *
+         * 删除方法 这里只会删除某个文件夹下的文件，如果传入的directory是个文件，将不做处理 * *
          *
          * @param directory
          */
@@ -11208,6 +11556,89 @@ public class GT {
             }
         }
 
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名类
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)            //设置SQL名称
+                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
+                    .init_3_SqlTable(tableClass)        //设置创建或更新升级的数据库表
+                    .init_4_Sql();                      //数据库操作执行
+        }
+
+        /**
+         * @param SQLName
+         * @param sqlVersions
+         * @return
+         * @用户自定义SQLCode
+         */
+        protected Hibernate initSQL(String SQLName, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)            //设置SQL名称
+                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
+                    .init_3_SqlTable(ApplicationUtils.getPackageName(this))        //设置创建或更新升级的数据库表
+                    .init_4_Sql();                      //数据库操作执行
+        }
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   创建表的路径
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, String tablePath, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tablePath)
+                    .init_4_Sql();
+        }
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名List集合
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tableList)
+                    .init_4_Sql();
+        }
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名Set集合
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tableSet)
+                    .init_4_Sql();
+        }
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名Array
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tableArray)
+                    .init_4_Sql();
+        }
 
         /**
          * 普通日志
@@ -11449,7 +11880,6 @@ public class GT {
                     .init_3_SqlTable(tableSet)
                     .init_4_Sql();
         }
-
 
         /**
          * @param SQLName     数据库名称
@@ -12475,24 +12905,24 @@ public class GT {
         //Spiritleve 屏幕旋转监听
         public abstract static class Spiritleve implements SensorEventListener {
             /**
-             用法如下：
-             //屏幕旋转监听 内部类
-             class SV extends SpiritleveView{
+             * 用法如下：
+             * //屏幕旋转监听 内部类
+             * class SV extends SpiritleveView{
              * *
-             public SV(Context context) {
-             super(context);
-             }
+             * public SV(Context context) {
+             * super(context);
+             * }
              * *
-             @Override
-             protected void getPosition(float xAngle, float yAngle) {
-             super.getPosition(xAngle, yAngle);
-             GT.log("X:" + (int)xAngle + "," + "Y:" + (int)yAngle);
-             }
-             }
-              * *
-             最后再在方法中初始化
-             new SV(activity);
-              * *
+             *
+             * @Override protected void getPosition(float xAngle, float yAngle) {
+             * super.getPosition(xAngle, yAngle);
+             * GT.log("X:" + (int)xAngle + "," + "Y:" + (int)yAngle);
+             * }
+             * }
+             * *
+             * 最后再在方法中初始化
+             * new SV(activity);
+             * *
              */
             float[] acceleromterValues = new float[3];//加速度传感器的值
             float[] magneticValues = new float[3];//磁场传感器的值
