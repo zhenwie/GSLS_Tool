@@ -3,13 +3,13 @@
 [![](https://jitpack.io/v/1079374315/GSLS_Tool.svg)](https://jitpack.io/#1079374315/GSLS_Tool)
 
 
-# 最新版本: 1.1.6
-发布时间：2019年4月30日 
+# 最新版本: 1.1.7
+发布时间：2019年5月7日 
 
 ## 此次版本更新： 
 ````
-更新时间:2020.4.30（大爆料：更新 Hibernate 数据库）
- 更新内容：（1.1.6 版本）
+更新时间:2020.5.7（大爆料：更新 Hibernate 数据库）
+ 更新内容：（1.1.7 版本）
  1.新增 LOG 日志类 分 Logcat 与 本地打印 用于打更加详细的日志。(最终效果 以最新教程为主)
    (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
    (2)新增两种打印   本地普通打印：logs("****");   本地错误打印：errs("****");
@@ -73,7 +73,7 @@ allprojects {
 第二步 2. 添加依赖关系
 dependencies {
 	//GT基础功能
-	implementation 'com.github.1079374315:GSLS_Tool:v1.1.6'//如果不需要使用全部功能，可以只添加GT基础依赖。
+	implementation 'com.github.1079374315:GSLS_Tool:v1.1.7'//如果不需要使用全部功能，可以只添加GT基础依赖。
 	
 	//GT全部功能 需要添加的包
  	implementation 'com.google.code.gson:gson:2.8.5'  //JSON 数据解析
@@ -92,7 +92,7 @@ dependencies {
 ````
 Copyright 2019 GSLS
 
-Licensed under the Apache License, Version 1.1.6 (the "License");
+Licensed under the Apache License, Version 1.1.7 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
