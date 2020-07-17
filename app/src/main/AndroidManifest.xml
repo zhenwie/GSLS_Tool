@@ -13,8 +13,6 @@
         android:theme="@style/AppTheme"
         tools:ignore="GoogleAppIndexingWarning">
 
-        <activity android:name=".activity.KotlinActivity"/>
-
         <activity android:name=".activity.AndroidActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
