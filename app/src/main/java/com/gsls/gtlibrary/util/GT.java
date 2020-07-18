@@ -204,15 +204,13 @@ import okhttp3.RequestBody;
  * <p>
  * <p>
  * <p>
- * 更新时间:2020.7.17
+ * 更新时间:2020.7.18
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.1.8 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.1.9 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
- * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
- * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p>
  * <p>
  * <p>
@@ -5781,12 +5779,21 @@ public class GT {
                         conn.setRequestMethod(GET);    //设置请求方式
                         int code = conn.getResponseCode();
                         if (code == 200) {//应答码200表示请求成功
-                            onSuccess(listener, conn);//请求成功
+                            try{
+                                onSuccess(listener, conn);//请求成功
+                            }catch (Exception e1){
+                                err("e:" + e1);
+                            }
                         } else {
                             GT.err("向服务器get请求返回的code:" + code);
                         }
                     } catch (Exception error) {
-                        onError(listener, error);//请求失败
+                        try{
+                            onError(listener, error);//请求失败
+                        }catch (Exception e1){
+                            err("e1:" + error);
+                            err("e2:" + e1);
+                        }
                     }
                 }
             });
@@ -5848,13 +5855,23 @@ public class GT {
 
                         int code = conn.getResponseCode();
                         if (code == 200) {//应答码200表示请求成功
-                            onSuccess(listener, conn);//请求成功
+                            try{
+                                onSuccess(listener, conn);//请求成功
+                            }catch (Exception e1){
+                                err("e:" + e1);
+                            }
+
                         } else {
                             GT.err("向服务器post请求返回的code:" + code);
                         }
 
                     } catch (Exception e) {
-                        onError(listener, e);
+                        try{
+                            onError(listener, e);
+                        }catch (Exception e1){
+                            err("e1:" + e);
+                            err("e2:" + e1);
+                        }
                     }
                 }
             });
