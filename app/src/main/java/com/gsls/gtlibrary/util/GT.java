@@ -608,7 +608,7 @@ public class GT {
                 while (true) {
                     String substring = strMsg.substring(0, logMaxLength);
                     Log.i(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(10);
+                    strMsg = strMsg.substring(logMaxLength);
                     if (strMsg.length() <= logMaxLength) {
                         Log.i(LOG.LOG_TAG + "i", strMsg);
                         break;
@@ -662,7 +662,7 @@ public class GT {
                 while (true) {
                     String substring = strMsg.substring(0, logMaxLength);
                     Log.e(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(10);
+                    strMsg = strMsg.substring(logMaxLength);
                     if (strMsg.length() <= logMaxLength) {
                         Log.e(LOG.LOG_TAG + "i", strMsg);
                         break;
@@ -707,7 +707,7 @@ public class GT {
                 while (true) {
                     String substring = strMsg.substring(0, logMaxLength);
                     Log.i(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(10);
+                    strMsg = strMsg.substring(logMaxLength);
                     if (strMsg.length() <= logMaxLength) {
                         Log.i(LOG.LOG_TAG + "i", strMsg);
                         break;
@@ -756,7 +756,7 @@ public class GT {
                 while (true) {
                     String substring = strMsg.substring(0, logMaxLength);
                     Log.e(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(10);
+                    strMsg = strMsg.substring(logMaxLength);
                     if (strMsg.length() <= logMaxLength) {
                         Log.e(LOG.LOG_TAG + "i", strMsg);
                         break;
