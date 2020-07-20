@@ -10305,7 +10305,6 @@ public class GT {
                      *
                      */
 
-                    err("切换方式：Activity");
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
                     transaction.add(fragmentId, fragment, name);
                     transaction.commit();
@@ -10314,7 +10313,6 @@ public class GT {
 
                 case FRAGMENT:// Fragment 切换方式
                 {
-                    err("切换方式：Fragment");
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
                     transaction.replace(fragmentId, fragment, name);
                     transaction.commit();
@@ -10323,7 +10321,6 @@ public class GT {
 
                 default:    //如果是非法参数 那就默认使用 Activity 的启动方式
                 {
-                    err("切换方式：Fragment");
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
                     transaction.add(fragmentId, fragment, name);
                     transaction.commit();
@@ -10396,7 +10393,6 @@ public class GT {
             switch (START_MODE) {
                 case STANDARD: //默认模式     该启动模式为Android默认启动模式，每当启动一个 fragment 就会在任务栈中创建一个
                 {
-                    err("默认模式");
                     START_MODE = STANDARD;//恢复默认模式
                     transaction.addToBackStack(name);//加入到回退栈
                     topFragmentName = "";//清空指向顶端的 Fragment
@@ -10405,7 +10401,6 @@ public class GT {
 
                 case HOME:  //主界面模式   该启动模式不将 Fragment 加入退回栈,一般用于APP首页
                 {
-                    err("主界面菜单 模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     if (!isStackTop(fragment.getClass())) {
@@ -10422,7 +10417,6 @@ public class GT {
 
                 case SINGLE_TOP: //栈顶模式     该启动模式是在查看任务栈顶和你将要启动的 fragment 是否是同一个 fragment，是一个就直接复用，否则就新创一个实例
                 {
-                    err("栈顶模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
@@ -10437,7 +10431,6 @@ public class GT {
 
                 case SINGLE_TASK: //栈内复用模式 该启动模式是在任务栈中看是否有和你一样的 fragment，有则直接把该 fragment 之上的 fragment 全部弹出使之置于栈顶,如果当前即最顶端那就复用。
                 {
-                    err("栈内复用模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
@@ -10461,7 +10454,6 @@ public class GT {
 
                 case ENTRANCE: {//  入口模式     弹出除栈底外所有 Fragment 再创建一个新的实例。常用于一个程序的入口处
 
-                    err("入口模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     //弹出所有栈
@@ -10476,7 +10468,6 @@ public class GT {
 
                 default://非正常的值
 
-                    err("非正常模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     err(getLineInfo(3) + "：在启动 Fragment 模式中，你输入了非正常的值,不给与启动操作。");
