@@ -204,10 +204,10 @@ import okhttp3.RequestBody;
  * <p>
  * <p>
  * <p>
- * 更新时间:2020.7.18
+ * 更新时间:2020.7.20
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.1.9 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.1 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
@@ -10761,7 +10761,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragmentClass);
+                gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragmentClass);
                 gt_fragment.switchingMode(ACTIVITY);
             }
             return gt_fragment;
@@ -10784,7 +10784,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragment);
+                gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragment);
                 gt_fragment.switchingMode(ACTIVITY);
             }
             return gt_fragment;
@@ -11731,9 +11731,41 @@ public class GT {
          */
         protected void startFragment(Object toFragment) {
             if (GT_Fragment.gt_fragment != null) {
-                startFragment(toFragment);
+                GT_Fragment.gt_fragment.startFragment((Fragment) toFragment);
             }
         }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragment(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(toFragment);
+            }
+        }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+
 
         /**
          * 普通日志
@@ -11867,26 +11899,46 @@ public class GT {
         }
 
         /**
-         * 启动 Fragment
-         *
          * @param toFragment
+         * @跳转 Fragment
          */
-        protected void startFragment(Fragment fragment) {
-            if (gt_fragment != null) {
-                gt_fragment.startFragment(fragment);
+        protected void startFragment(Object toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment((Fragment) toFragment);
             }
         }
 
         /**
-         * 启动 Fragment
-         *
          * @param toFragment
+         * @跳转 Fragment
          */
-        protected <T> void startFragment(Class<T> fragmentClass) {
-            if (gt_fragment != null) {
-                gt_fragment.startFragment(fragmentClass);
+        protected void startFragment(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(toFragment);
             }
         }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+
 
         /**
          * @param SQLName     数据库名称
