@@ -3,22 +3,17 @@
 [![](https://jitpack.io/v/1079374315/GSLS_Tool.svg)](https://jitpack.io/#1079374315/GSLS_Tool)
 
 
-# 最新版本: 1.1.6
-发布时间：2019年4月30日 
+# 最新版本: 1.2.1
+发布时间：2020年7月20日 
 
 ## 此次版本更新： 
 ````
-更新时间:2020.4.30（大爆料：更新 Hibernate 数据库）
- 更新内容：（1.1.6 版本）
- 1.新增 LOG 日志类 分 Logcat 与 本地打印 用于打更加详细的日志。(最终效果 以最新教程为主)
-   (1)可使用 setLogTAG 方法用于自定义 日志的 TAG 值
-   (2)新增两种打印   本地普通打印：logs("****");   本地错误打印：errs("****");
- 2.新增 TOAST 吐司类 用于专门管理 吐司变量,将自定义吐司的类移至 TOAST 类中。
- 3.AnnotationActivity、BaseActivity 类中增加 initFragment() 操作方法
- 4.权限类(AppAuthorityManagement)中添加上申请白名单权限。
- 5.更新 Hibernate 数据库类，依照 J2EE 的模式，根据实体类 映射出 数据库与字段，实现无SQL代码实现SQL逻辑的效果。
- 6.优化的数据池的外部数据池代码
- 7.优化一下代码，默认不开启Util工具包
+更新时间:2020.7.20（大爆料：更新 Fragment 框架、增加启动模式 与 切换模式）
+ 更新内容：（1.2.1 版本）
+ 1.更新了 HttpUtil (网络请求)类
+ 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 增加了 onBackPressed 方法
+ 3.增加了 logAll 与 errAll 增加打印所有日志方法
+ 具体使用教程请参考官网教程
  
 ````
 
@@ -45,6 +40,12 @@
 #### [第十八章：多媒体类篇](https://blog.csdn.net/qq_39799899/article/details/105851586)
 #### [第十九章：线程类篇](https://blog.csdn.net/qq_39799899/article/details/105851643) (常用推荐)
 #### [第二十章：随机类篇](https://blog.csdn.net/qq_39799899/article/details/105851774)
+#### [第二十一章：BaseActivity 教程篇](https://blog.csdn.net/qq_39799899/article/details/105867114)
+#### [第二十二章：AnnotationActivity 教程篇](https://blog.csdn.net/qq_39799899/article/details/105927908) (常用推荐)
+#### [第二十四章：GT_Fragment 教程篇](https://blog.csdn.net/qq_39799899/category_10214456.html) (常用推荐)
+#### [第二十五章：Annotations 教程篇](https://blog.csdn.net/qq_39799899/article/details/105929131) (常用推荐)
+
+#### [总篇九章：GT Hibernate 数据库 教程篇](https://blog.csdn.net/qq_39799899/category_9975334.html) (常用推荐)
 
 #### [GSLS_TOOL库：待更新]()
 
@@ -66,7 +67,7 @@ allprojects {
 第二步 2. 添加依赖关系
 dependencies {
 	//GT基础功能
-	implementation 'com.github.1079374315:GSLS_Tool:v1.1.6'//如果不需要使用全部功能，可以只添加GT基础依赖。
+	implementation 'com.github.1079374315:GSLS_Tool:v1.2.1'//如果不需要使用全部功能，可以只添加GT基础依赖。
 	
 	//GT全部功能 需要添加的包
  	implementation 'com.google.code.gson:gson:2.8.5'  //JSON 数据解析
@@ -85,7 +86,7 @@ dependencies {
 ````
 Copyright 2019 GSLS
 
-Licensed under the Apache License, Version 1.1.6 (the "License");
+Licensed under the Apache License, Version 1.2.1 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
