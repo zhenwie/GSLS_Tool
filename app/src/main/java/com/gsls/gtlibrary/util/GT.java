@@ -172,6 +172,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
@@ -204,13 +205,15 @@ import okhttp3.RequestBody;
  * <p>
  * <p>
  * <p>
- * 更新时间:2020.7.17
+ * 更新时间:2020.8.1
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.1.8 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.2 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
+ * 4.在 AnnotationActivity、BaseActivity、BaseFragments中增多了startFragment方法
+ * 5.优化了 BaseDialogFragments类 新增 onBackPressed(返回监听)、setFullScreen(设置充满全屏)、setHideBackground(设置隐藏背景)
  * <p>
  * <p>
  * <p>
@@ -2026,8 +2029,8 @@ public class GT {
         }
 
         //=============================== 数据库属性 ====================================
-        private String DATABASE_NAME = "GT.db";   //数据库名称
-        private int DATABASE_VERSION = 1;         //数据库版本
+        private String DATABASE_NAME = "GT.db";   //默认数据库名称
+        private int DATABASE_VERSION = 1;         //默认数据库版本
 
         public String getDATABASE_NAME() {
             return DATABASE_NAME;
@@ -2357,6 +2360,17 @@ public class GT {
          */
         public Hibernate deleteTable(String tableName) {
             String sql = "DROP TABLE " + tableName;
+            sqLiteDatabase2.execSQL(sql);
+            return this;
+        }
+
+        /**
+         * 删除表
+         * @param tableClass
+         * @return
+         */
+        public Hibernate deleteTable(Class<?> tableClass) {
+            String sql = "DROP TABLE " + tableClass.getSimpleName();
             sqLiteDatabase2.execSQL(sql);
             return this;
         }
@@ -3182,7 +3196,6 @@ public class GT {
         }
 
         // SQL 查询
-
         private String orderByStr = "";//排序
         private String limitStr = "";//限量
 
@@ -4058,7 +4071,6 @@ public class GT {
         }
 
         //多个查询
-
         /**
          * @param tableNameClass
          * @param <T>
@@ -10197,21 +10209,24 @@ public class GT {
         }
 
         //设置与获取 Home页面的 fragment 容器ID
-        public void setHomeFragmentId(int homeFragmentId) {
+        public GT_Fragment setHomeFragmentId(int homeFragmentId) {
             this.homeFragmentId = homeFragmentId;
+            return this;
         }
 
         public int getHomeFragmentId() {
             return homeFragmentId;
         }
 
+
         //设置与获取 主页面的 Fragment 容器ID
-        public static int getMainFragmentId() {
+        public int getMainFragmentId() {
             return mainFragmentId;
         }
 
-        public static void setMainFragmentId(int mainFragmentId) {
+        public GT_Fragment setMainFragmentId(int mainFragmentId) {
             GT_Fragment.mainFragmentId = mainFragmentId;
+            return this;
         }
 
         public List<FragmentBean> getFragmentStack() {
@@ -10286,7 +10301,6 @@ public class GT {
                      *
                      */
 
-                    err("切换方式：Activity");
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
                     transaction.add(fragmentId, fragment, name);
                     transaction.commit();
@@ -10295,7 +10309,6 @@ public class GT {
 
                 case FRAGMENT:// Fragment 切换方式
                 {
-                    err("切换方式：Fragment");
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
                     transaction.replace(fragmentId, fragment, name);
                     transaction.commit();
@@ -10304,7 +10317,6 @@ public class GT {
 
                 default:    //如果是非法参数 那就默认使用 Activity 的启动方式
                 {
-                    err("切换方式：Fragment");
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
                     transaction.add(fragmentId, fragment, name);
                     transaction.commit();
@@ -10377,7 +10389,6 @@ public class GT {
             switch (START_MODE) {
                 case STANDARD: //默认模式     该启动模式为Android默认启动模式，每当启动一个 fragment 就会在任务栈中创建一个
                 {
-                    err("默认模式");
                     START_MODE = STANDARD;//恢复默认模式
                     transaction.addToBackStack(name);//加入到回退栈
                     topFragmentName = "";//清空指向顶端的 Fragment
@@ -10386,7 +10397,6 @@ public class GT {
 
                 case HOME:  //主界面模式   该启动模式不将 Fragment 加入退回栈,一般用于APP首页
                 {
-                    err("主界面菜单 模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     if (!isStackTop(fragment.getClass())) {
@@ -10403,7 +10413,6 @@ public class GT {
 
                 case SINGLE_TOP: //栈顶模式     该启动模式是在查看任务栈顶和你将要启动的 fragment 是否是同一个 fragment，是一个就直接复用，否则就新创一个实例
                 {
-                    err("栈顶模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
@@ -10418,7 +10427,6 @@ public class GT {
 
                 case SINGLE_TASK: //栈内复用模式 该启动模式是在任务栈中看是否有和你一样的 fragment，有则直接把该 fragment 之上的 fragment 全部弹出使之置于栈顶,如果当前即最顶端那就复用。
                 {
-                    err("栈内复用模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
@@ -10442,7 +10450,6 @@ public class GT {
 
                 case ENTRANCE: {//  入口模式     弹出除栈底外所有 Fragment 再创建一个新的实例。常用于一个程序的入口处
 
-                    err("入口模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     //弹出所有栈
@@ -10457,7 +10464,6 @@ public class GT {
 
                 default://非正常的值
 
-                    err("非正常模式");
                     START_MODE = STANDARD;//恢复默认模式
 
                     err(getLineInfo(3) + "：在启动 Fragment 模式中，你输入了非正常的值,不给与启动操作。");
@@ -10655,7 +10661,6 @@ public class GT {
          * @return
          */
         public static GT_Fragment Build(FragmentActivity fragmentActivity, Bundle bundle) {
-            log("bundle:" + bundle);
             if (bundle == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -10742,7 +10747,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragmentClass);
+                gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragmentClass);
                 gt_fragment.switchingMode(ACTIVITY);
             }
             return gt_fragment;
@@ -10765,7 +10770,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragment);
+                gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragment);
                 gt_fragment.switchingMode(ACTIVITY);
             }
             return gt_fragment;
@@ -10804,7 +10809,6 @@ public class GT {
             listener = new FragmentManager.OnBackStackChangedListener() {
                 @Override
                 public void onBackStackChanged() {
-                    log("添加 ：" + gt_fragment.getFragmentSimpleNames());
                     topFragmentName = "";//清空指向顶端的 Fragment
                 }
             };
@@ -11216,24 +11220,67 @@ public class GT {
             }
 
             /**
-             * 开启新的 Fragment
-             *
-             * @param newFragment
+             * @param toFragment
+             * @跳转 Fragment
              */
-            protected void startFragment(Fragment newFragment) {
-                if (gt_fragment != null) {
-                    gt_fragment.startFragment(newFragment);
+            protected void startFragment(Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(toFragment);
                 }
             }
 
             /**
-             * 开启新的 Fragment
-             *
-             * @param newFragment
+             * @param toFragment
+             * @跳转 Fragment
              */
-            protected <T> void startFragment(Class<T> fragmentClass) {
-                if (gt_fragment != null) {
-                    gt_fragment.startFragment(fragmentClass);
+            protected void startFragment(Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(toFragment);
+                }
+            }
+
+            protected void startFragment(int fragmentId, Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            protected void startFragment(int fragmentId, Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragmentHome(Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragmentHome(Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+                }
+            }
+
+            protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
@@ -11250,9 +11297,19 @@ public class GT {
                 } else {
                     view = inflater.inflate(loadLayout(), container, false);
                 }
-
+                //如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
+                if (SWITCHING_MODE == FRAGMENT) {
+                    GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
+                        @Override
+                        public boolean onKey(View v, int keyCode, KeyEvent event) {
+                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                                return onBackPressed();//回调按下返回键
+                            }
+                            return false;
+                        }
+                    });
+                }
                 this.gt_fragment = GT_Fragment.gt_fragment;
-
                 initBaseFragment(view);//解决 在 add 的情况下 透明背景与点击穿透的问题
                 createView(view);
                 return view;
@@ -11298,7 +11355,7 @@ public class GT {
             @Override
             public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
-                initView(view, savedInstanceState);//主要方法
+                initView(view, savedInstanceState);
             }
 
             /**
@@ -11312,35 +11369,10 @@ public class GT {
             }
 
             /**
-             * 跳转 Activity
+             * 返回 true 则劫持返回事件
              *
-             * @param activityClass
+             * @return
              */
-            protected void startActivity(Class activityClass) {
-                GT.startAct(activityClass);
-            }
-
-            /**
-             * 解决 Fragment 按下物理返回按钮监听
-             */
-            @Override
-            public void onResume() {
-                super.onResume();
-                View view = getView();
-                if (view != null) {
-                    GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
-                        @Override
-                        public boolean onKey(View v, int keyCode, KeyEvent event) {
-                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
-                                return onBackPressed();//回调按下返回键
-                            }
-                            return false;
-                        }
-                    });
-
-                }
-            }
-
             protected boolean onBackPressed() {
                 return false;
             }
@@ -11450,6 +11482,14 @@ public class GT {
          */
         public abstract static class BaseDialogFragments extends DialogFragment {
 
+            protected Activity activity;
+
+            @Override
+            public void onAttach(@NonNull Context context) {
+                super.onAttach(context);
+                activity = (Activity) context;
+            }
+
             /**
              * 返回要加载的布局
              *
@@ -11468,18 +11508,31 @@ public class GT {
             /**
              * 主要实现的功能
              */
-            protected void function() {
+            protected void loadData() {
             }
 
             /**
-             * 是否去掉 背景弹窗
-             *
-             * @return
+             * 注意：
+             * 本方法建议在 onResume 方法中使用
+             * 设置充满全屏
              */
-            private boolean isShowBackground = false;
+            protected void setFullScreen() {
+                getDialog().getWindow().setLayout(-1, -2);
+            }
 
-            protected void setShowBackground(boolean tf) {
-                isShowBackground = tf;
+            /**
+             * 设置隐藏背景
+             */
+            protected void setHideBackground() {
+                getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));//隐藏背景
+            }
+
+            /**
+             * 设置单击外部不隐藏对话框
+             */
+            protected void setClickExternalNoHideDialog() {
+                //设置点击外部不会取消当前对话框
+                getDialog().setCanceledOnTouchOutside(false);
             }
 
             /**
@@ -11516,10 +11569,28 @@ public class GT {
             @Override
             public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
-                if (isShowBackground)
-                    getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
                 initView(view, savedInstanceState);//主要方法
-                function();
+                loadData();
+                //监听单击返回键无效
+                getDialog().setOnKeyListener(new DialogInterface.OnKeyListener() {
+                    @Override
+                    public boolean onKey(DialogInterface dialog, int keyCode, KeyEvent event) {
+                        if (keyCode == KeyEvent.KEYCODE_BACK) {
+                            return onBackPressed();
+                        }
+                        return false;
+                    }
+                });
+
+            }
+
+            /**
+             * 返回 true 则劫持返回事件
+             *
+             * @return
+             */
+            protected boolean onBackPressed() {
+                return false;
             }
 
             /**
@@ -11624,7 +11695,7 @@ public class GT {
         /**
          * 释放资源
          */
-       /* public void close() {
+        public void close() {
 
             //移除 Fragment 栈中监听器
             if (fragmentManager != null && listener != null) {
@@ -11647,7 +11718,7 @@ public class GT {
                 gt_fragment = null;
             }
 
-        }*/
+        }
 
 
     }
@@ -11710,10 +11781,69 @@ public class GT {
          * @param toFragment
          * @跳转 Fragment
          */
-        protected void startFragment(Object toFragment) {
+        protected void startFragment(Fragment toFragment) {
             if (GT_Fragment.gt_fragment != null) {
-                startFragment(toFragment);
+                GT_Fragment.gt_fragment.startFragment(toFragment);
             }
+        }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragment(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(toFragment);
+            }
+        }
+
+        protected void startFragment(int fragmentId, Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+        protected void startFragment(int fragmentId, Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+        protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+        protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+        protected GT_Fragment getGT_Fragment() {
+            return GT.GT_Fragment.gt_fragment;
         }
 
         /**
@@ -11848,25 +11978,72 @@ public class GT {
         }
 
         /**
-         * 启动 Fragment
-         *
          * @param toFragment
+         * @跳转 Fragment
          */
-        protected void startFragment(Fragment fragment) {
-            if (gt_fragment != null) {
-                gt_fragment.startFragment(fragment);
+        protected void startFragment(Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(toFragment);
             }
         }
 
         /**
-         * 启动 Fragment
-         *
          * @param toFragment
+         * @跳转 Fragment
          */
-        protected <T> void startFragment(Class<T> fragmentClass) {
-            if (gt_fragment != null) {
-                gt_fragment.startFragment(fragmentClass);
+        protected void startFragment(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(toFragment);
             }
+        }
+
+        protected void startFragment(int fragmentId, Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+        protected void startFragment(int fragmentId, Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+        /**
+         * @param toFragment
+         * @跳转 Fragment
+         */
+        protected void startFragmentHome(Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            }
+        }
+
+        protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+        protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+            if (GT_Fragment.gt_fragment != null) {
+                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            }
+        }
+
+        protected GT_Fragment getGT_Fragment() {
+            return GT.GT_Fragment.gt_fragment;
         }
 
         /**

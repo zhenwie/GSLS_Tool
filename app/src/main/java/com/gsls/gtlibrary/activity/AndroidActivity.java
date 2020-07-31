@@ -11,6 +11,7 @@ public class AndroidActivity extends GT.AnnotationActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         build(this);
+
     }
 
 }
