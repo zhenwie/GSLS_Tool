@@ -205,13 +205,15 @@ import okhttp3.RequestBody;
  * <p>
  * <p>
  * <p>
- * 更新时间:2020.7.20
+ * 更新时间:2020.8.1
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.1 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.2 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
+ * 4.在 AnnotationActivity、BaseActivity、BaseFragments中增多了startFragment方法
+ * 5.优化了 BaseDialogFragments类 新增 onBackPressed(返回监听)、setFullScreen(设置充满全屏)、setHideBackground(设置隐藏背景)
  * <p>
  * <p>
  * <p>
@@ -649,6 +651,7 @@ public class GT {
             }
         }
     }
+
 
     /**
      * 打印所有提示消息 Log
@@ -5779,18 +5782,18 @@ public class GT {
                         conn.setRequestMethod(GET);    //设置请求方式
                         int code = conn.getResponseCode();
                         if (code == 200) {//应答码200表示请求成功
-                            try{
+                            try {
                                 onSuccess(listener, conn);//请求成功
-                            }catch (Exception e1){
+                            } catch (Exception e1) {
                                 err("e:" + e1);
                             }
                         } else {
                             GT.err("向服务器get请求返回的code:" + code);
                         }
                     } catch (Exception error) {
-                        try{
+                        try {
                             onError(listener, error);//请求失败
-                        }catch (Exception e1){
+                        } catch (Exception e1) {
                             err("e1:" + error);
                             err("e2:" + e1);
                         }
@@ -5855,9 +5858,9 @@ public class GT {
 
                         int code = conn.getResponseCode();
                         if (code == 200) {//应答码200表示请求成功
-                            try{
+                            try {
                                 onSuccess(listener, conn);//请求成功
-                            }catch (Exception e1){
+                            } catch (Exception e1) {
                                 err("e:" + e1);
                             }
 
@@ -5866,9 +5869,9 @@ public class GT {
                         }
 
                     } catch (Exception e) {
-                        try{
+                        try {
                             onError(listener, e);
-                        }catch (Exception e1){
+                        } catch (Exception e1) {
                             err("e1:" + e);
                             err("e2:" + e1);
                         }
@@ -7935,6 +7938,27 @@ public class GT {
 
         }
 
+        /**
+         * 获取当前手机所有App信息
+         *
+         * @param context
+         * @return
+         */
+        public static ArrayList<HashMap<String, Object>> getAllAppData(Context context) {
+            PackageManager pckMan = context.getPackageManager();
+            ArrayList<HashMap<String, Object>> items = new ArrayList<HashMap<String, Object>>();
+            List<PackageInfo> packageInfo = pckMan.getInstalledPackages(0);
+            for (PackageInfo pInfo : packageInfo) {
+                HashMap<String, Object> item = new HashMap<String, Object>();
+                item.put("appimage", pInfo.applicationInfo.loadIcon(pckMan));
+                item.put("packageName", pInfo.packageName);
+                item.put("versionCode", pInfo.versionCode);
+                item.put("versionName", pInfo.versionName);
+                item.put("appName", pInfo.applicationInfo.loadLabel(pckMan).toString());
+                items.add(item);
+            }
+            return items;
+        }
 
     }
 
@@ -8374,7 +8398,7 @@ public class GT {
 
     }
 
-//=========================================== APP 存储池 =========================================
+//=========================================== APP 数据 =========================================
 
     /**
      * @App存储池
@@ -8832,6 +8856,66 @@ public class GT {
 
 
     }
+
+    /**
+     * GT 适配器
+     */
+    public static class GT_Adapters {
+
+        /**
+         * 用于继承的 适配器基类
+         *
+         * @param <T>
+         */
+        public abstract class BaseAdapters<T> extends ArrayAdapter<T> implements BaseViewHolder<T> {
+
+            private int position = 0;
+
+            public int getPosition() {
+                return position;
+            }
+
+            public BaseAdapters(Context context, int resource, List<T> objects) {
+                super(context, resource, objects);
+            }
+
+            /**
+             * 加载布局
+             *
+             * @return
+             */
+            protected abstract int loadLayout();
+
+            public View getView(int position, View convertView, ViewGroup parent) {
+                this.position = position;
+                View layout = LayoutInflater.from(getContext()).inflate(loadLayout(), parent, false);
+                initView(layout, getItem(position));
+                initView(layout, getItem(position), convertView, parent);
+                return layout;
+            }
+
+            protected View initView(View view, T bean) {
+                function(view, bean);
+                return view;
+            }
+
+            ;
+
+            protected View initView(View view, T bean, View convertView, ViewGroup parent) {
+                function(view, bean);
+                return view;
+            }
+
+            ;
+
+        }
+
+        private static abstract interface BaseViewHolder<T> {
+            void function(final View view, final T bean);
+        }
+
+    }
+
 
 //=========================================== 字符串加密类 =========================================
 
@@ -10666,7 +10750,7 @@ public class GT {
          */
         public static GT_Fragment Build(FragmentActivity fragmentActivity, Bundle bundle) {
             log("bundle:" + bundle);
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
                 initFragment(fragmentActivity);
@@ -10683,7 +10767,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Class<T> fragmentClass, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
                 initFragment(fragmentActivity);
@@ -10705,7 +10789,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Fragment fragment, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
                 initFragment(fragmentActivity);
@@ -10726,7 +10810,7 @@ public class GT {
          * @return
          */
         public static GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -10744,7 +10828,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Class<T> fragmentClass, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -10767,7 +10851,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Fragment fragment, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -11571,11 +11655,30 @@ public class GT {
             }
 
             /**
+             * 普通日志
+             *
+             * @param object
+             */
+            protected void logAll(Object object) {
+                GT.log(object);
+            }
+
+            /**
+             * 带 TAG 的普通日志
+             *
+             * @param tag
+             * @param object
+             */
+            protected void logAll(Object tag, Object object) {
+                GT.log(tag, object);
+            }
+
+            /**
              * 错误日志
              *
              * @param object
              */
-            protected void err(Object object) {
+            protected void errAll(Object object) {
                 GT.err(object);
             }
 
@@ -11585,7 +11688,7 @@ public class GT {
              * @param tag
              * @param object
              */
-            protected void err(Object tag, Object object) {
+            protected void errAll(Object tag, Object object) {
                 GT.err(tag, object);
             }
 
@@ -11756,7 +11859,90 @@ public class GT {
             }
         }
 
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名类
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)            //设置SQL名称
+                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
+                    .init_3_SqlTable(tableClass)        //设置创建或更新升级的数据库表
+                    .init_4_Sql();                      //数据库操作执行
+        }
 
+        /**
+         * @param SQLName
+         * @param sqlVersions
+         * @return
+         * @用户自定义SQLCode
+         */
+        protected Hibernate initSQL(String SQLName, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)            //设置SQL名称
+                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
+                    .init_3_SqlTable(ApplicationUtils.getPackageName(this))        //设置创建或更新升级的数据库表
+                    .init_4_Sql();                      //数据库操作执行
+        }
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   创建表的路径
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, String tablePath, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tablePath)
+                    .init_4_Sql();
+        }
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名List集合
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tableList)
+                    .init_4_Sql();
+        }
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名Set集合
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tableSet)
+                    .init_4_Sql();
+        }
+
+
+        /**
+         * @param SQLName     数据库名称
+         * @param tableList   表名Array
+         * @param sqlVersions 数据库版本
+         * @初始化 SQL
+         */
+        protected Hibernate initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
+            return new Hibernate()
+                    .init_1_SqlName(SQLName)
+                    .init_2_SqlVersion(sqlVersions)
+                    .init_3_SqlTable(tableArray)
+                    .init_4_Sql();
+        }
 
         /**
          * 普通日志
@@ -11778,11 +11964,30 @@ public class GT {
         }
 
         /**
+         * 普通日志
+         *
+         * @param object
+         */
+        protected void logAll(Object object) {
+            GT.log(object);
+        }
+
+        /**
+         * 带 TAG 的普通日志
+         *
+         * @param tag
+         * @param object
+         */
+        protected void logAll(Object tag, Object object) {
+            GT.log(tag, object);
+        }
+
+        /**
          * 错误日志
          *
          * @param object
          */
-        protected void err(Object object) {
+        protected void errAll(Object object) {
             GT.err(object);
         }
 
@@ -11792,7 +11997,7 @@ public class GT {
          * @param tag
          * @param object
          */
-        protected void err(Object tag, Object object) {
+        protected void errAll(Object tag, Object object) {
             GT.err(tag, object);
         }
 
@@ -11930,7 +12135,6 @@ public class GT {
         }
 
 
-
         /**
          * @param SQLName     数据库名称
          * @param tableList   表名类
@@ -12041,7 +12245,7 @@ public class GT {
          * @param object
          */
         protected void logAll(Object object) {
-            GT.logAll(object);
+            GT.log(object);
         }
 
         /**
@@ -12051,26 +12255,7 @@ public class GT {
          * @param object
          */
         protected void logAll(Object tag, Object object) {
-            GT.logAll(tag, object);
-        }
-
-        /**
-         * 错误日志
-         *
-         * @param object
-         */
-        protected void err(Object object) {
-            GT.err(object);
-        }
-
-        /**
-         * 带 TAG 的错误日志
-         *
-         * @param tag
-         * @param object
-         */
-        protected void err(Object tag, Object object) {
-            GT.err(tag, object);
+            GT.log(tag, object);
         }
 
         /**
@@ -12079,8 +12264,9 @@ public class GT {
          * @param object
          */
         protected void errAll(Object object) {
-            GT.errAll(object);
+            GT.err(object);
         }
+
 
         /**
          * 带 TAG 的错误日志
