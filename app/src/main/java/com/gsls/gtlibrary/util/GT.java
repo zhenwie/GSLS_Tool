@@ -205,15 +205,16 @@ import okhttp3.RequestBody;
  * <p>
  * <p>
  * <p>
- * 更新时间:2020.8.1
+ * 更新时间:2020.8.6
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.2 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.4 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
  * 4.在 AnnotationActivity、BaseActivity、BaseFragments中增多了startFragment方法
  * 5.优化了 BaseDialogFragments类 新增 onBackPressed(返回监听)、setFullScreen(设置充满全屏)、setHideBackground(设置隐藏背景)
+ * 6. Hibernate 数据库除增删查改的功能方法增加 class 形参方法
  * <p>
  * <p>
  * <p>
@@ -2332,6 +2333,18 @@ public class GT {
         }
 
         /**
+         * @param oldTableName 旧表名称
+         * @param NewTableName 新表名称
+         * @return
+         * @修改表名称
+         */
+        public Hibernate updateTableName(Class<?> oldTableNameClass, Class<?> NewTableNameClass) {
+            String sql = "ALTER TABLE " + oldTableNameClass.getSimpleName() + " RENAME TO " + NewTableNameClass.getSimpleName();
+            sqLiteDatabase2.execSQL(sql);
+            return this;
+        }
+
+        /**
          * @param tableName 表名
          * @return
          * @获取表所有字段名
@@ -2354,12 +2367,44 @@ public class GT {
         }
 
         /**
+         * @param tableClass 表名
+         * @return
+         * @获取表所有字段名
+         */
+        public List<String> getTableAllValue(Class<?> tableClass) {
+            String sql = "SELECT * FROM " + tableClass.getSimpleName() + " WHERE 0";
+            Cursor tempCursor = sqLiteDatabase2.rawQuery(sql, null);
+            try {
+                String[] columnNames = tempCursor.getColumnNames();
+                List<String> tableNameList = new ArrayList<>();
+                for (String str : columnNames) {
+                    tableNameList.add(str);
+                }
+                return tableNameList;
+            } finally {
+                tempCursor.close();
+            }
+
+        }
+
+        /**
          * @param tableName
          * @return
          * @删除表
          */
         public Hibernate deleteTable(String tableName) {
             String sql = "DROP TABLE " + tableName;
+            sqLiteDatabase2.execSQL(sql);
+            return this;
+        }
+
+        /**
+         * @param tableClass
+         * @return
+         * @删除表
+         */
+        public Hibernate deleteTable(Class<?> tableClass) {
+            String sql = "DROP TABLE " + tableClass.getSimpleName();
             sqLiteDatabase2.execSQL(sql);
             return this;
         }
@@ -2388,6 +2433,19 @@ public class GT {
         public boolean isTable(String tableName) {
             List<String> sqlAllTableName = getSQLAllTableName();
             if (sqlAllTableName.contains(tableName)) {
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * @param tableClass 表名
+         * @return 存在返回 true 不存在返回 false
+         * @监测当前数据库是否存在此表
+         */
+        public boolean isTable(Class<?> tableClass) {
+            List<String> sqlAllTableName = getSQLAllTableName();
+            if (sqlAllTableName.contains(tableClass.getSimpleName())) {
                 return true;
             }
             return false;
@@ -2425,6 +2483,40 @@ public class GT {
         }
 
         /**
+         * @param oldTableClass 旧表
+         * @param newTableClass 新表
+         * @return
+         * @导入表的数据 (自动匹配相同表字段自动导入数据)
+         */
+        public Hibernate inputTableData(Class<?> oldTableClass, Class<?> newTableClass) {
+
+            String oldTable = oldTableClass.getSimpleName();
+            String newTable = newTableClass.getSimpleName();
+
+            List<String> tempSQLTableValue = getTableAllValue(oldTable);//获取上个版本表所有字段
+            List<String> SQLTableValue = getTableAllValue(newTable);//获取当前最新版本数据库表所有字段
+            //效验出 旧版本 与 新版本 数据库均有的字段
+            List<String> SQLValue = new ArrayList<>();
+            for (String tableValue : tempSQLTableValue) {//遍历旧版本，如果新版本也有就存入 待导入数据字段行列
+                if (SQLTableValue.contains(tableValue)) {
+                    SQLValue.add(tableValue);//存入容器中
+                }
+            }
+
+            //生成可用的表字段
+            String tableChars = "";//表字段
+            for (String str : SQLValue) {
+                tableChars += (str + ",");
+            }
+            tableChars = tableChars.substring(0, tableChars.length() - 1);//去掉SQLCode 最后一个无用逗号
+
+            String inputSQL = "INSERT INTO " + newTable + "(" + tableChars + ") SELECT " + tableChars + " FROM " + oldTable;
+            sqLiteDatabase2.execSQL(inputSQL);
+
+            return this;
+        }
+
+        /**
          * @param oldTable     旧表
          * @param oldTableList 旧表集合
          * @param newTable     新表
@@ -2433,6 +2525,44 @@ public class GT {
          * @导入表的数据 (指定匹配相同表字段自动导入数据)
          */
         public Hibernate inputTableData(String oldTable, List<String> oldTableList, String newTable, List<String> newTableList) {
+
+            if (isTable(oldTable) && isTable(newTable)) {//如果当前数据库存在该表
+
+                //生成旧的可用表字段
+                String oldTableChar = "";
+                for (String str : oldTableList) {
+                    oldTableChar += (str + ",");
+                }
+                oldTableChar = oldTableChar.substring(0, oldTableChar.length() - 1);//去掉SQLCode 最后一个无用逗号
+
+                //生成新的可用表字段
+                String newTableChar = "";
+                for (String str : newTableList) {
+                    newTableChar += (str + ",");
+                }
+                newTableChar = newTableChar.substring(0, newTableChar.length() - 1);//去掉SQLCode 最后一个无用逗号
+
+
+                String inputSQL = "INSERT INTO " + newTable + "(" + newTableChar + ") SELECT " + oldTableChar + " FROM " + oldTable;
+                sqLiteDatabase2.execSQL(inputSQL);
+            }
+
+            return this;
+        }
+
+        /**
+         * @param oldTable     旧表
+         * @param oldTableList 旧表集合
+         * @param newTable     新表
+         * @param newTableList 新表集合
+         * @return
+         * @导入表的数据 (指定匹配相同表字段自动导入数据)
+         */
+        public Hibernate inputTableData(Class<?> oldTableClass, List<String> oldTableList, Class<?> newTableClass, List<String> newTableList) {
+
+            String oldTable = oldTableClass.getSimpleName();
+            String newTable = newTableClass.getSimpleName();
+
 
             if (isTable(oldTable) && isTable(newTable)) {//如果当前数据库存在该表
 
@@ -5821,45 +5951,62 @@ public class GT {
         /**
          * POST请求
          */
-        public static void postRequest(final String url, final GT.HttpUtil.OnLoadData listener) {
+        /**
+         * POST请求
+         */
+        public static void postRequest(final String url, final OnLoadData listener) {
 
-            if (url == null || !url.contains("?") || listener == null) {
+            if (url == null || listener == null) {
                 return;
             }
 
-            value = "";//初始化
-            HttpUtil.url = "";//初始化
+            value = "";// 初始化
+            HttpUtil.url = "";// 初始化
 
-            String[] arrayUrl = url.split("\\?");
-            if (arrayUrl.length >= 2) {
-                HttpUtil.url = arrayUrl[0];
-                for (int i = 1; i < arrayUrl.length; i++) {
-                    value += arrayUrl[i];
+            if (url.contains("?")) {
+                String[] arrayUrl = url.split("\\?");
+                if (arrayUrl.length >= 2) {
+                    HttpUtil.url = arrayUrl[0];
+                    for (int i = 1; i < arrayUrl.length; i++) {
+                        value += arrayUrl[i];
+                    }
+                } else {
+                    return;
                 }
-            } else {
-                return;
+            }else {
+                HttpUtil.url = url;
             }
 
-            GT.Thread.runJava(new Runnable() {// 为网络请求开启子线程
+            Thread.runJava(new Runnable() {// 为网络请求开启子线程
                 @Override
                 public void run() {
                     try {
-                        //打开连接
-                        URL path = new URL(HttpUtil.url);//1. 生成URL
-                        HttpURLConnection conn = (HttpURLConnection) path.openConnection();//2. HttpURLConnection 打开连接
-                        conn.setRequestMethod(POST);//3. 设置为 POST 请求
+                        // 打开连接
+                        URL path = new URL(HttpUtil.url);// 1. 生成URL
+                        HttpURLConnection conn = (HttpURLConnection) path.openConnection();// 2. HttpURLConnection 打开连接
+                        conn.setRequestMethod(POST);// 3. 设置为 POST 请求
+
+                        // Text 请求
                         conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");//4. Content-Type,这里是固定写法，发送内容的类型
 
-                        //向服务器提交请求数据
-                        conn.setDoOutput(true);//5. output，这里要记得开启输出流，将自己要添加的参数用这个输出流写进去，传给服务端，这是socket的基本结构
+                        // json 请求
+                        conn.setRequestProperty("Connection", "Keep-Alive");
+                        conn.setRequestProperty("Charset", "UTF-8");
+                        conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");// 设置文件类型:
+                        conn.setRequestProperty("accept", "application/json");
+
+
+
+                        // 向服务器提交请求数据
+                        conn.setDoOutput(true);// 5. output，这里要记得开启输出流，将自己要添加的参数用这个输出流写进去，传给服务端，这是socket的基本结构
                         OutputStream os = conn.getOutputStream();// 获取输出流
-                        os.write(value.getBytes(UTF_8));//一定要记得将自己的参数转换为字节，编码格式是utf-8
-                        os.flush();//关闭输出流
+                        os.write(value.getBytes(UTF_8));// 一定要记得将自己的参数转换为字节，编码格式是utf-8
+                        os.flush();// 关闭输出流
 
                         int code = conn.getResponseCode();
-                        if (code == 200) {//应答码200表示请求成功
+                        if (code == 200) {// 应答码200表示请求成功
                             try {
-                                onSuccess(listener, conn);//请求成功
+                                onSuccess(listener, conn);// 请求成功
                             } catch (Exception e1) {
                                 err("e:" + e1);
                             }
@@ -11466,7 +11613,7 @@ public class GT {
              * @param object
              */
             protected void logAll(Object object) {
-                GT.log(object);
+                GT.logAll(object);
             }
 
             /**
@@ -11476,7 +11623,7 @@ public class GT {
              * @param object
              */
             protected void logAll(Object tag, Object object) {
-                GT.log(tag, object);
+                GT.logAll(tag, object);
             }
 
             /**
@@ -11485,7 +11632,7 @@ public class GT {
              * @param object
              */
             protected void errAll(Object object) {
-                GT.err(object);
+                GT.errAll(object);
             }
 
             /**
@@ -11495,7 +11642,7 @@ public class GT {
              * @param object
              */
             protected void errAll(Object tag, Object object) {
-                GT.err(tag, object);
+                GT.errAll(tag, object);
             }
 
             /**
@@ -11660,7 +11807,7 @@ public class GT {
              * @param object
              */
             protected void logAll(Object object) {
-                GT.log(object);
+                GT.logAll(object);
             }
 
             /**
@@ -11670,7 +11817,7 @@ public class GT {
              * @param object
              */
             protected void logAll(Object tag, Object object) {
-                GT.log(tag, object);
+                GT.logAll(tag, object);
             }
 
             /**
@@ -11679,7 +11826,7 @@ public class GT {
              * @param object
              */
             protected void errAll(Object object) {
-                GT.err(object);
+                GT.errAll(object);
             }
 
             /**
@@ -11689,7 +11836,7 @@ public class GT {
              * @param object
              */
             protected void errAll(Object tag, Object object) {
-                GT.err(tag, object);
+                GT.errAll(tag, object);
             }
 
             /**
@@ -11969,7 +12116,7 @@ public class GT {
          * @param object
          */
         protected void logAll(Object object) {
-            GT.log(object);
+            GT.logAll(object);
         }
 
         /**
@@ -11979,7 +12126,7 @@ public class GT {
          * @param object
          */
         protected void logAll(Object tag, Object object) {
-            GT.log(tag, object);
+            GT.logAll(tag, object);
         }
 
         /**
@@ -11988,7 +12135,7 @@ public class GT {
          * @param object
          */
         protected void errAll(Object object) {
-            GT.err(object);
+            GT.errAll(object);
         }
 
         /**
@@ -11998,7 +12145,7 @@ public class GT {
          * @param object
          */
         protected void errAll(Object tag, Object object) {
-            GT.err(tag, object);
+            GT.errAll(tag, object);
         }
 
         /**
@@ -12245,7 +12392,7 @@ public class GT {
          * @param object
          */
         protected void logAll(Object object) {
-            GT.log(object);
+            GT.logAll(object);
         }
 
         /**
@@ -12255,7 +12402,7 @@ public class GT {
          * @param object
          */
         protected void logAll(Object tag, Object object) {
-            GT.log(tag, object);
+            GT.logAll(tag, object);
         }
 
         /**
@@ -12264,7 +12411,7 @@ public class GT {
          * @param object
          */
         protected void errAll(Object object) {
-            GT.err(object);
+            GT.errAll(object);
         }
 
 
