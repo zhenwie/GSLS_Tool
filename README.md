@@ -85,22 +85,23 @@ dependencies {
 ````
 
 
-````gradle
-## GT包混淆
+**2. GT包混淆：**
 
-## GT：
+````gradle
+
+## GT：（必要的混淆）
 -keep class com.gsls.gt.GT**{*;}
 
-## 继承GT包中的 GT_Fragment.BaseFragments 均不能混淆：
+## 继承GT包中的 GT_Fragment.BaseFragments 均不能混淆：(如果没有继承该类，可以不用混淆)
 -dontwarn (fragment包名).**
 -keep class (fragment包名).(基类)**{*;}
 -keep public class (fragment包名).(基类) { *; }
 -keep public class * extends (fragment包名).(基类) { *; }
 
-## 继承 GT包中的 GT.GT_Fragment.BaseDialogFragments 均不能混淆：
+## 继承 GT包中的 GT.GT_Fragment.BaseDialogFragments 均不能混淆：(如果没有继承该类，可以不用混淆)
 -keep class (Dialog包名).(Dialog类)**{*;}
 
-## gson
+## gson（使用到 GT包中SP的，需要混淆）
 -dontwarn com.google.gson.**
 -keep class sun.misc.Unsafe { *; }
 -keep class com.google.gson.** { *; }
