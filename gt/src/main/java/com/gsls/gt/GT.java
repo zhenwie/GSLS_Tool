@@ -174,6 +174,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
@@ -206,10 +207,10 @@ import okhttp3.RequestBody;
  * <p>
  * <p>
  * <p>
- * 更新时间:2020.8.11
+ * 更新时间:2020.8.12
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.4 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.5 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
