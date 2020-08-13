@@ -204,18 +204,18 @@ import okhttp3.RequestBody;
  * GSLS_Tool
  * <p>
  * <p>
- * <p>
- * <p>
- * 更新时间:2020.8.12
+ * 更新时间:2020.8.13
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.5 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.6 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
  * 4.在 AnnotationActivity、BaseActivity、BaseFragments中增多了startFragment方法
  * 5.优化了 BaseDialogFragments类 新增 onBackPressed(返回监听)、setFullScreen(设置充满全屏)、setHideBackground(设置隐藏背景)、SetHideDefaultTitle（设置隐藏默认标题）
- * 6. Hibernate 数据库除增删查改的功能方法增加 class 形参方法
+ * 6.Hibernate 数据库除增删查改的功能方法增加 class 形参方法
+ * 7.在 GT_Fragment 类中 添加 AnnotationFragment 与 AnnotationDialogFragment 注解基类（使用方法请参考官网）
+ * 8.将 BaseActivity 与 AnnotationActivity 统一添加到 GT_Activity 类中管理（使用方法请参考官网）
  * <p>
  * <p>
  * <p>
@@ -230,7 +230,7 @@ public class GT {
 
     //================================== 所有属于 GT 类的属性 =======================================
     private static GT gtAndroid = null;          //定义 GT 对象
-    private static boolean isGTUtil = false;      //默认加载 Util 类
+    private static boolean isGTUtil = false;      //默认不加载 Util 类
     private static Toast toast;                  //吐司缓冲
     private Context CONTEXT;                     //设置 当前动态的 上下文对象
     private static int logMaxLength = 3900;      //日志打印最大长度 默认是 3900 可修改
@@ -5974,7 +5974,7 @@ public class GT {
                 } else {
                     return;
                 }
-            }else {
+            } else {
                 HttpUtil.url = url;
             }
 
@@ -11396,14 +11396,14 @@ public class GT {
          */
         public abstract static class BaseFragments extends Fragment {
 
-            //是否恢复Fragment数据
-            private View view;//用于存储 Fragment
+            // 是否恢复Fragment数据
+            protected View view;// 用于存储 Fragment
 
             protected boolean isRecoverBundle() {
                 return false;
             }
 
-            //定义 Activity
+            // 定义 Activity
             protected Activity activity;
 
             // 获取 GT 实例
@@ -11411,11 +11411,18 @@ public class GT {
                 return getGT();
             }
 
-            //如果重写该方法了的话就需要自己写 接收 Activity
+            // 如果重写该方法了的话就需要自己写 接收 Activity
             @Override
             public void onAttach(Context context) {
                 super.onAttach(context);
-                activity = (Activity) context;//接收 Activity
+
+                // 使用官方推荐的方法持有 Activity
+                activity = (Activity) context;
+
+                // 如果因为异常原因持有失败就采取紧急措施，获取初始化的 Activity
+                if (activity == null) {
+                    activity = GT_Fragment.gt_fragment.getActivity();
+                }
             }
 
             /**
@@ -11423,7 +11430,9 @@ public class GT {
              *
              * @return
              */
-            protected abstract int loadLayout();
+            protected int loadLayout() {
+                return 0;
+            }
 
             /**
              * 初始化 View 数据
@@ -11482,7 +11491,6 @@ public class GT {
                 }
             }
 
-
             /**
              * @param toFragment
              * @跳转 Fragment
@@ -11520,33 +11528,33 @@ public class GT {
             @Nullable
             @Override
             public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                //是否恢复数据
+                // 是否恢复数据
                 if (isRecoverBundle()) {
-                    if (view == null) {//如果数据为 null 就创建
+                    if (view == null) {// 如果数据为 null 就创建
                         view = inflater.inflate(loadLayout(), container, false);
                     }
                 } else {
                     view = inflater.inflate(loadLayout(), container, false);
                 }
-                //如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
+                // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
                 if (SWITCHING_MODE == FRAGMENT) {
                     GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
                         @Override
                         public boolean onKey(View v, int keyCode, KeyEvent event) {
                             if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
-                                return onBackPressed();//回调按下返回键
+                                return onBackPressed();// 回调按下返回键
                             }
                             return false;
                         }
                     });
                 }
                 this.gt_fragment = GT_Fragment.gt_fragment;
-                initBaseFragment(view);//解决 在 add 的情况下 透明背景与点击穿透的问题
+                initBaseFragment(view);// 解决 在 add 的情况下 透明背景与点击穿透的问题
                 createView(view);
                 return view;
             }
 
-            //===================================== 懒加载 开始 =====================================
+            // ===================================== 懒加载 开始 =====================================
 
             /* 该页面，是否已经准备完毕 */
             private boolean isPrepared;
@@ -11554,9 +11562,7 @@ public class GT {
             private boolean isLazyLoaded;
 
             /**
-             * 主要实现的功能
-             * 当页面可见的时候，才加载当前页面数据。
-             * 没有打开的页面，就不会预加载
+             * 主要实现的功能 当页面可见的时候，才加载当前页面数据。 没有打开的页面，就不会预加载
              */
             protected void loadData() {
             }
@@ -11581,7 +11587,7 @@ public class GT {
                 }
             }
 
-            //===================================== 懒加载 结束 =====================================
+            // ===================================== 懒加载 结束 =====================================
 
             @Override
             public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
@@ -11608,7 +11614,7 @@ public class GT {
                 return false;
             }
 
-            //================================================================= GT 内部方法
+            // ================================================================= GT 内部方法
 
             /**
              * 普通日志
@@ -11635,7 +11641,7 @@ public class GT {
              * @param object
              */
             protected void logAll(Object object) {
-                GT.log(object);
+                GT.logAll(object);
             }
 
             /**
@@ -11645,7 +11651,7 @@ public class GT {
              * @param object
              */
             protected void logAll(Object tag, Object object) {
-                GT.log(tag, object);
+                GT.logAll(tag, object);
             }
 
             /**
@@ -11654,7 +11660,7 @@ public class GT {
              * @param object
              */
             protected void errAll(Object object) {
-                GT.err(object);
+                GT.errAll(object);
             }
 
             /**
@@ -11664,6 +11670,25 @@ public class GT {
              * @param object
              */
             protected void errAll(Object tag, Object object) {
+                GT.errAll(tag, object);
+            }
+
+            /**
+             * 错误日志
+             *
+             * @param object
+             */
+            protected void err(Object object) {
+                GT.err(object);
+            }
+
+            /**
+             * 带 TAG 的错误日志
+             *
+             * @param tag
+             * @param object
+             */
+            protected void err(Object tag, Object object) {
                 GT.err(tag, object);
             }
 
@@ -11707,6 +11732,60 @@ public class GT {
 
         }
 
+        /**
+         * 用于辅助 Fragment
+         */
+        public abstract static class AnnotationFragment extends BaseFragments {
+
+            //布局ID
+            private int resLayout;
+
+            public void setLayout(int resLayout) {
+                this.resLayout = resLayout;
+            }
+
+            @Override
+            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+                build(this);//注解赋值布局ID值
+
+                // 是否恢复数据
+                if (isRecoverBundle()) {
+                    if (view == null) {// 如果数据为 null 就创建
+                        view = inflater.inflate(resLayout, container, false);
+                    }
+                } else {
+                    view = inflater.inflate(resLayout, container, false);
+                }
+
+                // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
+                if (SWITCHING_MODE == FRAGMENT) {
+                    GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
+                        @Override
+                        public boolean onKey(View v, int keyCode, KeyEvent event) {
+                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                                return onBackPressed();// 回调按下返回键
+                            }
+                            return false;
+                        }
+                    });
+                }
+                this.gt_fragment = GT_Fragment.gt_fragment;
+                initBaseFragment(view);// 解决 在 add 的情况下 透明背景与点击穿透的问题
+                createView(view);
+                return view;
+            }
+
+            /**
+             * 构建 GT 工具包
+             *
+             * @param object
+             * @param view
+             */
+            private void build(Object object) {
+                GT.getGT().build(object, null);
+            }
+
+        }
 
         /**
          * 用于辅助 DialogFragment
@@ -11727,7 +11806,9 @@ public class GT {
              *
              * @return
              */
-            protected abstract int loadLayout();
+            protected int loadLayout() {
+                return 0;
+            }
 
             /**
              * 初始化 View 数据
@@ -11744,9 +11825,7 @@ public class GT {
             }
 
             /**
-             * 注意：
-             * 本方法建议在 onResume 方法中使用
-             * 设置充满全屏
+             * 注意： 本方法建议在 onResume 方法中使用 设置充满全屏
              */
             protected void setFullScreen() {
                 Objects.requireNonNull(Objects.requireNonNull(getDialog()).getWindow()).setLayout(-1, -2);
@@ -11756,26 +11835,15 @@ public class GT {
              * 设置隐藏背景
              */
             protected void setHideBackground() {
-                getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));//隐藏背景
+                getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));// 隐藏背景
             }
 
             /**
              * 设置单击外部不隐藏对话框
              */
             protected void setClickExternalNoHideDialog() {
-                //设置点击外部不会取消当前对话框
+                // 设置点击外部不会取消当前对话框
                 getDialog().setCanceledOnTouchOutside(false);
-            }
-
-            /**
-             * 设置隐藏默认标题
-             */
-            protected void SetHideDefaultTitle(){
-                // 去掉蓝色的线
-                Context context = getDialog().getContext();
-                int divierId = context.getResources().getIdentifier("android:id/titleDivider", null, null);
-                View divider = getDialog().findViewById(divierId);
-                divider.setBackgroundColor(Color.TRANSPARENT);
             }
 
             /**
@@ -11798,7 +11866,7 @@ public class GT {
              * @跳转其他的 DialogFragment
              */
             public void startDialogFragment(DialogFragment dialogFragment) {
-                dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());//弹出退出提示
+                dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
             }
 
             @Nullable
@@ -11809,14 +11877,78 @@ public class GT {
                 return view;
             }
 
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragment(Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragment(Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(toFragment);
+                }
+            }
+
+            protected void startFragment(int fragmentId, Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            protected void startFragment(int fragmentId, Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragmentHome(Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragmentHome(Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+                }
+            }
+
+            protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
             @Override
             public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
-                gt_fragment = GT_Fragment.gt_fragment;
-                initView(view, savedInstanceState);//主要方法
+                initView(view, savedInstanceState);// 主要方法
                 loadData();
-                //监听单击返回键无效
-                getDialog().setOnKeyListener(new DialogInterface.OnKeyListener() {
+                // 监听单击返回键无效
+                getDialog().setOnKeyListener(new Dialog.OnKeyListener() {
+
                     @Override
                     public boolean onKey(DialogInterface dialog, int keyCode, KeyEvent event) {
                         if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -11825,7 +11957,7 @@ public class GT {
                         return false;
                     }
                 });
-
+                this.gt_fragment = GT_Fragment.gt_fragment;
             }
 
             /**
@@ -11852,7 +11984,7 @@ public class GT {
              *
              * @param activityClass
              */
-            protected void startActivity(Class activityClass) {
+            protected void startActivity(Class<?> activityClass) {
                 GT.startAct(activityClass);
             }
 
@@ -11932,6 +12064,140 @@ public class GT {
                 GT.toast_time(object, time);
             }
 
+        }
+
+        /**
+         * 用于辅助 DialogFragment
+         */
+        public abstract static class AnnotationDialogFragment extends BaseDialogFragments {
+            // 布局ID
+            private int resLayout;
+
+            public void setLayout(int resLayout) {
+                this.resLayout = resLayout;
+            }
+
+            @Override
+            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+                build(this);// 注解赋值布局ID值
+                View view = inflater.inflate(resLayout, container, false);
+                createView(view);
+                return view;
+            }
+
+            /**
+             * 构建 GT 工具包
+             *
+             * @param object
+             * @param view
+             */
+            private void build(Object object) {
+                GT.getGT().build(object, null);
+            }
+        }
+
+
+        //=========================================== GT_Fragment 释放资源方法 ====================================
+
+        /**
+         * 释放资源
+         */
+        public void close() {
+
+            //移除 Fragment 栈中监听器
+            if (fragmentManager != null && listener != null) {
+                fragmentManager.removeOnBackStackChangedListener(listener);
+            }
+
+            if (activity != null) {
+                activity = null;
+            }
+
+            if (fragmentNames != null) {
+                fragmentNames.clear();
+            }
+
+            if (fragmentBeanList != null) {
+                fragmentBeanList.clear();
+            }
+
+            if (gt_fragment != null) {
+                gt_fragment = null;
+            }
+
+        }
+
+
+    }
+
+    /**
+     * 封装 Activity 管理器
+     */
+    public static class GT_Activity {
+
+        /**
+         * 封装普通的 Activity 管理器
+         */
+        public abstract static class BaseActivity extends AppCompatActivity {
+
+            protected GT_Fragment gt_fragment;
+
+            /**
+             * 初始化 加载布局
+             */
+            protected int loadLayout() {
+                return 0;
+            }
+
+            /**
+             * 在绘制完 View 之前设置数据
+             */
+            protected void initDrawView() {
+            }
+
+            /**
+             * 初始化 UI
+             */
+            protected abstract void initView(Bundle savedInstanceState);
+
+            /**
+             * 功能方法
+             */
+            protected void loadData() {
+            }
+
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                int loadLayout = loadLayout();
+                if (loadLayout != 0) {
+                    this.gt_fragment = GT_Fragment.gt_fragment;
+                    initDrawView();// 设置绘制前的数据
+                    setContentView(loadLayout);// 加载布局
+                    initView(savedInstanceState);// 初始化 UI
+                    loadData();// 功能方法
+                }
+
+            }
+
+            /**
+             * 构建 GT 工具包
+             *
+             * @param context
+             */
+            protected void build(Context context) {
+                getGT().build(context);
+            }
+
+            /**
+             * 跳转 Activity
+             *
+             * @param activityClass
+             */
+            protected void startActivity(Class activityClass) {
+                GT.startAct(activityClass);
+            }
+
             /**
              * @param toFragment
              * @跳转 Fragment
@@ -11996,653 +12262,229 @@ public class GT {
                 }
             }
 
-        }
-
-        //=========================================== GT_Fragment 释放资源方法 ====================================
-
-        /**
-         * 释放资源
-         */
-        public void close() {
-
-            //移除 Fragment 栈中监听器
-            if (fragmentManager != null && listener != null) {
-                fragmentManager.removeOnBackStackChangedListener(listener);
+            protected GT_Fragment getGT_Fragment() {
+                return GT.GT_Fragment.gt_fragment;
             }
 
-            if (activity != null) {
-                activity = null;
+            /**
+             * @param SQLName     数据库名称
+             * @param tableList   表名类
+             * @param sqlVersions 数据库版本
+             * @初始化 SQL
+             */
+            protected Hibernate initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
+                return new Hibernate()
+                        .init_1_SqlName(SQLName)            //设置SQL名称
+                        .init_2_SqlVersion(sqlVersions)     //设置数据库版本
+                        .init_3_SqlTable(tableClass)        //设置创建或更新升级的数据库表
+                        .init_4_Sql();                      //数据库操作执行
             }
 
-            if (fragmentNames != null) {
-                fragmentNames.clear();
+            /**
+             * @param SQLName
+             * @param sqlVersions
+             * @return
+             * @用户自定义SQLCode
+             */
+            protected Hibernate initSQL(String SQLName, int sqlVersions) {
+                return new Hibernate()
+                        .init_1_SqlName(SQLName)            //设置SQL名称
+                        .init_2_SqlVersion(sqlVersions)     //设置数据库版本
+                        .init_3_SqlTable(ApplicationUtils.getPackageName(this))        //设置创建或更新升级的数据库表
+                        .init_4_Sql();                      //数据库操作执行
             }
 
-            if (fragmentBeanList != null) {
-                fragmentBeanList.clear();
+            /**
+             * @param SQLName     数据库名称
+             * @param tableList   创建表的路径
+             * @param sqlVersions 数据库版本
+             * @初始化 SQL
+             */
+            protected Hibernate initSQL(String SQLName, String tablePath, int sqlVersions) {
+                return new Hibernate()
+                        .init_1_SqlName(SQLName)
+                        .init_2_SqlVersion(sqlVersions)
+                        .init_3_SqlTable(tablePath)
+                        .init_4_Sql();
             }
 
-            if (gt_fragment != null) {
-                gt_fragment = null;
+            /**
+             * @param SQLName     数据库名称
+             * @param tableList   表名List集合
+             * @param sqlVersions 数据库版本
+             * @初始化 SQL
+             */
+            protected Hibernate initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
+                return new Hibernate()
+                        .init_1_SqlName(SQLName)
+                        .init_2_SqlVersion(sqlVersions)
+                        .init_3_SqlTable(tableList)
+                        .init_4_Sql();
             }
 
-        }
-
-
-    }
-
-    /**
-     * 封装普通的 Activity 管理器
-     */
-    public abstract static class BaseActivity extends AppCompatActivity {
-
-        protected GT_Fragment gt_fragment;
-
-        /**
-         * 初始化 加载布局
-         */
-        protected abstract int initLayout(Bundle savedInstanceState);
-
-        /**
-         * 在绘制完 View 之前设置数据
-         */
-        protected void initDrawView() {
-        }
-
-        /**
-         * 初始化 UI
-         */
-        protected abstract void initView();
-
-        /**
-         * 功能方法
-         */
-        protected void function() {
-        }
-
-        @Override
-        protected void onCreate(Bundle savedInstanceState) {
-            super.onCreate(savedInstanceState);
-            gt_fragment = GT_Fragment.gt_fragment;
-            initDrawView();//设置绘制前的数据
-            setContentView(initLayout(savedInstanceState));//加载布局
-            initView();//初始化 UI
-            function();//功能方法
-        }
-
-        /**
-         * 构建 GT 工具包
-         *
-         * @param context
-         */
-        protected void build(Context context) {
-            GT.getGT().build(context);
-        }
-
-        /**
-         * 跳转 Activity
-         *
-         * @param activityClass
-         */
-        protected void startActivity(Class activityClass) {
-            GT.startAct(activityClass);
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名类
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)            //设置SQL名称
-                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
-                    .init_3_SqlTable(tableClass)        //设置创建或更新升级的数据库表
-                    .init_4_Sql();                      //数据库操作执行
-        }
-
-        /**
-         * @param SQLName
-         * @param sqlVersions
-         * @return
-         * @用户自定义SQLCode
-         */
-        protected Hibernate initSQL(String SQLName, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)            //设置SQL名称
-                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
-                    .init_3_SqlTable(ApplicationUtils.getPackageName(this))        //设置创建或更新升级的数据库表
-                    .init_4_Sql();                      //数据库操作执行
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   创建表的路径
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, String tablePath, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tablePath)
-                    .init_4_Sql();
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名List集合
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tableList)
-                    .init_4_Sql();
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名Set集合
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tableSet)
-                    .init_4_Sql();
-        }
-
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名Array
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tableArray)
-                    .init_4_Sql();
-        }
-
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragment(Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(toFragment);
+            /**
+             * @param SQLName     数据库名称
+             * @param tableList   表名Set集合
+             * @param sqlVersions 数据库版本
+             * @初始化 SQL
+             */
+            protected Hibernate initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
+                return new Hibernate()
+                        .init_1_SqlName(SQLName)
+                        .init_2_SqlVersion(sqlVersions)
+                        .init_3_SqlTable(tableSet)
+                        .init_4_Sql();
             }
-        }
 
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragment(Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(toFragment);
+            /**
+             * @param SQLName     数据库名称
+             * @param tableList   表名Array
+             * @param sqlVersions 数据库版本
+             * @初始化 SQL
+             */
+            protected Hibernate initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
+                return new Hibernate()
+                        .init_1_SqlName(SQLName)
+                        .init_2_SqlVersion(sqlVersions)
+                        .init_3_SqlTable(tableArray)
+                        .init_4_Sql();
             }
-        }
 
-        protected void startFragment(int fragmentId, Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            /**
+             * 普通日志
+             *
+             * @param object
+             */
+            protected void log(Object object) {
+                GT.log(object);
             }
-        }
 
-        protected void startFragment(int fragmentId, Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            /**
+             * 带 TAG 的普通日志
+             *
+             * @param tag
+             * @param object
+             */
+            protected void log(Object tag, Object object) {
+                GT.log(tag, object);
             }
-        }
 
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragmentHome(Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            /**
+             * 普通日志
+             *
+             * @param object
+             */
+            protected void logAll(Object object) {
+                GT.logAll(object);
             }
-        }
 
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragmentHome(Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            /**
+             * 带 TAG 的普通日志
+             *
+             * @param tag
+             * @param object
+             */
+            protected void logAll(Object tag, Object object) {
+                GT.logAll(tag, object);
             }
-        }
 
-        protected void startFragmentHome(int fragmentId, Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            /**
+             * 错误日志
+             *
+             * @param object
+             */
+            protected void err(Object object) {
+                GT.err(object);
             }
-        }
 
-        protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            /**
+             * 带 TAG 的错误日志
+             *
+             * @param tag
+             * @param object
+             */
+            protected void err(Object tag, Object object) {
+                GT.err(tag, object);
             }
-        }
 
-        protected GT_Fragment getGT_Fragment() {
-            return GT.GT_Fragment.gt_fragment;
-        }
-
-        /**
-         * 普通日志
-         *
-         * @param object
-         */
-        protected void log(Object object) {
-            GT.log(object);
-        }
-
-        /**
-         * 带 TAG 的普通日志
-         *
-         * @param tag
-         * @param object
-         */
-        protected void log(Object tag, Object object) {
-            GT.log(tag, object);
-        }
-
-        /**
-         * 错误日志
-         *
-         * @param object
-         */
-        protected void err(Object object) {
-            GT.err(object);
-        }
-
-        /**
-         * 带 TAG 的错误日志
-         *
-         * @param tag
-         * @param object
-         */
-        protected void err(Object tag, Object object) {
-            GT.err(tag, object);
-        }
-
-        /**
-         * 抛异常
-         *
-         * @param tag
-         */
-        protected void exception(Object tag) {
-            GT.exception(tag);
-        }
-
-        /**
-         * 普通的 Toast
-         *
-         * @param object
-         */
-        protected void toast(Object object) {
-            GT.toast_s(object);
-        }
-
-        /**
-         * 带 Context 的 Toast
-         *
-         * @param context
-         * @param object
-         */
-        protected void toast(Context context, Object object) {
-            GT.toast_s(context, object);
-        }
-
-        /**
-         * 带 延时的 的 Toast
-         *
-         * @param time
-         * @param object
-         */
-        protected void toast(long time, Object object) {
-            GT.toast_time(object, time);
-        }
-
-
-
-    }
-
-    /**
-     * 封装注解的 Activity 管理器
-     */
-    public abstract static class AnnotationActivity extends AppCompatActivity {
-
-        protected GT_Fragment gt_fragment;
-
-        /**
-         * 在绘制完 View 之前设置数据
-         */
-        protected void initDrawView() {
-        }
-
-        /**
-         * 初始化 UI
-         */
-        protected abstract void initView(Bundle savedInstanceState);
-
-        /**
-         * 功能方法
-         */
-        protected void loadData() {
-        }
-
-        @Override
-        protected void onCreate(Bundle savedInstanceState) {
-            super.onCreate(savedInstanceState);
-            gt_fragment = GT_Fragment.gt_fragment;
-            initDrawView();//设置绘制前的数据
-            initView(savedInstanceState);//初始化 UI
-            loadData();//功能方法
-
-        }
-
-        /**
-         * 构建 GT 工具包
-         *
-         * @param context
-         */
-        protected void build(Context context) {
-            getGT().build(context);
-        }
-
-        /**
-         * 跳转 Activity
-         *
-         * @param activityClass
-         */
-        protected void startActivity(Class activityClass) {
-            GT.startAct(activityClass);
-        }
-
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragment(Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(toFragment);
+            /**
+             * 错误日志
+             *
+             * @param object
+             */
+            protected void errAll(Object object) {
+                GT.errAll(object);
             }
-        }
 
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragment(Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(toFragment);
+            /**
+             * 带 TAG 的错误日志
+             *
+             * @param tag
+             * @param object
+             */
+            protected void errAll(Object tag, Object object) {
+                GT.errAll(tag, object);
             }
-        }
 
-        protected void startFragment(int fragmentId, Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            /**
+             * 抛异常
+             *
+             * @param tag
+             */
+            protected void exception(Object tag) {
+                GT.exception(tag);
             }
-        }
 
-        protected void startFragment(int fragmentId, Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+            /**
+             * 普通的 Toast
+             *
+             * @param object
+             */
+            protected void toast(Object object) {
+                GT.toast_s(object);
             }
-        }
 
-
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragmentHome(Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            /**
+             * 带 Context 的 Toast
+             *
+             * @param context
+             * @param object
+             */
+            protected void toast(Context context, Object object) {
+                GT.toast_s(context, object);
             }
-        }
 
-        /**
-         * @param toFragment
-         * @跳转 Fragment
-         */
-        protected void startFragmentHome(Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+            /**
+             * 带 延时的 的 Toast
+             *
+             * @param time
+             * @param object
+             */
+            protected void toast(long time, Object object) {
+                GT.toast_time(object, time);
             }
+
+
         }
 
-        protected void startFragmentHome(int fragmentId, Fragment toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+        /**
+         * 封装注解的 Activity 管理器
+         */
+        public abstract static class AnnotationActivity extends BaseActivity {
+
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                gt_fragment = GT_Fragment.gt_fragment;
+                initDrawView();// 设置绘制前的数据
+                initView(savedInstanceState);// 初始化 UI
+                loadData();// 功能方法
+
             }
-        }
 
-        protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
-            if (GT_Fragment.gt_fragment != null) {
-                GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
-            }
-        }
-
-        protected GT_Fragment getGT_Fragment() {
-            return GT.GT_Fragment.gt_fragment;
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名类
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)            //设置SQL名称
-                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
-                    .init_3_SqlTable(tableClass)        //设置创建或更新升级的数据库表
-                    .init_4_Sql();                      //数据库操作执行
-        }
-
-        /**
-         * @param SQLName
-         * @param sqlVersions
-         * @return
-         * @用户自定义SQLCode
-         */
-        protected Hibernate initSQL(String SQLName, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)            //设置SQL名称
-                    .init_2_SqlVersion(sqlVersions)     //设置数据库版本
-                    .init_3_SqlTable(ApplicationUtils.getPackageName(this))        //设置创建或更新升级的数据库表
-                    .init_4_Sql();                      //数据库操作执行
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   创建表的路径
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, String tablePath, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tablePath)
-                    .init_4_Sql();
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名List集合
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tableList)
-                    .init_4_Sql();
-        }
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名Set集合
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tableSet)
-                    .init_4_Sql();
-        }
-
-
-        /**
-         * @param SQLName     数据库名称
-         * @param tableList   表名Array
-         * @param sqlVersions 数据库版本
-         * @初始化 SQL
-         */
-        protected Hibernate initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
-            return new Hibernate()
-                    .init_1_SqlName(SQLName)
-                    .init_2_SqlVersion(sqlVersions)
-                    .init_3_SqlTable(tableArray)
-                    .init_4_Sql();
-        }
-
-        /**
-         * 普通日志
-         *
-         * @param object
-         */
-        protected void log(Object object) {
-            GT.log(object);
-        }
-
-        /**
-         * 带 TAG 的普通日志
-         *
-         * @param tag
-         * @param object
-         */
-        protected void log(Object tag, Object object) {
-            GT.log(tag, object);
-        }
-
-        /**
-         * 普通日志
-         *
-         * @param object
-         */
-        protected void logAll(Object object) {
-            GT.logAll(object);
-        }
-
-        /**
-         * 带 TAG 的普通日志
-         *
-         * @param tag
-         * @param object
-         */
-        protected void logAll(Object tag, Object object) {
-            GT.logAll(tag, object);
-        }
-
-        /**
-         * 错误日志
-         *
-         * @param object
-         */
-        protected void err(Object object) {
-            GT.err(object);
-        }
-
-        /**
-         * 带 TAG 的错误日志
-         *
-         * @param tag
-         * @param object
-         */
-        protected void err(Object tag, Object object) {
-            GT.err(tag, object);
-        }
-
-        /**
-         * 错误日志
-         *
-         * @param object
-         */
-        protected void errAll(Object object) {
-            GT.errAll(object);
-        }
-
-        /**
-         * 带 TAG 的错误日志
-         *
-         * @param tag
-         * @param object
-         */
-        protected void errAll(Object tag, Object object) {
-            GT.errAll(tag, object);
-        }
-
-        /**
-         * 抛异常
-         *
-         * @param tag
-         */
-        protected void exception(Object tag) {
-            GT.exception(tag);
-        }
-
-        /**
-         * 普通的 Toast
-         *
-         * @param object
-         */
-        protected void toast(Object object) {
-            GT.toast_s(object);
-        }
-
-        /**
-         * 带 Context 的 Toast
-         *
-         * @param context
-         * @param object
-         */
-        protected void toast(Context context, Object object) {
-            GT.toast_s(context, object);
-        }
-
-        /**
-         * 带 延时的 的 Toast
-         *
-         * @param time
-         * @param object
-         */
-        protected void toast(long time, Object object) {
-            GT.toast_time(object, time);
         }
 
     }
-
 
 
 //============================================= 游戏类 ======================================
@@ -14226,6 +14068,7 @@ public class GT {
 
 //======================================= Run GT 的内部注解 =====================================
 
+
     /**
      * 注解类
      */
@@ -14233,17 +14076,37 @@ public class GT {
 
 
         /**
-         * 为给 Activity 类 标的注解
-         * 用法如下：
+         * 为给 Activity 类 标的注解 用法如下：
          *
-         * @Activity(R.layout.activity_main) public class AndroidActivity extends AppCompatActivity {....}
+         * @Activity(R.layout.activity_main) public class DemoActivity extends AppCompatActivity {....}
          */
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
-        public @interface GT_Activity {
+        public @interface GT_AnnotationActivity {
             int value();
         }
 
+        /**
+         * 为给 Activity 类 标的注解 用法如下：
+         *
+         * @Activity(R.layout.activity_main) public class DemoFragment extends GT_AnnotationFragment {....}
+         */
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_AnnotationFragment {
+            int value();
+        }
+
+        /**
+         * 为给 Activity 类 标的注解 用法如下：
+         *
+         * @Activity(R.layout.activity_main) public class DemoFragment extends GT_AnnotationFragment {....}
+         */
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_AnnotationDialogFragment {
+            int value();
+        }
 
         /**
          * 为给 View 组件标的注解
@@ -14596,6 +14459,10 @@ public class GT {
 
             // SQL 注解
             initSQL(object, mClass);                      //为加载 List SQL 成员变量初始化
+
+            // Fragment 、注解
+            initAnnotationFragment(object, mClass);// 为加载 Fragment 布局初始化
+            initGT_AnnotationDialogFragment(object, mClass);// 为加载 Fragment 布局初始化
             initGT_Fragment(object, mClass);              //为加载 GTFragment 成员变量初始化
 
             // Java 注解部分
@@ -15390,7 +15257,64 @@ public class GT {
         }
 
 
-        //================================   下面是 Activity 的注解内容   ==========================
+        //================================   下面是 Fragment 的注解内容   ==========================
+
+        /**
+         * 注解 Fragment
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initAnnotationFragment(Object object, Class<? extends Object> mClass) {
+            Annotations.GT_AnnotationFragment contentView = mClass.getAnnotation(Annotations.GT_AnnotationFragment.class);// 获取该类 ContextView 的注解类
+            // 如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();// 获取注解类参数
+                try {
+                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    method.setAccessible(true);// 获取该方法的访问权限
+                    method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
+                } catch (NoSuchMethodException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (IllegalAccessException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (InvocationTargetException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                }
+            }
+        }
+
+        /**
+         * 注解 Fragment
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initGT_AnnotationDialogFragment(Object object, Class<? extends Object> mClass) {
+            Annotations.GT_AnnotationDialogFragment contentView = mClass.getAnnotation(Annotations.GT_AnnotationDialogFragment.class);// 获取该类 ContextView 的注解类
+            // 如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();// 获取注解类参数
+                try {
+                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    method.setAccessible(true);// 获取该方法的访问权限
+                    method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
+                } catch (NoSuchMethodException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (IllegalAccessException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (InvocationTargetException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                }
+            }
+        }
+
 
         private static void initGT_Fragment(Object object, Class<? extends Object> mClass) {
             Field[] fields = mClass.getDeclaredFields();//获致当前 Activity 所有成员变更
@@ -15823,7 +15747,7 @@ public class GT {
          * @param activity
          */
         private static void initActivity(Activity activity, Class<? extends Activity> mClass) {
-            Annotations.GT_Activity contentView = mClass.getAnnotation(Annotations.GT_Activity.class);//获取该类 ContextView 的注解类
+            Annotations.GT_AnnotationActivity contentView = mClass.getAnnotation(Annotations.GT_AnnotationActivity.class);//获取该类 ContextView 的注解类
             //如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();//获取注解类参数

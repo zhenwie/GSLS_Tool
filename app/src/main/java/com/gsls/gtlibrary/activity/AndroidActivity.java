@@ -5,8 +5,8 @@ import android.os.Bundle;
 import com.gsls.gtlibrary.R;
 import com.gsls.gtlibrary.util.GT;
 
-@GT.Annotations.GT_Activity(R.layout.activity_main)
-public class AndroidActivity extends GT.AnnotationActivity {
+@GT.Annotations.GT_AnnotationActivity(R.layout.activity_main)
+public class AndroidActivity extends GT.GT_Activity.AnnotationActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
