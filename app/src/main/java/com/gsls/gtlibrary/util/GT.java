@@ -204,10 +204,10 @@ import okhttp3.RequestBody;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2020.8.13
+ * 更新时间:2020.8.19
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.6 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.7 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
@@ -11537,17 +11537,15 @@ public class GT {
                     view = inflater.inflate(loadLayout(), container, false);
                 }
                 // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
-                if (SWITCHING_MODE == FRAGMENT) {
-                    GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
-                        @Override
-                        public boolean onKey(View v, int keyCode, KeyEvent event) {
-                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
-                                return onBackPressed();// 回调按下返回键
-                            }
-                            return false;
+                GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
+                    @Override
+                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                        if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                            return onBackPressed();// 回调按下返回键
                         }
-                    });
-                }
+                        return false;
+                    }
+                });
                 this.gt_fragment = GT_Fragment.gt_fragment;
                 initBaseFragment(view);// 解决 在 add 的情况下 透明背景与点击穿透的问题
                 createView(view);
@@ -11758,17 +11756,16 @@ public class GT {
                 }
 
                 // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
-                if (SWITCHING_MODE == FRAGMENT) {
-                    GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
-                        @Override
-                        public boolean onKey(View v, int keyCode, KeyEvent event) {
-                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
-                                return onBackPressed();// 回调按下返回键
-                            }
-                            return false;
+                GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
+                    @Override
+                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                        if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                            return onBackPressed();// 回调按下返回键
                         }
-                    });
-                }
+                        return false;
+                    }
+                });
+
                 this.gt_fragment = GT_Fragment.gt_fragment;
                 initBaseFragment(view);// 解决 在 add 的情况下 透明背景与点击穿透的问题
                 createView(view);
