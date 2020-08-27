@@ -55,6 +55,7 @@ import android.net.NetworkInfo;
 import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.net.wifi.hotspot2.pps.HomeSp;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -204,10 +205,10 @@ import okhttp3.RequestBody;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2020.8.19
+ * 更新时间:2020.8.27
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.7 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
+ * 更新内容：（1.2.8 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
  * 1.更新了 HttpUtil (网络请求)类
  * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
  * 3.增加了 logAll 与 errAll 增加打印所有日志方法
@@ -10892,7 +10893,7 @@ public class GT {
          * @return
          */
         public static GT_Fragment Build(FragmentActivity fragmentActivity, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
                 initFragment(fragmentActivity);
@@ -10909,7 +10910,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Class<T> fragmentClass, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
                 initFragment(fragmentActivity);
@@ -10917,7 +10918,7 @@ public class GT {
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
                 gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragmentClass);
-                gt_fragment.switchingMode(ACTIVITY);
+                gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
         }
@@ -10931,7 +10932,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Fragment fragment, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
                 initFragment(fragmentActivity);
@@ -10939,7 +10940,7 @@ public class GT {
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
                 gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragment);
-                gt_fragment.switchingMode(ACTIVITY);
+                gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
         }
@@ -10952,7 +10953,7 @@ public class GT {
          * @return
          */
         public static GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -10970,7 +10971,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Class<T> fragmentClass, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -10979,7 +10980,7 @@ public class GT {
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
                 gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragmentClass);
-                gt_fragment.switchingMode(ACTIVITY);
+                gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
         }
@@ -10993,7 +10994,7 @@ public class GT {
          * @return
          */
         public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Fragment fragment, Bundle bundle) {
-            if (bundle == null) {
+            if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -11002,7 +11003,7 @@ public class GT {
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
                 gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragment);
-                gt_fragment.switchingMode(ACTIVITY);
+                gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
         }
@@ -11170,6 +11171,9 @@ public class GT {
          */
         public <T> GT_Fragment startFragmentHome(Class<T> fragmentClass) {
 
+            //设置本次 Fragment 的启动模式
+            startMode(HOME);
+
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragmentClass == null) return this;
 
@@ -11201,6 +11205,9 @@ public class GT {
          * @return
          */
         public GT_Fragment startFragmentHome(Fragment fragment) {
+
+            //设置本次 Fragment 的启动模式
+            startMode(HOME);
 
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragment == null) return this;
@@ -11513,12 +11520,14 @@ public class GT {
 
             protected void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
             protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
@@ -11928,12 +11937,14 @@ public class GT {
 
             protected void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
             protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
@@ -12249,12 +12260,14 @@ public class GT {
 
             protected void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
             protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
