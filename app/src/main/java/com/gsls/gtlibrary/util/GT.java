@@ -55,7 +55,6 @@ import android.net.NetworkInfo;
 import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.net.wifi.hotspot2.pps.HomeSp;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -136,8 +135,11 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -205,18 +207,18 @@ import okhttp3.RequestBody;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2020.8.27
+ * 更新时间:2020.11.24
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.8 版本 GT_Fragment 重构代码 增加启动模式 与 切换方式）
- * 1.更新了 HttpUtil (网络请求)类
- * 2.更新了 GT_Fragment 类 增加了页面数据恢复 与 BaseFragments 的优化（BaseFragment 增加了 onBackPressed 方法）
- * 3.增加了 logAll 与 errAll 增加打印所有日志方法
- * 4.在 AnnotationActivity、BaseActivity、BaseFragments中增多了startFragment方法
- * 5.优化了 BaseDialogFragments类 新增 onBackPressed(返回监听)、setFullScreen(设置充满全屏)、setHideBackground(设置隐藏背景)、SetHideDefaultTitle（设置隐藏默认标题）
- * 6.Hibernate 数据库除增删查改的功能方法增加 class 形参方法
- * 7.在 GT_Fragment 类中 添加 AnnotationFragment 与 AnnotationDialogFragment 注解基类（使用方法请参考官网）
- * 8.将 BaseActivity 与 AnnotationActivity 统一添加到 GT_Activity 类中管理（使用方法请参考官网）
+ * 更新内容：（1.2.9 版本 数据传递 就是这么简单！）
+ * 1.新增 SaveObject 类，采用序列化进行传递 Object(GT_Fragment|GT_Animation|Hibernate|GT_SharedPreferences|AppDataPool|均自动实现序列化)
+ * 2.增加 APP 错误日志捕获方法：GT.LOG.initAppErrLogTry(this);(如果想打印到本地，请打开本地打印：GT.LOG.LOG_FILE_TF = true;)
+ * 3.新增 GT_Fragment 构建注解，用法如下：（具体教程请参考官网教程）
+ * 用法1：GT.GT_Fragment.Build;
+ * 用法2：GT.GT_Fragment.Builds(R.id.frameLayout, Fragment_A.class); 参数一：指定一个Fragment 容器，参数二：指定预加载的Fragment页面，参数均可不填
+ * 注意：使用注解时如果没有指定加载Fragment容器的话很容易报未找到视图的异常，但添加 gt_fragment.setHomeFragmentId(R.id.frameLayout); 即可
+ * 4.GT_Fragment 新增 DIALOG 切换方式 如：gt_fragment.switchingMode(GT.GT_Fragment.DIALOG); 让切换的Fragment 进行 hide / show 操作
+ *
  * <p>
  * <p>
  * <p>
@@ -233,7 +235,7 @@ public class GT {
     private static GT gtAndroid = null;          //定义 GT 对象
     private static boolean isGTUtil = false;      //默认不加载 Util 类
     private static Toast toast;                  //吐司缓冲
-    private Context CONTEXT;                     //设置 当前动态的 上下文对象
+    private Activity activity;                     //设置 当前动态的 上下文对象
     private static int logMaxLength = 3900;      //日志打印最大长度 默认是 3900 可修改
     //================================== 提供访问 GT 属性的接口======================================
 
@@ -261,18 +263,18 @@ public class GT {
      *
      * @return
      */
-    public Context getCONTEXT() {
-        return CONTEXT;
+    public Activity getactivity() {
+        return activity;
     }
 
     /**
      * 绑定 Activity
      *
-     * @param CONTEXT
+     * @param activity
      * @Activity 为外部提供访问 GT Context 接口
      */
-    public void build(Context context) {
-        this.CONTEXT = context;
+    public void build(Activity activity) {
+        this.activity = activity;
         initGTUtilActivity();//初始化 GT 必要的工具
     }
 
@@ -284,7 +286,6 @@ public class GT {
      * @Fragment 为外部提供访问 GT Context 接口
      */
     public void build(Object object, View view) {
-
         initGTUtilFragment(object, view);//初始化 GT 必要的工具
     }
 
@@ -293,8 +294,8 @@ public class GT {
      * @param view
      * @初始化必要工具 为外部提供访问 GT Context 接口
      */
-    public void build(Context context, Object object, View view) {
-        this.CONTEXT = context;
+    public void build(Activity activity, Object object, View view) {
+        this.activity = activity;
         initGTUtilFragment(object, view);//初始化 GT 必要的工具
     }
 
@@ -330,11 +331,11 @@ public class GT {
     private void initGTUtilActivity() {
 
         //GT 包内部默认加载的工具包
-        AnnotationAssist.initAll((Activity) CONTEXT); //初始化 IOC 注解
+        AnnotationAssist.initAll((Activity) activity); //初始化 IOC 注解
 
         //是否加载注解
         if (isGTUtil) {//默认是加载的
-            Utils.init(CONTEXT);//初始化强大的 Utiles 工具
+            Utils.init(activity);//初始化强大的 Utiles 工具
         }
 
 
@@ -342,13 +343,12 @@ public class GT {
 
     //初始化 GT 必要的工具  主要用于 非 Activity 的页面 如：Fragment、DialogFragment 等页面
     private void initGTUtilFragment(Object object, View view) {
-
         //GT 包内部默认加载的工具包
         AnnotationAssist.initAll(object, view); //初始化 IOC 注解
 
         //是否加载注解
         if (isGTUtil) {//默认是加载的
-            Utils.init(CONTEXT);//初始化强大的 Utiles 工具
+            Utils.init(activity);//初始化强大的 Utiles 工具
         }
 
     }
@@ -569,6 +569,100 @@ public class GT {
             return file;
         }
 
+        //注册App异常捕获
+        public static void initAppErrLogTry(Activity activity) {
+            AppErrLog.getInstance().init(activity);//初始化
+        }
+
+
+    }
+
+    /**
+     * @APP 错误异常信息捕获
+     */
+    private static class AppErrLog implements java.lang.Thread.UncaughtExceptionHandler {
+        private static AppErrLog sInstance = new AppErrLog();
+        private java.lang.Thread.UncaughtExceptionHandler mDefaultMyCrashHandler;
+        private Context mContext;
+
+        private AppErrLog() {
+        }
+
+        public static AppErrLog getInstance() {
+            return sInstance;
+        }
+
+        public void init(@NonNull Context context) {
+            mDefaultMyCrashHandler = java.lang.Thread.getDefaultUncaughtExceptionHandler();
+            java.lang.Thread.setDefaultUncaughtExceptionHandler(this);
+            mContext = context.getApplicationContext();
+        }
+
+        /**
+         * 当程序中有未被捕获的异常，系统将会调用这个方法
+         *
+         * @param t 出现未捕获异常的线程
+         * @param e 得到异常信息
+         */
+        @Override
+        public void uncaughtException(java.lang.Thread t, Throwable e) {
+            try {
+                //保存到本地
+//            exportExceptionToSDCard(e);
+                GT.logs("************************ ErrLogRun ***************************");
+                GT.logs("PhoneData：" + appendPhoneInfo());
+                GT.logs("---------------------------------------------------------------");
+                GT.logs("ErrLog:" + e);
+                GT.logs("************************ ErrLogClose ***************************");
+                //下面也可以写上传的服务器的代码
+            } catch (Exception e1) {
+                e1.printStackTrace();
+            }
+            e.printStackTrace();
+            //如果系统提供了默认的异常处理器，则交给系统去结束程序，否则就自己结束自己
+            if (mDefaultMyCrashHandler != null) {
+                mDefaultMyCrashHandler.uncaughtException(t, e);
+            } else {
+                GT.log("exit app");
+            }
+        }
+
+        /**
+         * 获取手机信息
+         */
+        private String appendPhoneInfo() throws PackageManager.NameNotFoundException {
+            PackageManager pm = mContext.getPackageManager();
+            PackageInfo pi = pm.getPackageInfo(mContext.getPackageName(), PackageManager.GET_ACTIVITIES);
+            StringBuilder sb = new StringBuilder();
+            //App版本
+            sb.append("App Version: ");
+            sb.append(pi.versionName);
+            sb.append("_");
+            sb.append(pi.versionCode + "\n");
+
+            //Android版本号
+            sb.append("OS Version: ");
+            sb.append(Build.VERSION.RELEASE);
+            sb.append("_");
+            sb.append(Build.VERSION.SDK_INT + "\n");
+
+            //手机制造商
+            sb.append("Vendor: ");
+            sb.append(Build.MANUFACTURER + "\n");
+
+            //手机型号
+            sb.append("Model: ");
+            sb.append(Build.MODEL + "\n");
+
+            //CPU架构
+            sb.append("CPU: ");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                sb.append(Arrays.toString(Build.SUPPORTED_ABIS));
+            } else {
+                sb.append(Build.CPU_ABI);
+            }
+            return sb.toString();
+        }
     }
 
     /**
@@ -747,7 +841,6 @@ public class GT {
 
     }
 
-
     /**
      * 打印所有提示消息 Log
      *
@@ -788,6 +881,22 @@ public class GT {
             e.printStackTrace();
         }
     }
+
+    /**
+     * 抛异常，第几层
+     *
+     * @param tag
+     * @param number
+     */
+    public static void exception(Object tag, int number) {
+        try {
+            throw new Exception(tag.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+            GT.log(getLineInfo(number), "e:" + e);
+        }
+    }
+
 
     //============================================= 吐司类 =====================================
 
@@ -844,13 +953,13 @@ public class GT {
              */
             public ToastView initLayout(int layout) {
                 if (TOAST.TOAST_TF) {
-                    if (getGT().CONTEXT != null) {
-                        view = LayoutInflater.from(getGT().CONTEXT).inflate(layout, null);
-                        toast = new Toast(getGT().CONTEXT);
+                    if (getGT().activity != null) {
+                        view = LayoutInflater.from(getGT().activity).inflate(layout, null);
+                        toast = new Toast(getGT().activity);
                         toast.setView(view);
                     } else {
                         if (LOG.LOG_TF) {//设置为默认输出日志
-                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setCONTEXT(activity);");
+                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
                         }
                     }
                 }
@@ -865,7 +974,7 @@ public class GT {
                         toast.setView(view);
                     } else {
                         if (LOG.LOG_TF) {//设置为默认输出日志
-                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setCONTEXT(activity);");
+                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
                         }
                     }
                 }
@@ -880,15 +989,15 @@ public class GT {
             public ToastView initLayout(int layout, int Gravity) {
 
                 if (TOAST.TOAST_TF) {
-                    if (getGT().CONTEXT != null) {
-                        view = LayoutInflater.from(getGT().CONTEXT).inflate(layout, null);
-                        toast = new Toast(getGT().CONTEXT);
+                    if (getGT().activity != null) {
+                        view = LayoutInflater.from(getGT().activity).inflate(layout, null);
+                        toast = new Toast(getGT().activity);
                         if (Gravity != 0)
                             toast.setGravity(Gravity, 0, 0);
                         toast.setView(view);
                     } else {
                         if (LOG.LOG_TF) {//设置为默认输出日志
-                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setCONTEXT(activity);");
+                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
                         }
                     }
                 }
@@ -907,7 +1016,7 @@ public class GT {
                         toast.setView(view);
                     } else {
                         if (LOG.LOG_TF) {//设置为默认输出日志
-                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setCONTEXT(activity);");
+                            err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
                         }
                     }
                 }
@@ -926,11 +1035,11 @@ public class GT {
      */
     public static void toast_s(Object msg) {
         if (TOAST.TOAST_TF) {
-            if (getGT().CONTEXT != null) {
-                Toast.makeText(getGT().CONTEXT, String.valueOf(msg), Toast.LENGTH_SHORT).show();
+            if (getGT().activity != null) {
+                Toast.makeText(getGT().activity, String.valueOf(msg), Toast.LENGTH_SHORT).show();
             } else {
                 if (LOG.LOG_TF)//设置为默认输出日志
-                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setCONTEXT(activity);");
+                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
             }
 
         }
@@ -944,8 +1053,8 @@ public class GT {
      */
     public static void toast_time(Object msg, long time) {
         if (TOAST.TOAST_TF) {
-            if (getGT().CONTEXT != null) {
-                final Toast toast = Toast.makeText(getGT().CONTEXT, String.valueOf(msg), Toast.LENGTH_LONG);
+            if (getGT().activity != null) {
+                final Toast toast = Toast.makeText(getGT().activity, String.valueOf(msg), Toast.LENGTH_LONG);
                 final Timer timer = new Timer();
                 timer.schedule(new TimerTask() {
                     @Override
@@ -962,7 +1071,7 @@ public class GT {
                 }, time);
             } else {
                 if (LOG.LOG_TF)//设置为默认输出日志
-                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setCONTEXT(activity);");
+                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
             }
 
         }
@@ -1011,9 +1120,9 @@ public class GT {
      * @标准Toast
      */
     public static void toast(Object content) {
-        if (getGT().getCONTEXT() != null) {
+        if (getGT().getactivity() != null) {
             if (toast == null) {
-                toast = Toast.makeText(getGT().getCONTEXT(), content.toString(), Toast.LENGTH_SHORT);
+                toast = Toast.makeText(getGT().getactivity(), content.toString(), Toast.LENGTH_SHORT);
             } else {
                 toast.setText(content.toString());
             }
@@ -1435,10 +1544,10 @@ public class GT {
      * @param activityClass 跳转的类
      */
     public static void startAct(Class activityClass) {
-        if (getGT().CONTEXT != null) {
-            getGT().CONTEXT.startActivity(new Intent(getGT().CONTEXT, activityClass));//跳转 Activity
+        if (getGT().activity != null) {
+            getGT().activity.startActivity(new Intent(getGT().activity, activityClass));//跳转 Activity
         } else {
-            GT.err(getLineInfo(1), "跳转 Activity 失败，CONTEXT 为 null 无法进行相应的 Activity 跳转");
+            GT.err(getLineInfo(1), "跳转 Activity 失败，activity 为 null 无法进行相应的 Activity 跳转");
         }
     }
 
@@ -1449,10 +1558,10 @@ public class GT {
      */
     public static void startAct(Intent intent) {
 
-        if (getGT().CONTEXT != null && intent != null) {
-            getGT().CONTEXT.startActivity(intent);//跳转 Activity
+        if (getGT().activity != null && intent != null) {
+            getGT().activity.startActivity(intent);//跳转 Activity
         } else {
-            GT.err(getLineInfo(1), "跳转 Activity 失败，CONTEXT 或 Intent为 null 无法进行相应的 Activity 跳转");
+            GT.err(getLineInfo(1), "跳转 Activity 失败，activity 或 Intent为 null 无法进行相应的 Activity 跳转");
         }
     }
 
@@ -1471,9 +1580,590 @@ public class GT {
     //============================================= 数据存储类 =====================================
 
     /**
+     * 对 Object 的增删查改操作
+     */
+    public static class SaveObject {
+
+        public static interface SaveBean extends Serializable {
+        }
+
+        /**
+         * 保存Object
+         *
+         * @param context
+         * @param obj
+         * @return 是否保存成功
+         */
+        public static synchronized boolean saveObject(Context context, Object obj) {
+            if (context == null || obj == null) {
+                errs("保存的参数为 null");
+                return false;
+            }
+            try {
+                File file = new File(context.getFilesDir().getPath() + obj.getClass().getName());
+                ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(file));
+                out.writeObject(obj);//存储Object
+                out.close();//关闭存储流
+            } catch (IOException e) {
+                GT.errs("异常:" + e);
+                e.printStackTrace();
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * 删除Object
+         *
+         * @param context
+         * @param cla
+         * @return
+         */
+        public static synchronized boolean deleteObject(Context context, Class<?> cla) {
+            if (context == null || cla == null) {
+                errs("删除的参数为 null");
+                return false;
+            }
+            try {
+                File file = new File(context.getFilesDir().getPath() + cla.getName());
+                ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(file));
+                Object obj = new Object();//保证不会空指针
+                try {
+                    obj = cla.newInstance();//实体化
+                } catch (IllegalAccessException e) {
+                    GT.errs("异常:" + e);
+                    e.printStackTrace();
+                    return false;
+                } catch (InstantiationException e) {
+                    GT.errs("异常:" + e);
+                    e.printStackTrace();
+                    return false;
+                }
+                out.writeObject(obj);//存储Object
+                out.close();//关闭存储流
+            } catch (IOException e) {
+                GT.errs("异常:" + e);
+                e.printStackTrace();
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * 获取Object
+         *
+         * @param context
+         * @param cla
+         * @param <T>
+         * @return
+         */
+        public static synchronized <T> T queryObject(Context context, Class<T> cla) {
+
+            if (context == null || cla == null) {
+                errs("查询的参数为 null");
+                return null;
+            }
+            T t = null;
+            try {
+                File file = new File(context.getFilesDir().getPath() + cla.getName());
+                ObjectInputStream in = new ObjectInputStream(new FileInputStream(file));
+                t = (T) in.readObject();
+                in.close();//关闭反序列化数据流
+            } catch (IOException | ClassNotFoundException e) {
+                GT.errs("异常:" + e);
+                e.printStackTrace();
+            }
+            return t;
+
+        }
+
+        /**
+         * 更改Object
+         *
+         * @param context
+         * @param obj
+         * @return
+         */
+        public static synchronized boolean updateObject(Context context, Object obj) {
+            if (context == null || obj == null) {
+                errs("修改的参数为 null");
+                return false;
+            }
+            try {
+                File file = new File(context.getFilesDir().getPath() + obj.getClass().getName());
+                ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(file));
+                out.writeObject(obj);//存储Object
+                out.close();//关闭存储流
+            } catch (IOException e) {
+                GT.errs("异常:" + e);
+                e.printStackTrace();
+                return false;
+            }
+            return true;
+        }
+
+    }
+
+    /**
+     * @App存储池
+     */
+    public static class AppDataPool implements SaveObject.SaveBean {
+
+        /**
+         * @App内部存储池
+         * @临时数据
+         */
+        public static class Interior {
+
+            /**
+             * @内部存储池
+             * @存储数据的临时容器
+             */
+            private final static Map<Object, Object> interiorDataPool = new HashMap<>();
+
+            /**
+             * @param classs
+             * @param key
+             * @param data
+             * @return 操作成功 返回 true
+             * @保存数据
+             */
+            public static boolean saveDataPool(Object classs, Object key, Object data) {
+                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
+                if (!interiorDataPool.containsKey(idKey)) {
+                    interiorDataPool.put(idKey, data);//存储数据
+                    return true;
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "App内部存储池，保存数据失败！当前数据池中存在该值");
+                    }
+                    return false;
+                }
+            }
+
+            /**
+             * @param classs
+             * @param key
+             * @return 操作成功 返回 true
+             * @删除数据
+             */
+            public static boolean deleteDataPool(Object classs, Object key) {
+                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
+                if (interiorDataPool.containsKey(idKey)) {
+                    interiorDataPool.remove(idKey);//删除数据
+                    return true;
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "App内部存储池，删除数据失败！当前数据池中不存在该值");
+                    }
+                    return false;
+                }
+            }
+
+            /**
+             * @param classs 读取那个类存储的数据
+             * @param key    存储的key
+             * @return 成功返回 查询的值 否则返回 null
+             * @查询数据
+             */
+            public static Object queryDataPool(Object classs, Object key) {
+                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
+                if (interiorDataPool.containsKey(idKey)) {
+                    return interiorDataPool.get(idKey);//获取数据
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "App内部存储池，查询数据失败！当前数据池中不存在该值");
+                    }
+                    return null;
+                }
+            }
+
+            /**
+             * @param classs 读取那个类存储的数据
+             * @param key    存储的key
+             * @return 成功返回 true
+             * @修改数据
+             */
+            public static boolean updateDataPool(Object classs, Object key, Object toData) {
+                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
+                if (interiorDataPool.containsKey(idKey)) {
+                    interiorDataPool.put(idKey, toData);//修改数据
+                    return true;
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "App内部存储池，修改数据失败！当前数据池中不存在该值");
+                    }
+                    return false;
+                }
+            }
+
+            /**
+             * @return
+             * @清空
+             */
+            public static boolean clearData() {
+                if (interiorDataPool != null) {
+                    try {
+                        interiorDataPool.clear();
+                        return true;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                }
+                return false;
+            }
+
+            /**
+             * @param classs
+             * @param key
+             * @return
+             * @APP存储池中返回IdKey
+             */
+            private static String getIdKey(Object classs, Object key) {
+                return classs.getClass().getName().replace(".", "/") + ".java 【" + key + "】";// 获取文件包名与Java文件名
+            }
+
+        }
+
+        /**
+         * @APP外部存储池
+         * @持久性数据（需要在清单文件中添加以下文件读取与写入权限）
+         * @<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+         * @<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+         */
+        public static class External {
+
+            /**
+             * @外部存储池
+             * @存储数据的永久容器
+             */
+            private static Map<Object, Object> externalDataPool = null;    //当前App所有数据的容器
+            private static Object passWord = null;             //当前文件的密码
+            private static GT_File gt_file = null;             //GT_File 工具包
+            private static final String fileSaveDataPath = "/Android/data/com.gsls.gtlibrary/AppDataPool/";//GT APP 公共池数据源
+            private static String appPackage = null;
+            private static String fileName = null;             //保存数据的文件名
+            private static String filePath = null;             //当前文件的全部路径
+            private static Gson gson = null;
+            private Activity activity;
+
+            /**
+             * @param activity
+             * @param passWord
+             * @初始化
+             */
+            public static void init(Activity activity, Object passWord) {
+                gt_file = new GT_File();//创建 File 对象
+                gson = new Gson();
+                appPackage = AppUtils.getAppPackageName();
+                AppAuthorityManagement.readWritePermission(activity);//申请文件读写的6.0以上权限
+                External.passWord = Encryption.MD5.encryptMD5(appPackage + passWord);//将 密码 进行 MD5 加密
+                fileName = getAppName(AppUtils.getAppPackageName());
+            }
+
+            /**
+             * @param packName
+             * @param key
+             * @param data
+             * @return 返回为 true 则表示 保存成功
+             * @保存数据(保存只能保存自己app池下的数据)
+             */
+            public static boolean saveDataPool(Object key, Object data) {
+                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), getAppName(appPackage));
+                if (!externalDataPool.containsKey(key)) {
+                    //保存操作
+                    externalDataPool.put(key, data);//将数据保存到map中
+                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
+                    gt_file.save(encryptData, fileSaveDataPath + appPackage, getAppName(appPackage));
+                    return true;
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "当前保存 外部数据池出错，数据池 中已存在该 Key 保存失败");
+                    }
+                    return false;
+                }
+
+            }
+
+            /**
+             * @param packageName
+             * @param passWord
+             * @param key
+             * @param toData
+             * @return
+             * @查询数据(查询自己app池下的数据)
+             */
+            public static Object queryDataPool(Object key) {
+                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), getAppName(appPackage));
+                return externalDataPool.get(key);
+            }
+
+            /**
+             * @param packName
+             * @param key
+             * @param data
+             * @return 返回为 true 则表示 保存成功
+             * @查询数据(查询需要输入指定查询App的包名)
+             */
+            public static Object queryDataPool(Object appPackage, Object passWord, Object key) {
+                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
+                fileName = getAppName(appPackage);
+                pathStr += fileName;
+                File file = new File(pathStr);
+                if (file.exists()) {   //如果当前文件不存在
+                    String queryData = gt_file.query(fileSaveDataPath + appPackage, fileName);//读取文件内的数据
+                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
+                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
+                    Map<Object, Object> map = gson.fromJson(encryptData, HashMap.class);
+                    if (map != null) {
+                        if (map.containsKey(key)) {
+                            return map.get(key);
+                        } else {
+                            if (LOG.isGtLogTf()) {
+                                log(getLineInfo(1), "当前查询 外部数据池出错，数据池 中不存在该 Key 查询失败");
+                            }
+                            return null;
+                        }
+                    } else {
+                        if (LOG.isGtLogTf()) {
+                            log(getLineInfo(1), "当前查询 外部数据池出错，数据池数据被破坏，请检查该数据池");
+                        }
+                        return null;
+                    }
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "当前查询 外部数据池出错，数据池 中不存在该 app包名 的数据池 查询失败");
+                    }
+                    return null;
+                }
+
+            }
+
+            /**
+             * @param packageName
+             * @param passWord
+             * @param key
+             * @param toData
+             * @return
+             * @修改数据(修改只能修改自己app池下的数据)
+             */
+            public static boolean updateDataPool(Object key, Object toData) {
+
+                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), fileName);
+                if (externalDataPool != null) {
+                    if (externalDataPool.containsKey(key)) {
+                        //保存操作
+                        externalDataPool.put(key, toData);//将数据保存到map中
+                        String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
+                        gt_file.save(encryptData, fileSaveDataPath + appPackage, fileName);
+                        return true;
+                    } else {
+                        if (LOG.isGtLogTf()) {
+                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不已存在该 Key 修改失败");
+                        }
+                        return false;
+                    }
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "当前修改 外部数据池出错，数据池不存在 修改失败");
+                    }
+                    return false;
+                }
+
+
+            }
+
+            /**
+             * @param appPackage 包名
+             * @param passWord   密码
+             * @param key        key
+             * @param toData     修改值
+             * @return
+             * @修改外部APP数据池的数据
+             */
+            public static boolean updateDataPool(Object appPackage, Object passWord, Object key, Object toData) {
+
+                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
+                pathStr += getAppName(appPackage.toString());
+                File file = new File(pathStr);
+                if (file.exists()) {   //如果当前文件不存在
+                    String queryData = gt_file.query(fileSaveDataPath + appPackage, getAppName(appPackage.toString()));//读取文件内的数据
+                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
+                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
+                    Map<Object, Object> map = null;
+                    try {
+                        map = gson.fromJson(encryptData, HashMap.class);
+                    } catch (Exception e) {
+                        if (LOG.isGtLogTf()) {
+                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池出现问题 修改失败");
+                        }
+                        return false;
+                    }
+                    if (map != null) {
+                        if (map.containsKey(key)) {
+                            map.put(key, toData);
+                            String encryptDataStr = Encryption.DES.encryptPassword(map, passWord);
+                            gt_file.save(encryptDataStr, fileSaveDataPath + appPackage, getAppName(appPackage));
+                            return true;
+                        } else {
+                            if (LOG.isGtLogTf()) {
+                                log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不已存在该 Key 修改失败");
+                            }
+                            return false;
+                        }
+                    } else {
+                        if (LOG.isGtLogTf()) {
+                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池数据被破坏，请检查该数据池");
+                        }
+                        return false;
+                    }
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不存在该 app包名 的数据池 修改失败");
+                    }
+                    return false;
+                }
+            }
+
+            /**
+             * @param packageName
+             * @param passWord
+             * @param key
+             * @param toData
+             * @return
+             * @删除数据(删除只能删除自己app池下的数据)
+             */
+            public static boolean deleteDataPool(Object key) {
+                //获取当前所有路径
+                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord, getAppName(appPackage));
+                if (externalDataPool != null && externalDataPool.containsKey(key)) {
+                    //保存操作
+                    externalDataPool.remove(key);//将数据删除到map中
+                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
+                    gt_file.save(encryptData, fileSaveDataPath + appPackage, getAppName(appPackage));
+                    return true;
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不已存在该 Key 删除失败");
+                    }
+                    return false;
+                }
+            }
+
+            /**
+             * @param appPackage App包名
+             * @param passWord   密码
+             * @param key        key
+             * @return
+             * @删除App外部数据池的数据
+             */
+            public static boolean deleteDataPool(Object appPackage, Object passWord, Object key) {
+
+                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
+                pathStr += getAppName(appPackage.toString());
+                File file = new File(pathStr);
+                if (file.exists()) {   //如果当前文件不存在
+                    String queryData = gt_file.query(fileSaveDataPath + appPackage, getAppName(appPackage.toString()));//读取文件内的数据
+                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
+                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
+                    Map<Object, Object> map = null;
+                    try {
+                        map = gson.fromJson(encryptData, HashMap.class);
+                    } catch (Exception e) {
+                        if (LOG.isGtLogTf()) {
+                            log(getLineInfo(1), "当前删除 外部数据池出错，数据池出现问题 删除失败");
+                        }
+                        return false;
+                    }
+                    if (map != null) {
+                        if (map.containsKey(key)) {
+                            map.clear();
+                            String encryptDataStr = Encryption.DES.encryptPassword(map, passWord);
+                            gt_file.save(encryptDataStr, fileSaveDataPath + appPackage, getAppName(appPackage));
+                            return true;
+                        } else {
+                            if (LOG.isGtLogTf()) {
+                                log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不已存在该 Key 删除失败");
+                            }
+                            return false;
+                        }
+                    } else {
+                        if (LOG.isGtLogTf()) {
+                            log(getLineInfo(1), "当前删除 外部数据池出错，数据池数据被破坏，请检查该数据池");
+                        }
+                        return false;
+                    }
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不存在该 app包名 的数据池 删除失败");
+                    }
+                    return false;
+                }
+            }
+
+            /**
+             * @param packName
+             * @param key
+             * @param data
+             * @return 返回为 true 则表示 保存成功
+             * @清空数据(清空只能保存自己app池下的数据)
+             */
+            public static boolean clearDataPool(Object key, Object data) {
+
+                if (externalDataPool != null && !externalDataPool.containsKey(key)) {
+                    externalDataPool.clear();
+                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
+                    gt_file.save(encryptData, fileSaveDataPath + AppUtils.getAppPackageName(), fileName);
+                    return true;
+                } else {
+                    if (LOG.isGtLogTf()) {
+                        log(getLineInfo(1), "当前清空 外部数据池出错，数据池 中不已存在该 Key 清空失败");
+                    }
+                    return false;
+                }
+
+            }
+
+            /**
+             * @return
+             * @获取当前App名称
+             */
+            private static String getAppName(Object appPackage) {
+                //获取当前所有路径
+                String path = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
+                List<String> filesAllName = ApplicationUtils.getFilesAllName(path);
+                if (filesAllName.size() > 0) {
+                    path = filesAllName.get(0);
+                    //获取文件名
+                    fileName = path.substring(path.lastIndexOf("/") + 1, path.length());
+                } else {
+                    fileName = null;
+                }
+                return fileName;
+            }
+
+            /**
+             * @param appPackage
+             * @param encryptionPassWord
+             * @param fileName
+             * @获取数据池中的 Map
+             */
+            public static Map<Object, Object> getExternalDataPool(Object appPackage, Object encryptionPassWord, String fileName) {
+                String queryData = gt_file.query(fileSaveDataPath + appPackage, fileName);//读取文件内的数据
+                String encryptData = Encryption.DES.decryptPassword(queryData, encryptionPassWord);//将加密的数据解密
+                externalDataPool = gson.fromJson(encryptData, HashMap.class);
+                return externalDataPool;
+            }
+
+        }
+
+
+    }
+
+    /**
      * 数据持久化 SharedPreferences
      */
-    public static class GT_SharedPreferences {
+    public static class GT_SharedPreferences implements SaveObject.SaveBean {
 
         private Context context;
 
@@ -1908,13 +2598,13 @@ public class GT {
     /**
      * @Hibernate SQL
      */
-    public static class Hibernate {
+    public static class Hibernate implements SaveObject.SaveBean {
 
         //=============================== 实例化 Hibernate 对象 ====================================
         private Context context;
 
         public Hibernate() {
-            Context context = getGT().getCONTEXT();
+            Context context = getGT().getactivity();
             if (context != null) {
                 this.context = context;
             } else {
@@ -5669,6 +6359,7 @@ public class GT {
     public static class JSON {
 
         private static JSONObject jsonObject;
+        private final static Gson gson = new Gson();
 
         public JSONObject getJsonObject() {
             return jsonObject;
@@ -5700,10 +6391,10 @@ public class GT {
          * @param aClass 指定 解析后的 bean 可续
          * @return 返回 实体类
          */
-        public <T> T getBean(Class<T> aClass, String string) {
+        public static <T> T getBean(String string, Class<T> aClass) {
             T o = null;
             try {
-                o = new Gson().fromJson(string, aClass);
+                o = gson.fromJson(string, aClass);
             } catch (Exception exception) {
                 err(getLineInfo(1), "你的 JSON 解析类型不匹配，请检查  " + aClass + "  是否与请求的Json数据一致！");
             }
@@ -8539,464 +9230,7 @@ public class GT {
 
     }
 
-//=========================================== APP 数据 =========================================
-
-    /**
-     * @App存储池
-     */
-    public static class AppDataPool {
-
-        /**
-         * @App内部存储池
-         * @临时数据
-         */
-        public static class Interior {
-
-            /**
-             * @内部存储池
-             * @存储数据的临时容器
-             */
-            private final static Map<Object, Object> interiorDataPool = new HashMap<>();
-
-            /**
-             * @param classs
-             * @param key
-             * @param data
-             * @return 操作成功 返回 true
-             * @保存数据
-             */
-            public static boolean saveDataPool(Object classs, Object key, Object data) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (!interiorDataPool.containsKey(idKey)) {
-                    interiorDataPool.put(idKey, data);//存储数据
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，保存数据失败！当前数据池中存在该值");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param classs
-             * @param key
-             * @return 操作成功 返回 true
-             * @删除数据
-             */
-            public static boolean deleteDataPool(Object classs, Object key) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (interiorDataPool.containsKey(idKey)) {
-                    interiorDataPool.remove(idKey);//删除数据
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，删除数据失败！当前数据池中不存在该值");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param classs 读取那个类存储的数据
-             * @param key    存储的key
-             * @return 成功返回 查询的值 否则返回 null
-             * @查询数据
-             */
-            public static Object queryDataPool(Object classs, Object key) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (interiorDataPool.containsKey(idKey)) {
-                    return interiorDataPool.get(idKey);//获取数据
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，查询数据失败！当前数据池中不存在该值");
-                    }
-                    return null;
-                }
-            }
-
-            /**
-             * @param classs 读取那个类存储的数据
-             * @param key    存储的key
-             * @return 成功返回 true
-             * @修改数据
-             */
-            public static boolean updateDataPool(Object classs, Object key, Object toData) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (interiorDataPool.containsKey(idKey)) {
-                    interiorDataPool.put(idKey, toData);//修改数据
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，修改数据失败！当前数据池中不存在该值");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @return
-             * @清空
-             */
-            public static boolean clearData() {
-                if (interiorDataPool != null) {
-                    try {
-                        interiorDataPool.clear();
-                        return true;
-                    } catch (Exception e) {
-                        return false;
-                    }
-                }
-                return false;
-            }
-
-            /**
-             * @param classs
-             * @param key
-             * @return
-             * @APP存储池中返回IdKey
-             */
-            private static String getIdKey(Object classs, Object key) {
-                return classs.getClass().getName().replace(".", "/") + ".java 【" + key + "】";// 获取文件包名与Java文件名
-            }
-
-        }
-
-        /**
-         * @APP外部存储池
-         * @持久性数据（需要在清单文件中添加以下文件读取与写入权限）
-         * @<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-         * @<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-         */
-        public static class External {
-
-            /**
-             * @外部存储池
-             * @存储数据的永久容器
-             */
-            private static Map<Object, Object> externalDataPool = null;    //当前App所有数据的容器
-            private static Object passWord = null;             //当前文件的密码
-            private static GT_File gt_file = null;             //GT_File 工具包
-            private static final String fileSaveDataPath = "/Android/data/com.gsls.gtlibrary/AppDataPool/";//GT APP 公共池数据源
-            private static String appPackage = null;
-            private static String fileName = null;             //保存数据的文件名
-            private static String filePath = null;             //当前文件的全部路径
-            private static Gson gson = null;
-            private Activity activity;
-
-            /**
-             * @param activity
-             * @param passWord
-             * @初始化
-             */
-            public static void init(Activity activity, Object passWord) {
-                gt_file = new GT_File();//创建 File 对象
-                gson = new Gson();
-                appPackage = AppUtils.getAppPackageName();
-                AppAuthorityManagement.readWritePermission(activity);//申请文件读写的6.0以上权限
-                External.passWord = Encryption.MD5.encryptMD5(appPackage + passWord);//将 密码 进行 MD5 加密
-                fileName = getAppName(AppUtils.getAppPackageName());
-            }
-
-            /**
-             * @param packName
-             * @param key
-             * @param data
-             * @return 返回为 true 则表示 保存成功
-             * @保存数据(保存只能保存自己app池下的数据)
-             */
-            public static boolean saveDataPool(Object key, Object data) {
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), getAppName(appPackage));
-                if (!externalDataPool.containsKey(key)) {
-                    //保存操作
-                    externalDataPool.put(key, data);//将数据保存到map中
-                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                    gt_file.save(encryptData, fileSaveDataPath + appPackage, getAppName(appPackage));
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前保存 外部数据池出错，数据池 中已存在该 Key 保存失败");
-                    }
-                    return false;
-                }
-
-            }
-
-            /**
-             * @param packageName
-             * @param passWord
-             * @param key
-             * @param toData
-             * @return
-             * @查询数据(查询自己app池下的数据)
-             */
-            public static Object queryDataPool(Object key) {
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), getAppName(appPackage));
-                return externalDataPool.get(key);
-            }
-
-            /**
-             * @param packName
-             * @param key
-             * @param data
-             * @return 返回为 true 则表示 保存成功
-             * @查询数据(查询需要输入指定查询App的包名)
-             */
-            public static Object queryDataPool(Object appPackage, Object passWord, Object key) {
-                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                fileName = getAppName(appPackage);
-                pathStr += fileName;
-                File file = new File(pathStr);
-                if (file.exists()) {   //如果当前文件不存在
-                    String queryData = gt_file.query(fileSaveDataPath + appPackage, fileName);//读取文件内的数据
-                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
-                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
-                    Map<Object, Object> map = gson.fromJson(encryptData, HashMap.class);
-                    if (map != null) {
-                        if (map.containsKey(key)) {
-                            return map.get(key);
-                        } else {
-                            if (LOG.isGtLogTf()) {
-                                log(getLineInfo(1), "当前查询 外部数据池出错，数据池 中不存在该 Key 查询失败");
-                            }
-                            return null;
-                        }
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前查询 外部数据池出错，数据池数据被破坏，请检查该数据池");
-                        }
-                        return null;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前查询 外部数据池出错，数据池 中不存在该 app包名 的数据池 查询失败");
-                    }
-                    return null;
-                }
-
-            }
-
-            /**
-             * @param packageName
-             * @param passWord
-             * @param key
-             * @param toData
-             * @return
-             * @修改数据(修改只能修改自己app池下的数据)
-             */
-            public static boolean updateDataPool(Object key, Object toData) {
-
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), fileName);
-                if (externalDataPool != null) {
-                    if (externalDataPool.containsKey(key)) {
-                        //保存操作
-                        externalDataPool.put(key, toData);//将数据保存到map中
-                        String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                        gt_file.save(encryptData, fileSaveDataPath + appPackage, fileName);
-                        return true;
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不已存在该 Key 修改失败");
-                        }
-                        return false;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前修改 外部数据池出错，数据池不存在 修改失败");
-                    }
-                    return false;
-                }
-
-
-            }
-
-            /**
-             * @param appPackage 包名
-             * @param passWord   密码
-             * @param key        key
-             * @param toData     修改值
-             * @return
-             * @修改外部APP数据池的数据
-             */
-            public static boolean updateDataPool(Object appPackage, Object passWord, Object key, Object toData) {
-
-                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                pathStr += getAppName(appPackage.toString());
-                File file = new File(pathStr);
-                if (file.exists()) {   //如果当前文件不存在
-                    String queryData = gt_file.query(fileSaveDataPath + appPackage, getAppName(appPackage.toString()));//读取文件内的数据
-                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
-                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
-                    Map<Object, Object> map = null;
-                    try {
-                        map = gson.fromJson(encryptData, HashMap.class);
-                    } catch (Exception e) {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池出现问题 修改失败");
-                        }
-                        return false;
-                    }
-                    if (map != null) {
-                        if (map.containsKey(key)) {
-                            map.put(key, toData);
-                            String encryptDataStr = Encryption.DES.encryptPassword(map, passWord);
-                            gt_file.save(encryptDataStr, fileSaveDataPath + appPackage, getAppName(appPackage));
-                            return true;
-                        } else {
-                            if (LOG.isGtLogTf()) {
-                                log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不已存在该 Key 修改失败");
-                            }
-                            return false;
-                        }
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池数据被破坏，请检查该数据池");
-                        }
-                        return false;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不存在该 app包名 的数据池 修改失败");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param packageName
-             * @param passWord
-             * @param key
-             * @param toData
-             * @return
-             * @删除数据(删除只能删除自己app池下的数据)
-             */
-            public static boolean deleteDataPool(Object key) {
-                //获取当前所有路径
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord, getAppName(appPackage));
-                if (externalDataPool != null && externalDataPool.containsKey(key)) {
-                    //保存操作
-                    externalDataPool.remove(key);//将数据删除到map中
-                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                    gt_file.save(encryptData, fileSaveDataPath + appPackage, getAppName(appPackage));
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不已存在该 Key 删除失败");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param appPackage App包名
-             * @param passWord   密码
-             * @param key        key
-             * @return
-             * @删除App外部数据池的数据
-             */
-            public static boolean deleteDataPool(Object appPackage, Object passWord, Object key) {
-
-                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                pathStr += getAppName(appPackage.toString());
-                File file = new File(pathStr);
-                if (file.exists()) {   //如果当前文件不存在
-                    String queryData = gt_file.query(fileSaveDataPath + appPackage, getAppName(appPackage.toString()));//读取文件内的数据
-                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
-                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
-                    Map<Object, Object> map = null;
-                    try {
-                        map = gson.fromJson(encryptData, HashMap.class);
-                    } catch (Exception e) {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前删除 外部数据池出错，数据池出现问题 删除失败");
-                        }
-                        return false;
-                    }
-                    if (map != null) {
-                        if (map.containsKey(key)) {
-                            map.clear();
-                            String encryptDataStr = Encryption.DES.encryptPassword(map, passWord);
-                            gt_file.save(encryptDataStr, fileSaveDataPath + appPackage, getAppName(appPackage));
-                            return true;
-                        } else {
-                            if (LOG.isGtLogTf()) {
-                                log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不已存在该 Key 删除失败");
-                            }
-                            return false;
-                        }
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前删除 外部数据池出错，数据池数据被破坏，请检查该数据池");
-                        }
-                        return false;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不存在该 app包名 的数据池 删除失败");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param packName
-             * @param key
-             * @param data
-             * @return 返回为 true 则表示 保存成功
-             * @清空数据(清空只能保存自己app池下的数据)
-             */
-            public static boolean clearDataPool(Object key, Object data) {
-
-                if (externalDataPool != null && !externalDataPool.containsKey(key)) {
-                    externalDataPool.clear();
-                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                    gt_file.save(encryptData, fileSaveDataPath + AppUtils.getAppPackageName(), fileName);
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前清空 外部数据池出错，数据池 中不已存在该 Key 清空失败");
-                    }
-                    return false;
-                }
-
-            }
-
-
-            /**
-             * @return
-             * @获取当前App名称
-             */
-            private static String getAppName(Object appPackage) {
-                //获取当前所有路径
-                String path = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                List<String> filesAllName = ApplicationUtils.getFilesAllName(path);
-                if (filesAllName.size() > 0) {
-                    path = filesAllName.get(0);
-                    //获取文件名
-                    fileName = path.substring(path.lastIndexOf("/") + 1, path.length());
-                } else {
-                    fileName = null;
-                }
-                return fileName;
-            }
-
-            /**
-             * @param appPackage
-             * @param encryptionPassWord
-             * @param fileName
-             * @获取数据池中的 Map
-             */
-            public static Map<Object, Object> getExternalDataPool(Object appPackage, Object encryptionPassWord, String fileName) {
-                String queryData = gt_file.query(fileSaveDataPath + appPackage, fileName);//读取文件内的数据
-                String encryptData = Encryption.DES.decryptPassword(queryData, encryptionPassWord);//将加密的数据解密
-                externalDataPool = gson.fromJson(encryptData, HashMap.class);
-                return externalDataPool;
-            }
-
-        }
-
-
-    }
+//=========================================== 数据适配器 =========================================
 
     /**
      * GT 适配器
@@ -9008,7 +9242,7 @@ public class GT {
          *
          * @param <T>
          */
-        public abstract class BaseAdapters<T> extends ArrayAdapter<T> implements BaseViewHolder<T> {
+        public static abstract class BaseArrayAdapters<T> extends ArrayAdapter<T> implements BaseViewHolder<T> {
 
             private int position = 0;
 
@@ -9016,7 +9250,7 @@ public class GT {
                 return position;
             }
 
-            public BaseAdapters(Context context, int resource, List<T> objects) {
+            public BaseArrayAdapters(Context context, int resource, List<T> objects) {
                 super(context, resource, objects);
             }
 
@@ -9054,6 +9288,9 @@ public class GT {
         private static abstract interface BaseViewHolder<T> {
             void function(final View view, final T bean);
         }
+
+
+//        public static abstract class Base
 
     }
 
@@ -9248,7 +9485,7 @@ public class GT {
      * Android GT 动画
      * 动画后面加 F 的则表示 该动画 是假的动画 后面为 T 的则表示为 真动画
      */
-    public static class GT_Animation {
+    public static class GT_Animation implements SaveObject.SaveBean {
 
         public GT_Animation() {
         }
@@ -10355,13 +10592,26 @@ public class GT {
     /**
      * 封装 Fragment 管理器
      */
-    public static class GT_Fragment {
+    public static class GT_Fragment implements SaveObject.SaveBean {
 
         //===================================================== 用于注解获取 GT_Fragment 实例对象 ====================================
+
+        //注意：使用注解时如果没有指定加载Fragment容器的话很容易报未找到视图的异常，但添加 gt_fragment.setHomeFragmentId(R.id.frameLayout); 即可
 
         @Target(ElementType.FIELD)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface Build {
+            //不带参数的
+        }
+
+        @Target(ElementType.FIELD)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface Builds {
+            //GT.GT_Fragment.Build(R.id.frameLayout, Fragment_A.class);
+            //带参数的
+            int setLayout() default 0;//设置Fragment容器
+
+            Class<?> setClass() default Builds.class;//设置预先加载的Fragment
 
         }
 
@@ -10378,7 +10628,7 @@ public class GT {
         private static int mainFragmentId = 0;//Main主页面FragmentID
         private final static int FRAGMENT_ID = 0x1079;//设置静态Fragment 初始 ID
         private static String topFragmentName = "";//始终指向最顶端的 Fragment
-        private static List<FragmentBean> fragmentBeanList;//存储 Fragment 栈中的 Fragment 信息
+        private static List<BackStackFragmentBean> fragmentBeanList;//存储 Fragment 栈中的 Fragment 信息
         private static List<String> fragmentNames;//存储 Fragment 栈中所有 Fragment 名字
         private String saveStackData = "[]";//保存当前栈中 Fragment 数据
         private Activity activity;//活动引用
@@ -10397,7 +10647,7 @@ public class GT {
             //如果没有主动在 Fragment 初始化的时候初始化 Activity 那么就会导致这里为 null
             if (activity == null) {
                 //采取第1号紧急措施，遍历整个 Fragment栈中还存在的 Fragment ，挨个去取一个不为 null 的 Activity ，有那就直接返回该 Activity
-                for (String fragmentName : getFragmentNames()) {//遍历栈中的所有 Fragment
+                for (String fragmentName : getBackStackFragmentNames()) {//遍历栈中的所有 Fragment
                     Fragment fragment = fragmentManager.findFragmentByTag(fragmentName);//通过设置的标识获取 Fragment
                     if (fragment != null) {
                         activity = fragment.getActivity();//获取 Activity
@@ -10409,7 +10659,7 @@ public class GT {
 
                 //采取第2号紧急措施，如果有绑定 Activity 那就直接使用绑定的 Activity
                 if (activity == null) {
-                    activity = (Activity) getGT().CONTEXT;
+                    activity = (Activity) getGT().activity;
                 }
 
                 //如果还是没有 Activity 那就没法了...
@@ -10461,13 +10711,14 @@ public class GT {
             return this;
         }
 
-        public List<FragmentBean> getFragmentStack() {
-            return getFragmentList();
+        public List<BackStackFragmentBean> getBackStackFragmentStack() {
+            return getBackStackFragmentList();
         }
 
         public List<String> getFragmentFragments() {
-            return getFragmentNames();
+            return getBackStackFragmentNames();
         }
+
 
         //===================================================== 切换 Fragment 方式 ====================================
 
@@ -10484,9 +10735,14 @@ public class GT {
         public final static int ACTIVITY = 0;
 
         /**
-         * ACTIVITY:    Activity 启动方式   模仿 Activity 启动方式    切换 Fragment 使用 replace 的方式
+         * FRAGMENT:    Fragment 启动方式   模仿 Activity 启动方式    切换 Fragment 使用 replace 的方式
          */
         public final static int FRAGMENT = 1;
+
+        /**
+         * DIALOG:    Dialog 启动方式   模仿 Activity 启动方式    切换 Fragment 使用 hide/show 的方式
+         */
+        public final static int DIALOG = 2;
 
         /**
          * 切换方式 默认使用  Activity
@@ -10522,7 +10778,7 @@ public class GT {
          * @param name
          */
         @SuppressLint("WrongConstant")
-        private void fragmentSwitchingModeManagement(int fragmentId, FragmentTransaction transaction, Fragment fragment, String name) {
+        private void fragmentSwitchingModeManagement(int fragmentId, FragmentTransaction transaction, Fragment fragment, Class<?> fragmentClass) {
 
             switch (SWITCHING_MODE) {
                 case ACTIVITY:// Activity 切换方式
@@ -10534,7 +10790,7 @@ public class GT {
                      */
 
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
-                    transaction.add(fragmentId, fragment, name);
+                    transaction.add(fragmentId, fragment, fragmentClass.getName());
                     transaction.commit();
                     break;
                 }
@@ -10542,15 +10798,40 @@ public class GT {
                 case FRAGMENT:// Fragment 切换方式
                 {
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
-                    transaction.replace(fragmentId, fragment, name);
+                    transaction.replace(fragmentId, fragment, fragmentClass.getName());
                     transaction.commit();
+                    break;
+                }
+
+                case DIALOG:// Dialog 切换方式
+                {
+
+                    //判断当前 Fragment 栈中是否存在当前要显示的Fragment
+                    if (getStackFragmentNames().contains(fragmentClass.getName())) {
+                        //存在
+
+                        for (Fragment fragment1 : getStackFragments()) {
+                            if (fragmentClass.getName().equals(fragment1.getClass().getName())) {
+                                gt_fragment.getTransaction().show(fragment1).commit();
+                            } else {
+                                gt_fragment.getTransaction().hide(fragment1).commit();
+                            }
+                        }
+
+                    } else {
+                        //不存在
+                        transaction.add(fragmentId, fragment, fragmentClass.getName());
+                        transaction.commit();
+                    }
+
+
                     break;
                 }
 
                 default:    //如果是非法参数 那就默认使用 Activity 的启动方式
                 {
 //                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
-                    transaction.add(fragmentId, fragment, name);
+                    transaction.add(fragmentId, fragment, fragmentClass.getName());
                     transaction.commit();
                 }
 
@@ -10616,8 +10897,8 @@ public class GT {
          * @param fragment    当前启动的 Fragment
          * @return
          */
-        private boolean modeManagement(FragmentTransaction transaction, Fragment fragment) {
-            String name = fragment.getClass().getName();
+        private boolean modeManagement(FragmentTransaction transaction, Class<?> fragmentClass) {
+            String name = fragmentClass.getName();
             switch (START_MODE) {
                 case STANDARD: //默认模式     该启动模式为Android默认启动模式，每当启动一个 fragment 就会在任务栈中创建一个
                 {
@@ -10631,7 +10912,7 @@ public class GT {
                 {
                     START_MODE = STANDARD;//恢复默认模式
 
-                    if (!isStackTop(fragment.getClass())) {
+                    if (!isStackTop(fragmentClass)) {
                         return false;
                     }
 
@@ -10648,7 +10929,7 @@ public class GT {
                     START_MODE = STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
-                    if (!isStackTop(fragment.getClass())) {
+                    if (!isStackTop(fragmentClass)) {
                         return false;
                     }
 
@@ -10662,11 +10943,11 @@ public class GT {
                     START_MODE = STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
-                    if (!isStackTop(fragment.getClass())) {
+                    if (!isStackTop(fragmentClass)) {
                         return false;
                     }
 
-                    List<String> fragmentNames = getFragmentNames();
+                    List<String> fragmentNames = getBackStackFragmentNames();
                     int lastIndex = fragmentNames.lastIndexOf(name);//查找当前集合中最后一个 Fragment 索引
                     if (lastIndex == -1) {
                         //如果回退栈中没找到新打开的 Fragment 就直接打开新的 Fragment
@@ -10685,7 +10966,7 @@ public class GT {
                     START_MODE = STANDARD;//恢复默认模式
 
                     //弹出所有栈
-                    for (int i = 0; i < getFragmentNames().size(); i++) {
+                    for (int i = 0; i < getBackStackFragmentNames().size(); i++) {
                         finish();
                     }
                     topFragmentName = "";//清空指向顶端的 Fragment
@@ -10706,6 +10987,9 @@ public class GT {
 
             return false;
         }
+
+
+        //===================================================== Fragment 回退栈 与 栈内 工具类 ====================================
 
         /**
          * 判断当前 fragment 是否处于最顶端显示
@@ -10735,11 +11019,11 @@ public class GT {
         }
 
         /**
-         * 获取当前 Fragment 栈中的信息
+         * 获取当前 Fragment 回退栈中的信息
          *
          * @return
          */
-        public List<FragmentBean> getFragmentList() {
+        public List<BackStackFragmentBean> getBackStackFragmentList() {
 
             if (fragmentBeanList == null) {
                 fragmentBeanList = new ArrayList<>();
@@ -10753,7 +11037,7 @@ public class GT {
                     String hashCode = fragmentData[0].substring(fragmentData[0].indexOf("{") + 1);//唯一标示
                     String stackIndex = fragmentData[1].substring(1);//栈索引
                     String fragmentName = fragmentData[2].substring(0, fragmentData[2].length() - 1);//fragment名称
-                    fragmentBeanList.add(new FragmentBean(Integer.parseInt(stackIndex), hashCode, fragmentName));
+                    fragmentBeanList.add(new BackStackFragmentBean(Integer.parseInt(stackIndex), hashCode, fragmentName));
                 } catch (Exception e) {
                     exception(getLineInfo() + "报错:" + e);
                 }
@@ -10763,11 +11047,11 @@ public class GT {
         }
 
         /**
-         * 获取当前 Fragment 栈中 Fragment 所有名称
+         * 获取当前 Fragment 回退栈中 Fragment 所有名称
          *
          * @return
          */
-        public List<String> getFragmentNames() {
+        public List<String> getBackStackFragmentNames() {
 
             if (fragmentNames == null) {
                 fragmentNames = new ArrayList<>();
@@ -10794,11 +11078,11 @@ public class GT {
         }
 
         /**
-         * 获取当前 Fragment 栈中 Fragment 所有名称
+         * 获取当前 Fragment 回退栈中 Fragment 所有名称
          *
          * @return
          */
-        public List<String> getFragmentSimpleNames() {
+        public List<String> getBackStackFragmentSimpleNames() {
             List<String> fragmentNames = new ArrayList<>();
 
             String name = "";
@@ -10824,16 +11108,16 @@ public class GT {
         /**
          * Fragment 属性实体类
          */
-        private class FragmentBean {
+        public class BackStackFragmentBean {
 
             private int stackIndex;
             private String hashCode;
             private String fragmentName;
 
-            public FragmentBean() {
+            public BackStackFragmentBean() {
             }
 
-            public FragmentBean(int stackIndex, String hashCode, String fragmentName) {
+            public BackStackFragmentBean(int stackIndex, String hashCode, String fragmentName) {
                 this.stackIndex = stackIndex;
                 this.hashCode = hashCode;
                 this.fragmentName = fragmentName;
@@ -10865,13 +11149,56 @@ public class GT {
 
             @Override
             public String toString() {
-                return "FragmentBean{" +
+                return "BackStackFragmentBean{" +
                         "stackIndex=" + stackIndex +
                         ", hashCode='" + hashCode + '\'' +
                         ", fragmentName='" + fragmentName + '\'' +
                         '}';
             }
         }
+
+        /**
+         * 获取Fragment栈中所有的 Fragment
+         *
+         * @return
+         */
+        public List<Fragment> getStackFragments() {
+            if (fragmentManager != null) {
+                return fragmentManager.getFragments();
+            }
+            return null;
+        }
+
+        public List<String> getStackFragmentNames() {
+            if (fragmentManager != null) {
+                List<Fragment> fragments = fragmentManager.getFragments();
+                if (fragments.size() == 0) {
+                    return null;
+                }
+                List<String> fragmentNames = new ArrayList<>();
+                for (Fragment fragment : fragments) {
+                    fragmentNames.add(fragment.getClass().getName());
+                }
+                return fragmentNames;
+            }
+            return null;
+        }
+
+        public List<String> getStackFragmentSimpleNames() {
+            if (fragmentManager != null) {
+                List<Fragment> fragments = fragmentManager.getFragments();
+                if (fragments.size() == 0) {
+                    return null;
+                }
+                List<String> fragmentNames = new ArrayList<>();
+                for (Fragment fragment : fragments) {
+                    fragmentNames.add(fragment.getClass().getSimpleName());
+                }
+                return fragmentNames;
+            }
+            return null;
+        }
+
 
         //===================================================== 构建 GT_Fragment 对象 ====================================
 
@@ -11052,6 +11379,7 @@ public class GT {
 
         //=========================================== 启动新的 Fragment ====================================
 
+
         /**
          * 启动新的 Fragment
          *
@@ -11065,6 +11393,7 @@ public class GT {
             if (fragmentClass == null) return this;
 
             T fragment = null;
+
             try {
                 fragment = fragmentClass.newInstance();
             } catch (IllegalAccessException e) {
@@ -11073,13 +11402,10 @@ public class GT {
                 e.printStackTrace();
             }
 
-            if (fragment != null) {
-                //启动 Fragment
-                String name = fragment.getClass().getName();
-                FragmentTransaction transaction = getTransaction();
-                if (modeManagement(transaction, (Fragment) fragment)) {
-                    fragmentSwitchingModeManagement(mainFragmentId, transaction, (Fragment) fragment, name);
-                }
+            //启动 Fragment
+            FragmentTransaction transaction = getTransaction();
+            if (modeManagement(transaction, fragmentClass)) {
+                fragmentSwitchingModeManagement(mainFragmentId, transaction, (Fragment) fragment, fragmentClass);
             }
 
             return this;
@@ -11099,6 +11425,7 @@ public class GT {
             if (fragmentClass == null) return this;
 
             T fragment = null;
+
             try {
                 fragment = fragmentClass.newInstance();
             } catch (IllegalAccessException e) {
@@ -11107,18 +11434,14 @@ public class GT {
                 e.printStackTrace();
             }
 
-            if (fragment != null) {
-                //启动 Fragment
-                String name = fragment.getClass().getName();
-                FragmentTransaction transaction = getTransaction();
-                if (modeManagement(transaction, (Fragment) fragment)) {
-                    fragmentSwitchingModeManagement(resLayout, transaction, (Fragment) fragment, name);
-                }
+            //启动 Fragment
+            FragmentTransaction transaction = getTransaction();
+            if (modeManagement(transaction, fragmentClass)) {
+                fragmentSwitchingModeManagement(resLayout, transaction, (Fragment) fragment, fragmentClass);
             }
 
             return this;
         }
-
 
         /**
          * 启动新的 Fragment
@@ -11130,12 +11453,11 @@ public class GT {
 
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragment == null) return this;
-            String name = fragment.getClass().getName();
 
             //启动 Fragment
             FragmentTransaction transaction = getTransaction();
-            if (modeManagement(transaction, fragment)) {
-                fragmentSwitchingModeManagement(mainFragmentId, transaction, (Fragment) fragment, name);
+            if (modeManagement(transaction, fragment.getClass())) {
+                fragmentSwitchingModeManagement(mainFragmentId, transaction, fragment, fragment.getClass());
             }
             return this;
         }
@@ -11151,12 +11473,11 @@ public class GT {
 
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragment == null) return this;
-            String name = fragment.getClass().getName();
 
             //启动 Fragment
             FragmentTransaction transaction = getTransaction();
-            if (modeManagement(transaction, fragment)) {
-                fragmentSwitchingModeManagement(resLayout, transaction, (Fragment) fragment, name);
+            if (modeManagement(transaction, fragment.getClass())) {
+                fragmentSwitchingModeManagement(resLayout, transaction, fragment, fragment.getClass());
             }
             return this;
         }
@@ -11177,6 +11498,7 @@ public class GT {
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragmentClass == null) return this;
 
+            //执行 Activity 与 Fragment 切换模式的业务流程
             T fragment = null;
             try {
                 fragment = fragmentClass.newInstance();
@@ -11186,13 +11508,10 @@ public class GT {
                 e.printStackTrace();
             }
 
-            if (fragment != null) {
-                //启动 Fragment
-                String name = fragment.getClass().getName();
-                FragmentTransaction transaction = getTransaction();
-                if (modeManagement(transaction, (Fragment) fragment)) {
-                    fragmentSwitchingModeManagement(homeFragmentId, transaction, (Fragment) fragment, name);
-                }
+            //启动 Fragment
+            FragmentTransaction transaction = getTransaction();
+            if (modeManagement(transaction, fragmentClass)) {
+                fragmentSwitchingModeManagement(homeFragmentId, transaction, (Fragment) fragment, fragmentClass);
             }
 
             return this;
@@ -11211,12 +11530,11 @@ public class GT {
 
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragment == null) return this;
-            String name = fragment.getClass().getName();
 
             //启动 Fragment
             FragmentTransaction transaction = getTransaction();
-            if (modeManagement(transaction, fragment)) {
-                fragmentSwitchingModeManagement(homeFragmentId, transaction, (Fragment) fragment, name);
+            if (modeManagement(transaction, fragment.getClass())) {
+                fragmentSwitchingModeManagement(homeFragmentId, transaction, fragment, fragment.getClass());
             }
             return this;
         }
@@ -11643,6 +11961,15 @@ public class GT {
             }
 
             /**
+             * 详细日志
+             *
+             * @param object
+             */
+            protected void logs(Object object) {
+                GT.logs(object);
+            }
+
+            /**
              * 普通日志
              *
              * @param object
@@ -11697,6 +12024,15 @@ public class GT {
              */
             protected void err(Object tag, Object object) {
                 GT.err(tag, object);
+            }
+
+            /**
+             * 详细日志
+             *
+             * @param object
+             */
+            protected void errs(Object object) {
+                GT.errs(object);
             }
 
             /**
@@ -12016,6 +12352,15 @@ public class GT {
             }
 
             /**
+             * 详细日志
+             *
+             * @param object
+             */
+            protected void logs(Object object) {
+                GT.logs(object);
+            }
+
+            /**
              * 错误日志
              *
              * @param object
@@ -12032,6 +12377,15 @@ public class GT {
              */
             protected void err(Object tag, Object object) {
                 GT.err(tag, object);
+            }
+
+            /**
+             * 详细日志
+             *
+             * @param object
+             */
+            protected void errs(Object object) {
+                GT.errs(object);
             }
 
             /**
@@ -12193,8 +12547,8 @@ public class GT {
              *
              * @param context
              */
-            protected void build(Context context) {
-                getGT().build(context);
+            protected void build(Activity activity) {
+                getGT().build(activity);
             }
 
             /**
@@ -12380,6 +12734,15 @@ public class GT {
             }
 
             /**
+             * 详细日志
+             *
+             * @param object
+             */
+            protected void logs(Object object) {
+                GT.logs(object);
+            }
+
+            /**
              * 普通日志
              *
              * @param object
@@ -12415,6 +12778,15 @@ public class GT {
              */
             protected void err(Object tag, Object object) {
                 GT.err(tag, object);
+            }
+
+            /**
+             * 详细日志
+             *
+             * @param object
+             */
+            protected void errs(Object object) {
+                GT.errs(object);
             }
 
             /**
@@ -14552,14 +14924,14 @@ public class GT {
                 if (initView_Hibernate != null) {
                     String sqlName = initView_Hibernate.sqlName();
                     int sqlVersion = initView_Hibernate.sqlVersion();
-                    if (getGT().getCONTEXT() == null) {
+                    if (getGT().getactivity() == null) {
                         err(getLineInfo(2), "注入数据库失败！请在 Activity 中绑定GT注解");
                         return;
                     }
                     classObject = new Hibernate()
                             .init_1_SqlName(sqlName)            //设置SQL名称
                             .init_2_SqlVersion(sqlVersion)     //设置数据库版本
-                            .init_3_SqlTable(ApplicationUtils.getPackageName(getGT().getCONTEXT()))        //设置创建或更新升级的数据库表
+                            .init_3_SqlTable(ApplicationUtils.getPackageName(getGT().getactivity()))        //设置创建或更新升级的数据库表
                             .init_4_Sql();
 
                     //实例注入
@@ -15333,14 +15705,51 @@ public class GT {
                 Object classObject = null;//最终注入的值
 
                 //获取识别注解
-                GT_Fragment.Build initView_GT_Fragment = field.getAnnotation(GT_Fragment.Build.class);
+                GT_Fragment.Build initView_GT_Fragment = field.getAnnotation(GT_Fragment.Build.class);//不带参数的
 
-                //初始化GT数据库
+                //GT_Fragment 注解不为null
                 if (initView_GT_Fragment != null) {
-                    if (getGT().getCONTEXT() == null) {
-                        err(getLineInfo(2), "注入数据库失败！请在 Activity 中绑定GT注解");
-                        return;
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = getGT().getactivity();
+                    if (activity != null) {
+                        GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
                     }
+
+                    classObject = GT_Fragment.gt_fragment;
+                    //实例注入
+                    try {
+                        field.setAccessible(true);
+                        field.set(object, classObject);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+
+                //带参数的
+                GT_Fragment.Builds initView_GT_Fragments = field.getAnnotation(GT_Fragment.Builds.class);
+
+                //GT_Fragment 注解不为null
+                if (initView_GT_Fragments != null) {
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = getGT().getactivity();
+                    if (activity != null) {
+                        //获取注解的值
+                        int frameLayout = initView_GT_Fragments.setLayout();
+                        Class<?> aClass = initView_GT_Fragments.setClass();
+
+                        if (frameLayout != 0 && aClass != GT_Fragment.Builds.class) {
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, frameLayout, aClass, activity.getIntent().getExtras());
+                        } else if (frameLayout != 0) {
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, frameLayout, activity.getIntent().getExtras());
+                        } else if (aClass != GT_Fragment.Builds.class) {
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, aClass, activity.getIntent().getExtras());
+                        } else {
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
+                        }
+                    }
+
                     classObject = GT_Fragment.gt_fragment;
                     //实例注入
                     try {
@@ -15954,8 +16363,8 @@ public class GT {
          * @param runnable
          */
         public static void runAndroidAct(Runnable runnable) {
-            if (getGT().getCONTEXT() != null) {
-                Activity activity = (Activity) getGT().getCONTEXT();
+            if (getGT().getactivity() != null) {
+                Activity activity = (Activity) getGT().getactivity();
                 activity.runOnUiThread(runnable);
             } else {
                 log(getLineInfo(), "当前未绑定 Activity 无法使用该方法创建 UI 线程");
