@@ -207,10 +207,10 @@ import okhttp3.RequestBody;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2020.11.27
+ * 更新时间:2020.12.10
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.9 版本 数据传递 就是这么简单！）
+ * 更新内容：（1.2.9.1 版本 数据传递 就是这么简单！）
  * 1.新增 SaveObject 类，采用序列化进行传递 Object(GT_Fragment|GT_Animation|Hibernate|GT_SharedPreferences|AppDataPool|均自动实现序列化)
  * 2.增加 APP 错误日志捕获方法：GT.LOG.initAppErrLogTry(this);(如果想打印到本地，请打开本地打印：GT.LOG.LOG_FILE_TF = true;)
  * 3.新增 GT_Fragment 构建注解，用法如下：（具体教程请参考官网教程）
@@ -10609,7 +10609,9 @@ public class GT {
         public @interface Builds {
             //GT.GT_Fragment.Build(R.id.frameLayout, Fragment_A.class);
             //带参数的
-            int setLayout() default 0;//设置Fragment容器
+            int setLayoutHome() default 0;//设置HomeFragment容器
+
+            int setLayoutMain();//设置MainFragment容器
 
             Class<?> setClass() default Builds.class;//设置预先加载的Fragment
 
@@ -10807,7 +10809,8 @@ public class GT {
                 {
 
                     //判断当前 Fragment 栈中是否存在当前要显示的Fragment
-                    if (getStackFragmentNames().contains(fragmentClass.getName())) {
+                    List<String> stackFragmentNames = getStackFragmentNames();
+                    if (stackFragmentNames != null && stackFragmentNames.contains(fragmentClass.getName())) {
                         //存在
 
                         for (Fragment fragment1 : getStackFragments()) {
@@ -11171,14 +11174,17 @@ public class GT {
 
         public List<String> getStackFragmentNames() {
             if (fragmentManager != null) {
-                List<Fragment> fragments = fragmentManager.getFragments();
-                if (fragments.size() == 0) {
-                    return null;
-                }
                 List<String> fragmentNames = new ArrayList<>();
+                List<Fragment> fragments = fragmentManager.getFragments();
+
+                if (fragments.size() == 0) {
+                    return fragmentNames;
+                }
+
                 for (Fragment fragment : fragments) {
                     fragmentNames.add(fragment.getClass().getName());
                 }
+
                 return fragmentNames;
             }
             return null;
@@ -11198,7 +11204,6 @@ public class GT {
             }
             return null;
         }
-
 
         //===================================================== 构建 GT_Fragment 对象 ====================================
 
@@ -11785,6 +11790,33 @@ public class GT {
             }
 
             /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(DialogFragment dialogFragment) {
+                dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+
+                DialogFragment fragment = null;
+
+                try {
+                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (java.lang.InstantiationException e) {
+                    e.printStackTrace();
+                }
+
+                fragment.show(getFragmentManager(), fragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
              * @param toFragment
              * @跳转 Fragment
              */
@@ -12207,8 +12239,27 @@ public class GT {
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
-            public void startDialogFragment(DialogFragment dialogFragment) {
+            protected void startDialogFragment(DialogFragment dialogFragment) {
                 dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+
+                DialogFragment fragment = null;
+
+                try {
+                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (java.lang.InstantiationException e) {
+                    e.printStackTrace();
+                }
+
+                fragment.show(getFragmentManager(), fragment.getClass().toString());// 弹出退出提示
             }
 
             @Nullable
@@ -12549,6 +12600,33 @@ public class GT {
              */
             protected void build(Activity activity) {
                 getGT().build(activity);
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(DialogFragment dialogFragment) {
+                dialogFragment.show(getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+
+                DialogFragment fragment = null;
+
+                try {
+                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (java.lang.InstantiationException e) {
+                    e.printStackTrace();
+                }
+
+                fragment.show(getSupportFragmentManager(), fragment.getClass().toString());// 弹出退出提示
             }
 
             /**
@@ -15736,18 +15814,28 @@ public class GT {
                     Activity activity = getGT().getactivity();
                     if (activity != null) {
                         //获取注解的值
-                        int frameLayout = initView_GT_Fragments.setLayout();
-                        Class<?> aClass = initView_GT_Fragments.setClass();
+                        int layoutHome = initView_GT_Fragments.setLayoutHome();
+                        int layoutMain = initView_GT_Fragments.setLayoutMain();
 
-                        if (frameLayout != 0 && aClass != GT_Fragment.Builds.class) {
-                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, frameLayout, aClass, activity.getIntent().getExtras());
-                        } else if (frameLayout != 0) {
-                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, frameLayout, activity.getIntent().getExtras());
+                        //如果主界面为 null
+                        if (layoutHome == 0) {
+                            layoutHome = layoutMain;
+                        }
+
+                        Class<?> aClass = initView_GT_Fragments.setClass();
+                        if (layoutHome != 0 && aClass != GT_Fragment.Builds.class) {
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, aClass, activity.getIntent().getExtras());
+                        } else if (layoutHome != 0) {
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, activity.getIntent().getExtras());
                         } else if (aClass != GT_Fragment.Builds.class) {
                             GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, aClass, activity.getIntent().getExtras());
                         } else {
                             GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
                         }
+
+                        //设置
+                        GT_Fragment.gt_fragment.setMainFragmentId(layoutMain);
+
                     }
 
                     classObject = GT_Fragment.gt_fragment;
