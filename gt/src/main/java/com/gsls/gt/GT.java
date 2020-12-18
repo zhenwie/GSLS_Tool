@@ -117,7 +117,6 @@ import com.blankj.utilcode.util.AppUtils;
 import com.blankj.utilcode.util.Utils;
 import com.bumptech.glide.Glide;
 import com.google.gson.Gson;
-import com.gsls.gt.R;
 import com.lzy.okgo.callback.StringCallback;
 
 import org.json.JSONException;
@@ -207,10 +206,10 @@ import okhttp3.RequestBody;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2020.12.10
+ * 更新时间:2020.12.17
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.9.1 版本 数据传递 就是这么简单！）
+ * 更新内容：（1.2.9.2 版本 数据传递 就是这么简单！）
  * 1.新增 SaveObject 类，采用序列化进行传递 Object(GT_Fragment|GT_Animation|Hibernate|GT_SharedPreferences|AppDataPool|均自动实现序列化)
  * 2.增加 APP 错误日志捕获方法：GT.LOG.initAppErrLogTry(this);(如果想打印到本地，请打开本地打印：GT.LOG.LOG_FILE_TF = true;)
  * 3.新增 GT_Fragment 构建注解，用法如下：（具体教程请参考官网教程）
@@ -218,6 +217,7 @@ import okhttp3.RequestBody;
  * 用法2：GT.GT_Fragment.Builds(R.id.frameLayout, Fragment_A.class); 参数一：指定一个Fragment 容器，参数二：指定预加载的Fragment页面，参数均可不填
  * 注意：使用注解时如果没有指定加载Fragment容器的话很容易报未找到视图的异常，但添加 gt_fragment.setHomeFragmentId(R.id.frameLayout); 即可
  * 4.GT_Fragment 新增 DIALOG 切换方式 如：gt_fragment.switchingMode(GT.GT_Fragment.DIALOG); 让切换的Fragment 进行 hide / show 操作
+ * 5.增加Activity 启动 Fragment 或 DialogFragment 销毁后反馈给Activity 数据的操作，增加 Fragment 启动 DialogFragment 销毁反馈给Fragment 数据的操作
  *
  * <p>
  * <p>
@@ -11629,6 +11629,7 @@ public class GT {
             view.setOnKeyListener(onKeyListener);
         }
 
+
         /**
          * 关闭最顶端的 Fragment (将栈顶的 Fragment 退出去)
          *
@@ -11640,6 +11641,105 @@ public class GT {
             }
             return this;
         }
+
+        /**
+         * 在关闭 Fragment 同时传递数据回去
+         *
+         * @param intent
+         * @param <T>
+         * @return
+         */
+        public <T> GT_Fragment finish(Intent intent) {
+
+            //抢救一下 activity 为空的情况
+            if (activity == null) {
+                activity = getActivity();//从当前Fragment 中获取Activity
+                if (activity == null) {
+                    activity = gt_fragment.getActivity();//紧急情况使用 gt 内部获取Activity
+                }
+            }
+
+            //如果传递的值不为null 那就传递
+            if (intent != null && activity != null) {
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+            }
+
+            if (fragmentManager != null) {
+                fragmentManager.popBackStack();//将加入退回栈的最顶层 Fragment 进行退栈操作
+            }
+            return this;
+        }
+
+        /**
+         * 在关闭 Fragment 同时传递数据回去
+         *
+         * @param activity
+         * @param intent
+         * @param <T>
+         * @return
+         */
+        public <T> GT_Fragment finish(Activity activity, Intent intent) {
+
+            //如果传递的值不为null 那就传递
+            if (intent != null && activity != null) {
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+            }
+
+            if (fragmentManager != null) {
+                fragmentManager.popBackStack();//将加入退回栈的最顶层 Fragment 进行退栈操作
+            }
+            return this;
+        }
+
+        /**
+         * 在关闭 Fragment 同时传递数据回去
+         *
+         * @param intent
+         * @param <T>
+         * @return
+         */
+        public <T> GT_Fragment finish(Intent intent, int requestCode, int resultCode) {
+
+            //抢救一下 activity 为空的情况
+            if (activity == null) {
+                activity = getActivity();//从当前Fragment 中获取Activity
+                if (activity == null) {
+                    activity = gt_fragment.getActivity();//紧急情况使用 gt 内部获取Activity
+                }
+            }
+
+            //如果传递的值不为null 那就传递
+            if (intent != null && activity != null) {
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+            }
+
+            if (fragmentManager != null) {
+                fragmentManager.popBackStack();//将加入退回栈的最顶层 Fragment 进行退栈操作
+            }
+            return this;
+        }
+
+        /**
+         * 在关闭 Fragment 同时传递数据回去
+         *
+         * @param activity
+         * @param intent
+         * @param <T>
+         * @return
+         */
+        public <T> GT_Fragment finish(Activity activity, Intent intent, int requestCode, int resultCode) {
+
+            //如果传递的值不为null 那就传递
+            if (intent != null && activity != null) {
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+            }
+
+            if (fragmentManager != null) {
+                fragmentManager.popBackStack();//将加入退回栈的最顶层 Fragment 进行退栈操作
+            }
+            return this;
+        }
+
 
         /**
          * 指定 关闭 Fragment
@@ -11790,10 +11890,61 @@ public class GT {
             }
 
             /**
+             * 退出当前 Fragment 并传递数据
+             *
+             * @param intent
+             */
+            protected void finish(Intent intent) {
+                if (gt_fragment != null) {
+                    gt_fragment.finish(intent);
+                }
+            }
+
+            /**
+             * 退出当前 Fragment 并传递数据
+             *
+             * @param activity
+             * @param intent
+             */
+            protected void finish(Activity activity, Intent intent) {
+                if (gt_fragment != null) {
+                    gt_fragment.finish(activity, intent);
+                }
+            }
+
+            /**
+             * 退出当前 Fragment 并传递数据
+             *
+             * @param intent
+             * @param requestCode
+             * @param resultCode
+             */
+            protected void finish(Intent intent, int requestCode, int resultCode) {
+                if (gt_fragment != null) {
+                    gt_fragment.finish(intent, requestCode, resultCode);
+                }
+            }
+
+            /**
+             * 退出当前 Fragment 并传递数据
+             *
+             * @param activity
+             * @param intent
+             * @param requestCode
+             * @param resultCode
+             */
+            protected void finish(Activity activity, Intent intent, int requestCode, int resultCode) {
+                if (gt_fragment != null) {
+                    gt_fragment.finish(activity, intent, requestCode, resultCode);
+                }
+            }
+
+            /**
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
             protected void startDialogFragment(DialogFragment dialogFragment) {
+                dialogFragment.setTargetFragment(this, 1);
                 dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
             }
 
@@ -11802,18 +11953,17 @@ public class GT {
              * @跳转其他的 DialogFragment
              */
             protected void startDialogFragment(Class<?> dialogFragmentClass) {
-
-                DialogFragment fragment = null;
-
+                DialogFragment dialogFragment = null;
                 try {
-                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
+                    dialogFragment = (DialogFragment) dialogFragmentClass.newInstance();
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();
                 } catch (java.lang.InstantiationException e) {
                     e.printStackTrace();
                 }
 
-                fragment.show(getFragmentManager(), fragment.getClass().toString());// 弹出退出提示
+                dialogFragment.setTargetFragment(this, 1);
+                dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
             }
 
             /**
@@ -12105,6 +12255,37 @@ public class GT {
                 GT.toast_time(object, time);
             }
 
+
+            @Override
+            public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+                onResultDataFront(requestCode, resultCode, data);
+                super.onActivityResult(requestCode, resultCode, data);
+                onResultDataBehind(requestCode, resultCode, data);
+            }
+
+
+            /**
+             * 反馈前面
+             *
+             * @param requestCode
+             * @param resultCode
+             * @param data
+             */
+            protected void onResultDataFront(int requestCode, int resultCode, @Nullable Intent data) {
+
+            }
+
+            /**
+             * 反馈后面
+             *
+             * @param requestCode
+             * @param resultCode
+             * @param data
+             */
+            protected void onResultDataBehind(int requestCode, int resultCode, @Nullable Intent data) {
+
+            }
+
         }
 
         /**
@@ -12234,6 +12415,153 @@ public class GT {
             public void finish() {
                 dismiss();
             }
+
+            /**
+             * 在关闭 Fragment 同时传递数据回去
+             *
+             * @param intent
+             * @param <T>
+             * @return
+             */
+            public void finish(Intent intent) {
+
+                if (intent != null) {
+
+                    Fragment targetFragment = getTargetFragment();//判断打开该页面的是 Activity 还是 Fragment
+                    if (targetFragment != null) {
+                        //向 Fragment 反馈数据
+                        targetFragment.onActivityResult(1, 1, intent);
+                    } else {
+                        //向 Activity 反馈数据
+                        //抢救一下 activity 为空的情况
+                        if (activity == null) {
+                            activity = getActivity();//从当前Fragment 中获取Activity
+                            if (activity == null) {
+                                activity = gt_fragment.getActivity();//紧急情况使用 gt 内部获取Activity
+                            }
+                        }
+
+                        //如果传递的值不为null 那就传递
+                        if (activity != null) {
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                        }
+                    }
+                }
+
+                dismiss();
+
+            }
+
+            /**
+             * 在关闭 Fragment 同时传递数据回去
+             *
+             * @param activity
+             * @param intent
+             * @param <T>
+             * @return
+             */
+            public void finish(Activity activity, Intent intent) {
+
+                if (intent != null) {
+
+                    Fragment targetFragment = getTargetFragment();//判断打开该页面的是 Activity 还是 Fragment
+                    if (targetFragment != null) {
+                        //向 Fragment 反馈数据
+                        targetFragment.onActivityResult(1, 1, intent);
+                    } else {
+                        //向 Activity 反馈数据
+                        //抢救一下 activity 为空的情况
+                        if (activity == null) {
+                            activity = getActivity();//从当前Fragment 中获取Activity
+                            if (activity == null) {
+                                activity = gt_fragment.getActivity();//紧急情况使用 gt 内部获取Activity
+                            }
+                        }
+
+                        //如果传递的值不为null 那就传递
+                        if (activity != null) {
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                        }
+                    }
+                }
+
+                dismiss();
+
+            }
+
+            /**
+             * 在关闭 Fragment 同时传递数据回去
+             *
+             * @param intent
+             * @param <T>
+             * @return
+             */
+            public void finish(Intent intent, int requestCode, int resultCode) {
+
+                if (intent != null) {
+
+                    Fragment targetFragment = getTargetFragment();//判断打开该页面的是 Activity 还是 Fragment
+                    if (targetFragment != null) {
+                        //向 Fragment 反馈数据
+                        targetFragment.onActivityResult(requestCode, resultCode, intent);
+                    } else {
+                        //向 Activity 反馈数据
+                        //抢救一下 activity 为空的情况
+                        if (activity == null) {
+                            activity = getActivity();//从当前Fragment 中获取Activity
+                            if (activity == null) {
+                                activity = gt_fragment.getActivity();//紧急情况使用 gt 内部获取Activity
+                            }
+                        }
+
+                        //如果传递的值不为null 那就传递
+                        if (activity != null) {
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                        }
+                    }
+                }
+
+                dismiss();
+
+            }
+
+            /**
+             * 在关闭 Fragment 同时传递数据回去
+             *
+             * @param activity
+             * @param intent
+             * @param <T>
+             * @return
+             */
+            public void finish(Activity activity, Intent intent, int requestCode, int resultCode) {
+
+                if (intent != null) {
+
+                    Fragment targetFragment = getTargetFragment();//判断打开该页面的是 Activity 还是 Fragment
+                    if (targetFragment != null) {
+                        //向 Fragment 反馈数据
+                        targetFragment.onActivityResult(requestCode, resultCode, intent);
+                    } else {
+                        //向 Activity 反馈数据
+                        //抢救一下 activity 为空的情况
+                        if (activity == null) {
+                            activity = getActivity();//从当前Fragment 中获取Activity
+                            if (activity == null) {
+                                activity = gt_fragment.getActivity();//紧急情况使用 gt 内部获取Activity
+                            }
+                        }
+
+                        //如果传递的值不为null 那就传递
+                        if (activity != null) {
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                        }
+                    }
+                }
+
+                dismiss();
+
+            }
+
 
             /**
              * @param dialogFragment
@@ -12924,6 +13252,36 @@ public class GT {
                 GT.toast_time(object, time);
             }
 
+            //反馈数据
+            @Override
+            public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+                onResultDataFront(requestCode, resultCode, data);
+                super.onActivityResult(requestCode, resultCode, data);
+                onResultDataBehind(requestCode, resultCode, data);
+            }
+
+            /**
+             * 反馈前面
+             *
+             * @param requestCode
+             * @param resultCode
+             * @param data
+             */
+            protected void onResultDataFront(int requestCode, int resultCode, @Nullable Intent data) {
+
+            }
+
+            /**
+             * 反馈后面
+             *
+             * @param requestCode
+             * @param resultCode
+             * @param data
+             */
+            protected void onResultDataBehind(int requestCode, int resultCode, @Nullable Intent data) {
+
+            }
+
 
         }
 
@@ -12941,6 +13299,7 @@ public class GT {
                 loadData();// 功能方法
 
             }
+
 
         }
 
