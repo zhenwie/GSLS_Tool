@@ -53,6 +53,7 @@ import android.media.SoundPool;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
+import android.net.http.SslError;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -87,15 +88,14 @@ import android.view.animation.RotateAnimation;
 import android.view.animation.ScaleAnimation;
 import android.view.animation.TranslateAnimation;
 import android.view.inputmethod.InputMethodManager;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -113,19 +113,16 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
-import com.blankj.utilcode.util.AppUtils;
 import com.blankj.utilcode.util.Utils;
-import com.bumptech.glide.Glide;
-import com.google.gson.Gson;
+import com.gsls.gtlibrary.R;
 import com.lzy.okgo.callback.StringCallback;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
+import org.json.JSONStringer;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -134,6 +131,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
@@ -149,6 +147,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
@@ -161,17 +160,20 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Time;
+import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -200,24 +202,39 @@ import okhttp3.FormBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
+import okhttp3.Response;
+
+import static android.content.Context.POWER_SERVICE;
 
 /**
  * 工具类说明：
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2020.12.17
+ * 更新时间:2021.3.17
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.2.9.2 版本 数据传递 就是这么简单！）
- * 1.新增 SaveObject 类，采用序列化进行传递 Object(GT_Fragment|GT_Animation|Hibernate|GT_SharedPreferences|AppDataPool|均自动实现序列化)
- * 2.增加 APP 错误日志捕获方法：GT.LOG.initAppErrLogTry(this);(如果想打印到本地，请打开本地打印：GT.LOG.LOG_FILE_TF = true;)
- * 3.新增 GT_Fragment 构建注解，用法如下：（具体教程请参考官网教程）
- * 用法1：GT.GT_Fragment.Build;
- * 用法2：GT.GT_Fragment.Builds(R.id.frameLayout, Fragment_A.class); 参数一：指定一个Fragment 容器，参数二：指定预加载的Fragment页面，参数均可不填
- * 注意：使用注解时如果没有指定加载Fragment容器的话很容易报未找到视图的异常，但添加 gt_fragment.setHomeFragmentId(R.id.frameLayout); 即可
- * 4.GT_Fragment 新增 DIALOG 切换方式 如：gt_fragment.switchingMode(GT.GT_Fragment.DIALOG); 让切换的Fragment 进行 hide / show 操作
- * 5.增加Activity 启动 Fragment 或 DialogFragment 销毁后反馈给Activity 数据的操作，增加 Fragment 启动 DialogFragment 销毁反馈给Fragment 数据的操作
+ * <p>
+ * <p>
+ * 更新内容：（1.3.0 版本 大更新，工具类史诗级加强！）
+ * 1.重大更新内容：
+ * (1).新增 SaveObject 类，采用序列化进行传递 Object(GT_Fragment|GT_Animation|Hibernate|GT_SharedPreferences|AppDataPool|均自动实现序列化)
+ * (2).更新 JSON 类，史诗级增强，JSON 与 Bean 互转，还有许多其他功能方法待你探索（无需依赖gson库）
+ * (3).Hibernate 类 史诗级增强，支持较为复杂的关系映射(意味着可以在表里定义实体类)
+ * (4).GT_File 类 更名为 FileUtils 类, 史诗级增强, 增多许多实用性功能(轻轻松松自定义文件系统)
+ * (5).新增 WebViewUtils 工具类，新增 loadPCHtml(加载PC网页) 、 loadAppHtml(加载App网页) 功能 在加载网页时，实时监听进度
+ * (6).新增 ProgressDialogUtils 类 初始化简易的加载进度条。
+ *
+ * 2.小更新与优化:
+ * (1).增加 APP 错误日志捕获方法：GT.LOG.initAppErrLogTry(this);(如果想打印到本地，请打开本地打印：GT.LOG.LOG_FILE_TF = true;)
+ * (2).新增 GT_Fragment 构建注解（具体教程请参考官网教程）
+ * (3).GT_Fragment 新增 DIALOG 切换方式 如：gt_fragment.switchingMode(GT.GT_Fragment.DIALOG); 让切换的Fragment 进行 hide / show 操作
+ * (4).增加Activity 启动 Fragment 或 DialogFragment 销毁后反馈给Activity 数据的操作，增加 Fragment 启动 DialogFragment 销毁反馈给Fragment 数据的操作
+ * (5).UpdateApp App更新类优化,在下载时实时监听进度
+ * (6).startActivity 、 startFragment 新增 切换动画，有内置动画，也可自定义动画,设置后会一直有效无需二次设置
+ *
+ *
+ *
  *
  * <p>
  * <p>
@@ -263,7 +280,7 @@ public class GT {
      *
      * @return
      */
-    public Activity getactivity() {
+    public Activity getActivity() {
         return activity;
     }
 
@@ -347,8 +364,8 @@ public class GT {
         AnnotationAssist.initAll(object, view); //初始化 IOC 注解
 
         //是否加载注解
-        if (isGTUtil) {//默认是加载的
-            Utils.init(activity);//初始化强大的 Utiles 工具
+        if (isGTUtil) {//默认不加载的
+            Utils.init(activity);//初始化 Utiles 工具
         }
 
     }
@@ -1120,9 +1137,9 @@ public class GT {
      * @标准Toast
      */
     public static void toast(Object content) {
-        if (getGT().getactivity() != null) {
+        if (getGT().getActivity() != null) {
             if (toast == null) {
-                toast = Toast.makeText(getGT().getactivity(), content.toString(), Toast.LENGTH_SHORT);
+                toast = Toast.makeText(getGT().getActivity(), content.toString(), Toast.LENGTH_SHORT);
             } else {
                 toast.setText(content.toString());
             }
@@ -1400,6 +1417,102 @@ public class GT {
                 super.dismiss();
             }
 
+        }
+
+    }
+
+    /**
+     * 加载进度条
+     */
+    public static class ProgressDialogUtils {
+
+        /**
+         * 简易的进度条加载框
+         *
+         * @param context
+         * @param isCancelable 是否点击可取消
+         * @param message      消息内容
+         * @return
+         */
+        public static ProgressDialog initProgressBarDialog(Context context, boolean isCancelable, String message) {
+            ProgressDialog progressDialog = initCircleProgressDialog(context, isCancelable, message);
+            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);// 进度条 setProgress
+            return progressDialog;
+        }
+
+
+        /**
+         * 简易的圆圈加载框
+         *
+         * @param context
+         * @param isCancelable 是否点击可取消
+         * @param message      消息内容
+         * @return
+         */
+        public static ProgressDialog initCircleProgressDialog(Context context, boolean isCancelable, String message) {
+            ProgressDialog progressDialog = new ProgressDialog(context);
+            progressDialog.setCancelable(isCancelable);
+            if (message != null) {
+                progressDialog.setMessage(message);
+            }
+            return progressDialog;
+        }
+
+
+        /**
+         * 初始化进度条加载条
+         *
+         * @param context
+         * @param isCancelable    是否点击可取消
+         * @param icon            图标
+         * @param title           标题
+         * @param message         消息内容
+         * @param maxProgress     进度最大值
+         * @param dialogInterface 取消监听
+         * @return
+         */
+        public static ProgressDialog initProgressBarDialog(Context context, boolean isCancelable, int icon, String title, String message, int maxProgress, DialogInterface.OnCancelListener dialogInterface) {
+            ProgressDialog progressDialog = initCircleProgressDialog(context, isCancelable, icon, title, message, dialogInterface);
+            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);// 进度条 setProgress
+            progressDialog.setMax(maxProgress);
+            return progressDialog;
+        }
+
+
+        /**
+         * 初始化圆圈加载条
+         *
+         * @param context
+         * @param isCancelable    是否点击可取消
+         * @param icon            图标
+         * @param title           标题
+         * @param message         消息内容
+         * @param dialogInterface 取消监听
+         * @return
+         */
+        public static ProgressDialog initCircleProgressDialog(Context context, boolean isCancelable, int icon, String title, String message, DialogInterface.OnCancelListener dialogInterface) {
+            ProgressDialog progressDialog = new ProgressDialog(context);
+            progressDialog.setCancelable(isCancelable);
+
+            if (icon != -1) {
+                progressDialog.setIcon(icon);
+            }
+
+            if (title != null) {
+                progressDialog.setTitle(title);
+            }
+
+            if (message != null) {
+                progressDialog.setMessage(message);
+            }
+
+            if (isCancelable) {
+                if (dialogInterface != null) {
+                    progressDialog.setOnCancelListener(dialogInterface);//设置监听取消加载框事件
+                }
+            }
+
+            return progressDialog;
         }
 
     }
@@ -1705,462 +1818,6 @@ public class GT {
     }
 
     /**
-     * @App存储池
-     */
-    public static class AppDataPool implements SaveObject.SaveBean {
-
-        /**
-         * @App内部存储池
-         * @临时数据
-         */
-        public static class Interior {
-
-            /**
-             * @内部存储池
-             * @存储数据的临时容器
-             */
-            private final static Map<Object, Object> interiorDataPool = new HashMap<>();
-
-            /**
-             * @param classs
-             * @param key
-             * @param data
-             * @return 操作成功 返回 true
-             * @保存数据
-             */
-            public static boolean saveDataPool(Object classs, Object key, Object data) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (!interiorDataPool.containsKey(idKey)) {
-                    interiorDataPool.put(idKey, data);//存储数据
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，保存数据失败！当前数据池中存在该值");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param classs
-             * @param key
-             * @return 操作成功 返回 true
-             * @删除数据
-             */
-            public static boolean deleteDataPool(Object classs, Object key) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (interiorDataPool.containsKey(idKey)) {
-                    interiorDataPool.remove(idKey);//删除数据
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，删除数据失败！当前数据池中不存在该值");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param classs 读取那个类存储的数据
-             * @param key    存储的key
-             * @return 成功返回 查询的值 否则返回 null
-             * @查询数据
-             */
-            public static Object queryDataPool(Object classs, Object key) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (interiorDataPool.containsKey(idKey)) {
-                    return interiorDataPool.get(idKey);//获取数据
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，查询数据失败！当前数据池中不存在该值");
-                    }
-                    return null;
-                }
-            }
-
-            /**
-             * @param classs 读取那个类存储的数据
-             * @param key    存储的key
-             * @return 成功返回 true
-             * @修改数据
-             */
-            public static boolean updateDataPool(Object classs, Object key, Object toData) {
-                Object idKey = getIdKey(classs, key);//形成唯一的 IdKey
-                if (interiorDataPool.containsKey(idKey)) {
-                    interiorDataPool.put(idKey, toData);//修改数据
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "App内部存储池，修改数据失败！当前数据池中不存在该值");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @return
-             * @清空
-             */
-            public static boolean clearData() {
-                if (interiorDataPool != null) {
-                    try {
-                        interiorDataPool.clear();
-                        return true;
-                    } catch (Exception e) {
-                        return false;
-                    }
-                }
-                return false;
-            }
-
-            /**
-             * @param classs
-             * @param key
-             * @return
-             * @APP存储池中返回IdKey
-             */
-            private static String getIdKey(Object classs, Object key) {
-                return classs.getClass().getName().replace(".", "/") + ".java 【" + key + "】";// 获取文件包名与Java文件名
-            }
-
-        }
-
-        /**
-         * @APP外部存储池
-         * @持久性数据（需要在清单文件中添加以下文件读取与写入权限）
-         * @<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-         * @<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-         */
-        public static class External {
-
-            /**
-             * @外部存储池
-             * @存储数据的永久容器
-             */
-            private static Map<Object, Object> externalDataPool = null;    //当前App所有数据的容器
-            private static Object passWord = null;             //当前文件的密码
-            private static GT_File gt_file = null;             //GT_File 工具包
-            private static final String fileSaveDataPath = "/Android/data/com.gsls.gtlibrary/AppDataPool/";//GT APP 公共池数据源
-            private static String appPackage = null;
-            private static String fileName = null;             //保存数据的文件名
-            private static String filePath = null;             //当前文件的全部路径
-            private static Gson gson = null;
-            private Activity activity;
-
-            /**
-             * @param activity
-             * @param passWord
-             * @初始化
-             */
-            public static void init(Activity activity, Object passWord) {
-                gt_file = new GT_File();//创建 File 对象
-                gson = new Gson();
-                appPackage = AppUtils.getAppPackageName();
-                AppAuthorityManagement.readWritePermission(activity);//申请文件读写的6.0以上权限
-                External.passWord = Encryption.MD5.encryptMD5(appPackage + passWord);//将 密码 进行 MD5 加密
-                fileName = getAppName(AppUtils.getAppPackageName());
-            }
-
-            /**
-             * @param packName
-             * @param key
-             * @param data
-             * @return 返回为 true 则表示 保存成功
-             * @保存数据(保存只能保存自己app池下的数据)
-             */
-            public static boolean saveDataPool(Object key, Object data) {
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), getAppName(appPackage));
-                if (!externalDataPool.containsKey(key)) {
-                    //保存操作
-                    externalDataPool.put(key, data);//将数据保存到map中
-                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                    gt_file.save(encryptData, fileSaveDataPath + appPackage, getAppName(appPackage));
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前保存 外部数据池出错，数据池 中已存在该 Key 保存失败");
-                    }
-                    return false;
-                }
-
-            }
-
-            /**
-             * @param packageName
-             * @param passWord
-             * @param key
-             * @param toData
-             * @return
-             * @查询数据(查询自己app池下的数据)
-             */
-            public static Object queryDataPool(Object key) {
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), getAppName(appPackage));
-                return externalDataPool.get(key);
-            }
-
-            /**
-             * @param packName
-             * @param key
-             * @param data
-             * @return 返回为 true 则表示 保存成功
-             * @查询数据(查询需要输入指定查询App的包名)
-             */
-            public static Object queryDataPool(Object appPackage, Object passWord, Object key) {
-                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                fileName = getAppName(appPackage);
-                pathStr += fileName;
-                File file = new File(pathStr);
-                if (file.exists()) {   //如果当前文件不存在
-                    String queryData = gt_file.query(fileSaveDataPath + appPackage, fileName);//读取文件内的数据
-                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
-                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
-                    Map<Object, Object> map = gson.fromJson(encryptData, HashMap.class);
-                    if (map != null) {
-                        if (map.containsKey(key)) {
-                            return map.get(key);
-                        } else {
-                            if (LOG.isGtLogTf()) {
-                                log(getLineInfo(1), "当前查询 外部数据池出错，数据池 中不存在该 Key 查询失败");
-                            }
-                            return null;
-                        }
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前查询 外部数据池出错，数据池数据被破坏，请检查该数据池");
-                        }
-                        return null;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前查询 外部数据池出错，数据池 中不存在该 app包名 的数据池 查询失败");
-                    }
-                    return null;
-                }
-
-            }
-
-            /**
-             * @param packageName
-             * @param passWord
-             * @param key
-             * @param toData
-             * @return
-             * @修改数据(修改只能修改自己app池下的数据)
-             */
-            public static boolean updateDataPool(Object key, Object toData) {
-
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord.toString(), fileName);
-                if (externalDataPool != null) {
-                    if (externalDataPool.containsKey(key)) {
-                        //保存操作
-                        externalDataPool.put(key, toData);//将数据保存到map中
-                        String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                        gt_file.save(encryptData, fileSaveDataPath + appPackage, fileName);
-                        return true;
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不已存在该 Key 修改失败");
-                        }
-                        return false;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前修改 外部数据池出错，数据池不存在 修改失败");
-                    }
-                    return false;
-                }
-
-
-            }
-
-            /**
-             * @param appPackage 包名
-             * @param passWord   密码
-             * @param key        key
-             * @param toData     修改值
-             * @return
-             * @修改外部APP数据池的数据
-             */
-            public static boolean updateDataPool(Object appPackage, Object passWord, Object key, Object toData) {
-
-                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                pathStr += getAppName(appPackage.toString());
-                File file = new File(pathStr);
-                if (file.exists()) {   //如果当前文件不存在
-                    String queryData = gt_file.query(fileSaveDataPath + appPackage, getAppName(appPackage.toString()));//读取文件内的数据
-                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
-                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
-                    Map<Object, Object> map = null;
-                    try {
-                        map = gson.fromJson(encryptData, HashMap.class);
-                    } catch (Exception e) {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池出现问题 修改失败");
-                        }
-                        return false;
-                    }
-                    if (map != null) {
-                        if (map.containsKey(key)) {
-                            map.put(key, toData);
-                            String encryptDataStr = Encryption.DES.encryptPassword(map, passWord);
-                            gt_file.save(encryptDataStr, fileSaveDataPath + appPackage, getAppName(appPackage));
-                            return true;
-                        } else {
-                            if (LOG.isGtLogTf()) {
-                                log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不已存在该 Key 修改失败");
-                            }
-                            return false;
-                        }
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前修改 外部数据池出错，数据池数据被破坏，请检查该数据池");
-                        }
-                        return false;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前修改 外部数据池出错，数据池 中不存在该 app包名 的数据池 修改失败");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param packageName
-             * @param passWord
-             * @param key
-             * @param toData
-             * @return
-             * @删除数据(删除只能删除自己app池下的数据)
-             */
-            public static boolean deleteDataPool(Object key) {
-                //获取当前所有路径
-                Map<Object, Object> externalDataPool = getExternalDataPool(appPackage, passWord, getAppName(appPackage));
-                if (externalDataPool != null && externalDataPool.containsKey(key)) {
-                    //保存操作
-                    externalDataPool.remove(key);//将数据删除到map中
-                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                    gt_file.save(encryptData, fileSaveDataPath + appPackage, getAppName(appPackage));
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不已存在该 Key 删除失败");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param appPackage App包名
-             * @param passWord   密码
-             * @param key        key
-             * @return
-             * @删除App外部数据池的数据
-             */
-            public static boolean deleteDataPool(Object appPackage, Object passWord, Object key) {
-
-                String pathStr = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                pathStr += getAppName(appPackage.toString());
-                File file = new File(pathStr);
-                if (file.exists()) {   //如果当前文件不存在
-                    String queryData = gt_file.query(fileSaveDataPath + appPackage, getAppName(appPackage.toString()));//读取文件内的数据
-                    passWord = Encryption.MD5.encryptMD5(appPackage.toString() + passWord);//将 密码 进行 MD5 加密
-                    String encryptData = Encryption.DES.decryptPassword(queryData, passWord);//将加密的数据解密
-                    Map<Object, Object> map = null;
-                    try {
-                        map = gson.fromJson(encryptData, HashMap.class);
-                    } catch (Exception e) {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前删除 外部数据池出错，数据池出现问题 删除失败");
-                        }
-                        return false;
-                    }
-                    if (map != null) {
-                        if (map.containsKey(key)) {
-                            map.clear();
-                            String encryptDataStr = Encryption.DES.encryptPassword(map, passWord);
-                            gt_file.save(encryptDataStr, fileSaveDataPath + appPackage, getAppName(appPackage));
-                            return true;
-                        } else {
-                            if (LOG.isGtLogTf()) {
-                                log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不已存在该 Key 删除失败");
-                            }
-                            return false;
-                        }
-                    } else {
-                        if (LOG.isGtLogTf()) {
-                            log(getLineInfo(1), "当前删除 外部数据池出错，数据池数据被破坏，请检查该数据池");
-                        }
-                        return false;
-                    }
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前删除 外部数据池出错，数据池 中不存在该 app包名 的数据池 删除失败");
-                    }
-                    return false;
-                }
-            }
-
-            /**
-             * @param packName
-             * @param key
-             * @param data
-             * @return 返回为 true 则表示 保存成功
-             * @清空数据(清空只能保存自己app池下的数据)
-             */
-            public static boolean clearDataPool(Object key, Object data) {
-
-                if (externalDataPool != null && !externalDataPool.containsKey(key)) {
-                    externalDataPool.clear();
-                    String encryptData = Encryption.DES.encryptPassword(externalDataPool, passWord);
-                    gt_file.save(encryptData, fileSaveDataPath + AppUtils.getAppPackageName(), fileName);
-                    return true;
-                } else {
-                    if (LOG.isGtLogTf()) {
-                        log(getLineInfo(1), "当前清空 外部数据池出错，数据池 中不已存在该 Key 清空失败");
-                    }
-                    return false;
-                }
-
-            }
-
-            /**
-             * @return
-             * @获取当前App名称
-             */
-            private static String getAppName(Object appPackage) {
-                //获取当前所有路径
-                String path = ApplicationUtils.getAppDirectory() + fileSaveDataPath + appPackage + "/";
-                List<String> filesAllName = ApplicationUtils.getFilesAllName(path);
-                if (filesAllName.size() > 0) {
-                    path = filesAllName.get(0);
-                    //获取文件名
-                    fileName = path.substring(path.lastIndexOf("/") + 1, path.length());
-                } else {
-                    fileName = null;
-                }
-                return fileName;
-            }
-
-            /**
-             * @param appPackage
-             * @param encryptionPassWord
-             * @param fileName
-             * @获取数据池中的 Map
-             */
-            public static Map<Object, Object> getExternalDataPool(Object appPackage, Object encryptionPassWord, String fileName) {
-                String queryData = gt_file.query(fileSaveDataPath + appPackage, fileName);//读取文件内的数据
-                String encryptData = Encryption.DES.decryptPassword(queryData, encryptionPassWord);//将加密的数据解密
-                externalDataPool = gson.fromJson(encryptData, HashMap.class);
-                return externalDataPool;
-            }
-
-        }
-
-
-    }
-
-    /**
      * 数据持久化 SharedPreferences
      */
     public static class GT_SharedPreferences implements SaveObject.SaveBean {
@@ -2192,7 +1849,6 @@ public class GT {
         public static final int PRIVATE = 0;        //只有本应用可读写
         public static final int PROTECTED = 1;      //其他应用可以只读
         public static final int PUBLIC = 2;         //其他应用可以读写
-        private Gson gson = new Gson();             //是 Gson 对象
 
         /**
          * 初始化 SP
@@ -2247,7 +1903,7 @@ public class GT {
                 sp_e.putStringSet(key, (Set) object);
             } else {
                 if (LOG.GT_LOG_TF) log(context, "进行对象保存");
-                String json = new Gson().toJson(object);
+                String json = JSON.toJson(object);
                 String json_class = object.getClass().toString();
                 sp_e.putString(key, json);                           //保存对象的 Json 数据
                 sp_e.putString(key + "_class", json_class);            //保存对象的 class 数据
@@ -2309,7 +1965,11 @@ public class GT {
                         obj = str;              //普通的 Json 数据
                     } else {
                         Object object_class = getObj(str_class);    //通过对象的 class 反射出 实例对象
-                        obj = gson.fromJson(str, object_class.getClass());     //通过 Gson 与 实例对象 获取相应的 Object 对象
+                        try {
+                            obj = JSON.fromJson(str, object_class.getClass());     //通过 JSON 与 实例对象 获取相应的 Object 对象
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
                     }
                 } catch (ClassCastException e2) {
                     if (LOG.GT_LOG_TF)
@@ -2367,7 +2027,11 @@ public class GT {
             String str_class = sp.getString(key + "_class", null);     //获取对象 class 数据
             String str = sp.getString(key, null);                          //获取对象 Json  数据
             if (str_class != null && str_class.equals("class java.util.ArrayList")) {      //如果 class 数据为空
-                obj = gson.fromJson(str, type);//字符串转 List
+                try {
+                    obj = JSON.fromJson(str, type.getClass());//字符串转 List
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
             }
             return obj;
         }
@@ -2500,98 +2164,438 @@ public class GT {
     }
 
     /**
-     * 外部存储 File
+     * 增强版外部存储
      */
-    public static class GT_File {
+    public static class FileUtils {
 
         /**
-         * 使用实例：（默认路径为 SD 卡根目录）
-         * 第一步：
-         *          GT.GT_File file = new GT.GT_File();//创建 File 对象
-         * 第二步：
-         *          file.save("第一章:","/我的小说/武侠小说/","斗罗大陆.txt");//保存数据
-         * 第三步：
-         *          String query = file.query("/我的小说/武侠小说/", "斗罗大陆.txt"); //获取数据
-         */
-
-        /**
-         * 保存文件（默认路径为 SD 卡根目录）
+         * 保存单个文件
          *
-         * @param saveData 保存的数据
-         * @param savePaht 保存的文件路径
-         * @param fileName 保存文件的名称包括扩展名
+         * @param saveData 文件保存的数据
+         * @param savePaht 文件保存的路径
+         * @param fileName 文件名与扩展名
          */
-        public void save(String saveData, String savePaht, String fileName) {
+        public static void saveData(String saveData, String savePaht, String fileName) {
+            save(saveData, savePaht, fileName);
+        }
 
-            File fileNull = new File(Environment.getExternalStorageDirectory() + savePaht);//实例化文件对象
+        /**
+         * 保存多个文件
+         *
+         * @param savePaht 多个文件保存的地址
+         * @param saveMap  保存多个文件的数据 key = 文件名与扩展名  value = 文件里的数据
+         */
+        public static void saveDataAll(String savePaht, Map<String, String> saveMap) {
+            for (String key : saveMap.keySet()) {
+                save(saveMap.get(key), savePaht, key);
+            }
+        }
+
+        /**
+         * 文件是否存在
+         *
+         * @param filePathAddFileName
+         * @return
+         */
+        public static boolean fileExist(String filePathAddFileName) {
+            return new File(filePathAddFileName).exists();
+        }
+
+        /**
+         * 保存文件数据
+         *
+         * @param saveData
+         * @param savePaht
+         * @param fileName
+         */
+        public static void save(String saveData, String savePaht, String fileName) {
+            File fileNull = new File(savePaht);
             if (!fileNull.exists()) {
                 fileNull.mkdirs();
             }
 
-            File file = new File(Environment.getExternalStorageDirectory() + savePaht, fileName);//实例化文件对象
+            File file = new File(savePaht, fileName);
+            FileOutputStream fos = null;
 
-            FileOutputStream fos = null;//文件输出流
             try {
-                fos = new FileOutputStream(file);//获取文件输出流对象
-                fos.write(saveData.getBytes());//保存备忘信息
-                fos.flush();//清除缓存
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
+                fos = new FileOutputStream(file);
+                fos.write(saveData.getBytes());
+                fos.flush();
+            } catch (FileNotFoundException var18) {
+                var18.printStackTrace();
+            } catch (IOException var19) {
+                var19.printStackTrace();
             } finally {
                 if (fos != null) {
                     try {
-                        fos.close();//关闭输出流
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                        fos.close();
+                    } catch (IOException var17) {
+                        var17.printStackTrace();
                     }
                 }
+
             }
 
         }
 
         /**
-         * 查询文件
+         * 查询文件数据
          *
-         * @param queryPaht 查询文件的路径
-         * @param fileName  查询文件的名称
-         * @return String       返回文件数据
+         * @param queryPaht
+         * @param fileName
+         * @return
          */
-        public String query(String queryPaht, String fileName) {
-
-            File fileNull = new File(Environment.getExternalStorageDirectory() + queryPaht);//实例化文件对象
+        public static String query(String queryPaht, String fileName) {
+            File fileNull = new File(queryPaht);
             if (!fileNull.exists()) {
                 fileNull.mkdirs();
             }
 
-            File file = new File(Environment.getExternalStorageDirectory() + queryPaht, fileName);//实例化文件对象
-
-
-            FileInputStream fis = null;//文件输入流对象
+            File file = new File(queryPaht, fileName);
+            FileInputStream fis = null;
             byte[] buffer = null;
             String data = null;
+
             try {
-                fis = new FileInputStream(file);//获得文件输入流对象
-                buffer = new byte[fis.available()];//实例化字节数组
-                fis.read(buffer);//从输入流中读取数据
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
+                fis = new FileInputStream(file);
+                buffer = new byte[fis.available()];
+                fis.read(buffer);
+            } catch (FileNotFoundException var19) {
+                var19.printStackTrace();
+            } catch (IOException var20) {
+                var20.printStackTrace();
             } finally {
                 if (fis != null) {
                     try {
-                        fis.close();//关闭输入流对象
-                        data = new String(buffer);//把字节数组中的数据转换为字符串
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                        fis.close();
+                        data = new String(buffer);
+                    } catch (IOException var18) {
+                        var18.printStackTrace();
                     }
                 }
+
             }
 
             return data;
         }
+
+        /**
+         * 查询当前文件路径汇总有多少个文件
+         *
+         * @param filePath
+         * @return
+         */
+        public static List<String> queryFilePathFileNumber(String filePath) {
+
+            List<String> fileNameList = new ArrayList<>();
+
+            //判断当前路径是否存在
+            File file = new File(filePath);
+            if (!file.exists()) {
+                return fileNameList;
+            }
+
+            try {
+                File[] files = file.listFiles();
+                if (files == null || files.length == 0) return fileNameList;
+                for (File fileOne : files) {
+                    if (fileOne.isDirectory()) {
+                        fileNameList.add("目录:" + fileOne.getName());
+                    } else {
+                        fileNameList.add("文件:" + fileOne.getName());
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                return fileNameList;
+            }
+            return fileNameList;
+        }
+
+        /**
+         * 获取文件描述
+         *
+         * @param filePath
+         * @param fileName
+         * @return
+         */
+        public static String getFileSizeDescriptor(String filePath, String fileName) {
+
+            try {
+                long fileSize = getFileSize(new File(filePath, fileName));
+                String fileDescriptor = formetFileSize(fileSize);
+                return fileDescriptor;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            return null;
+        }
+
+        /**
+         * 获取指定文件大小
+         *
+         * @param file
+         * @return
+         * @throws Exception
+         */
+        private static long getFileSize(File file) throws Exception {
+            long size = 0;
+            if (file.exists()) {
+                FileInputStream fis = null;
+                fis = new FileInputStream(file);
+                size = fis.available();
+            } else {
+                file.createNewFile();
+            }
+            return size;
+        }
+
+        /**
+         * 转换文件大小
+         *
+         * @param fileS
+         * @return
+         */
+        private static String formetFileSize(long fileS) {
+            DecimalFormat df = new DecimalFormat("#.00");
+            String fileSizeString = "";
+            String wrongSize = "0B";
+            if (fileS == 0) {
+                return wrongSize;
+            }
+            if (fileS < 1024) {
+                fileSizeString = df.format((double) fileS) + "B";
+            } else if (fileS < 1048576) {
+                fileSizeString = df.format((double) fileS / 1024) + "KB";
+            } else if (fileS < 1073741824) {
+                fileSizeString = df.format((double) fileS / 1048576) + "MB";
+            } else {
+                fileSizeString = df.format((double) fileS / 1073741824) + "GB";
+            }
+            return fileSizeString;
+        }
+
+        /**
+         * 删除当前目录下所有的文件已经子文件
+         *
+         * @param deleteFile
+         */
+        public static void deleteAllFiles(File deleteFile, boolean deleteThisFile) {
+
+            if (!deleteFile.exists()) {
+                return;
+            }
+
+            File files[] = deleteFile.listFiles();
+            if (files != null && files.length != 0) {
+                for (File file : files) {
+                    if (file.isDirectory()) { // 判断是否为文件夹
+                        deleteAllFiles(file, deleteThisFile);
+                        try {
+                            file.delete();
+                        } catch (Exception e) {
+                        }
+                    } else {
+                        if (file.exists()) { // 判断是否存在
+                            deleteAllFiles(file, deleteThisFile);
+                            try {
+                                file.delete();
+                            } catch (Exception e) {
+                            }
+                        }
+                    }
+                }
+
+                //是否删除当前文件
+                if (deleteThisFile) {
+                    try {
+                        deleteFile.delete();
+                    } catch (Exception e) {
+                    }
+                }
+
+            } else {
+                try {
+                    deleteFile.delete();
+                } catch (Exception e) {
+                }
+            }
+        }
+
+        /**
+         * 重命名
+         *
+         * @param path
+         * @param oldName
+         * @param newName
+         */
+        public static void changeFileDirName(String path, String oldName, String newName) {
+            File oldFile = new File(path + "/" + oldName);
+            File newFile = new File(path + "/" + newName);
+
+            oldFile.renameTo(newFile);
+        }
+
+        /**
+         * 获取U盘名称
+         *
+         * @return
+         */
+        public static String getUsbName() {
+            String filePath = "/proc/mounts";
+            File file = new File(filePath);
+            List<String> lineList = new ArrayList<>();
+            InputStream inputStream = null;
+            try {
+                inputStream = new FileInputStream(file);
+                if (inputStream != null) {
+                    InputStreamReader inputStreamReader = new InputStreamReader(inputStream, "GBK");
+                    BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
+                    String line = "";
+                    while ((line = bufferedReader.readLine()) != null) {
+                        if (line.contains("vfat")) {
+                            lineList.add(line);
+                        }
+                    }
+                }
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                if (inputStream != null) {
+                    try {
+                        inputStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            if (lineList.size() == 0) return null;
+            String editPath = lineList.get(lineList.size() - 1);
+            int start = editPath.indexOf("/mnt");
+            int end = editPath.indexOf(" vfat");
+            String path = editPath.substring(start, end);
+
+            return path;
+        }
+
+
+        /**
+         * 复制单个文件
+         *
+         * @param fromFileStr
+         * @param toFileStr
+         * @return
+         */
+        public static void copyFile(String fromFileStr, String toFileStr) {
+
+            File fromFile = new File(fromFileStr);
+            File toFile = new File(toFileStr);
+
+            if (!fromFile.exists()) {
+                return;
+            }
+
+            //开始拷贝文件
+            copy(fromFileStr, toFileStr);
+        }
+
+        /**
+         * 拷贝文件
+         *
+         * @param fromFile
+         * @param toFile
+         * @return
+         */
+        private static int copy(String fromFile, String toFile) {
+            try {
+                InputStream inputStream = new FileInputStream(fromFile);
+                OutputStream outputStream = new FileOutputStream(toFile);
+                byte bt[] = new byte[1024];
+                int d;
+                while ((d = inputStream.read(bt)) > 0) {
+                    outputStream.write(bt, 0, d);
+                }
+                inputStream.close();
+                outputStream.close();
+                return 0;
+            } catch (Exception e) {
+                return -1;
+            }
+        }
+
+        /**
+         * 复制所有文件
+         *
+         * @param fromFile
+         * @param toFile
+         * @return
+         */
+        public static int copyAllFile(String fromFile, String toFile) {
+            //要复制的文件目录
+            File[] currentFiles;
+            File root = new File(fromFile);
+            //如同判断SD卡是否存在或者文件是否存在
+            //如果不存在则 return出去
+            if (!root.exists()) {
+                return -1;
+            }
+            //如果存在则获取当前目录下的全部文件 填充数组
+            currentFiles = root.listFiles();
+            if (currentFiles == null) {//如果只有一个文件，那就使用拷贝一个文件的方法
+                FileUtils.copyFile(fromFile, toFile);
+                return 0;
+            }
+
+            //目标目录
+            File targetDir = new File(toFile);
+            //创建目录
+            if (!targetDir.exists()) {
+                targetDir.mkdirs();
+            }
+            //遍历要复制该目录下的全部文件
+            for (int i = 0; i < currentFiles.length; i++) {
+                if (currentFiles[i].isDirectory())//如果当前项为子目录 进行递归
+                {
+//                GT.log("1 " + currentFiles[i].getPath() + "/" + "--------" + toFile + "/" + currentFiles[i].getName() + "/");
+                    copyAllFile(currentFiles[i].getPath() + "/", toFile + "/" + currentFiles[i].getName() + "/");
+
+                } else//如果当前项为文件则进行文件拷贝
+                {
+//                GT.log("2 " + currentFiles[i].getPath() + "--------" + toFile + "/" + currentFiles[i].getName());
+                    CopySdcardFile(currentFiles[i].getPath(), toFile + "/" + currentFiles[i].getName());
+                }
+            }
+            return 0;
+        }
+
+        /**
+         * 要复制的目录下的所有非子目录(文件夹)文件拷贝
+         *
+         * @param fromFile
+         * @param toFile
+         * @return
+         */
+        private static int CopySdcardFile(String fromFile, String toFile) {
+            try {
+                InputStream fosfrom = new FileInputStream(fromFile);
+                OutputStream fosto = new FileOutputStream(toFile);
+                byte bt[] = new byte[1024];
+                int c;
+                while ((c = fosfrom.read(bt)) > 0) {
+                    fosto.write(bt, 0, c);
+                }
+                fosfrom.close();
+                fosto.close();
+                return 0;
+
+            } catch (Exception ex) {
+                return -1;
+            }
+        }
+
 
     }
 
@@ -2604,7 +2608,7 @@ public class GT {
         private Context context;
 
         public Hibernate() {
-            Context context = getGT().getactivity();
+            Context context = getGT().getActivity();
             if (context != null) {
                 this.context = context;
             } else {
@@ -2614,55 +2618,6 @@ public class GT {
 
         public Hibernate(Context context) {
             this.context = context;
-        }
-
-        //=============================== 定义数据库新字段 ====================================
-
-        public static class SQLValue {
-
-            public static class Text<T> {
-
-                private StringBuffer stringBuffer = null;
-
-                public Text() {
-                    if (stringBuffer == null) {
-                        stringBuffer = new StringBuffer();
-                    }
-                }
-
-                public Text(T str) {
-                    if (stringBuffer == null) {
-                        stringBuffer = new StringBuffer();
-                        stringBuffer.append(str);
-                    }
-                }
-
-                public StringBuffer getTextObj() {
-                    return stringBuffer;
-                }
-
-                public Text addText(T str) {
-                    stringBuffer.append(str);
-                    return this;
-                }
-
-                public Text deleteText(int start, int end) {
-                    stringBuffer.delete(start, end);
-                    return this;
-                }
-
-                public T getText() {
-                    return (T) stringBuffer.toString();
-                }
-
-                public Text updateText(int offset, T t) {
-                    stringBuffer.insert(offset, t);
-                    return this;
-                }
-
-            }
-
-
         }
 
         //=============================== 数据库注解 ====================================
@@ -2851,7 +2806,7 @@ public class GT {
 
         //=============================== 数据表路径 ====================================
 
-        private List<Class<?>> tableList;//表class集合
+        private List<Class<?>> tableList;//创建表class集合
 
         public List<Class<?>> getTableList() {
             return tableList;
@@ -2994,7 +2949,7 @@ public class GT {
 
                         //第五步：删除数据库中多余无用的表
                         for (String tableName : getSQLAllTableName()) {//获取数据库中所有的表
-                            if (!"android_metadata".equals(tableName) && !"sqlite_sequence".equals(tableName)) {//过来掉系统自带的表
+                            if (!"sqlite_sequence".equals(tableName)) {//过来掉系统自带的表
                                 if (!tableNameList.contains(tableName)) {//如果数据库表没有存在最新数据库更新的表名当中
                                     deleteTable(tableName);//删除当前无效的表
                                 }
@@ -3110,7 +3065,7 @@ public class GT {
             Cursor cursor = sqLiteDatabase2.rawQuery("select name from sqlite_master where type='table' order by name", null);
             while (cursor.moveToNext()) {
                 String tableName = cursor.getString(0);
-                if (!"android_metadata".equals(tableName) && !"sqlite_sequence".equals(tableName)) {//过滤掉系统自带的表
+                if (!"sqlite_sequence".equals(tableName)) {//过滤掉系统自带的表
                     strList.add(tableName);
                 }
             }
@@ -3281,6 +3236,418 @@ public class GT {
         }
 
         /**
+         * 返回List或Map
+         *
+         * @param type
+         * @param value
+         * @param <T>
+         * @return
+         */
+        public Object returnListOrMap(Class<?> type, String value) {
+
+            if (type == List.class) {
+                if (value == null || "null".equals(value)) return null;
+                //如果是 List java.lang.String[1111, 2222, 3333]
+                String valueType = value.substring(0, value.indexOf("["));
+                String valueData = value.substring(value.indexOf("[") + 1, value.length() - 1);
+                String[] arrayValue = valueData.split(",");
+
+                switch (valueType) {
+                    case "java.lang.String":
+                        List<String> strList = new ArrayList<String>();
+                        for (String str : arrayValue) {
+                            strList.add(str);
+                        }
+                        return strList;
+                    case "java.lang.Integer":
+                        List<Integer> intList = new ArrayList<Integer>();
+                        for (String str : arrayValue) {
+                            intList.add(Integer.parseInt(str));
+                        }
+                        return intList;
+                    case "java.lang.Boolean":
+                        List<Boolean> booleanList = new ArrayList<Boolean>();
+                        for (String str : arrayValue) {
+                            booleanList.add(Boolean.parseBoolean(str));
+                        }
+                        return booleanList;
+                    case "java.lang.Double":
+                        List<Double> doubleList = new ArrayList<Double>();
+                        for (String str : arrayValue) {
+                            doubleList.add(Double.parseDouble(str));
+                        }
+                        return doubleList;
+                    case "java.lang.Float":
+                        List<Float> floatList = new ArrayList<Float>();
+                        for (String str : arrayValue) {
+                            floatList.add(Float.parseFloat(str));
+                        }
+                        return floatList;
+                    case "java.sql.Time":
+                        List<Time> timeList = new ArrayList<Time>();
+                        for (String str : arrayValue) {
+                            SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
+                            Date d2 = null;
+                            try {
+                                d2 = format2.parse(str);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                            Time startTimeFmt = new Time(d2.getTime());
+                            timeList.add(startTimeFmt);
+                        }
+                        return timeList;
+                    case "java.util.Date":
+                    case "java.sql.Date":
+                        List<Date> dateList = new ArrayList<Date>();
+                        for (String str : arrayValue) {
+                            try {
+                                Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(str);
+                                dateList.add(date);
+                            } catch (ParseException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        return dateList;
+                    case "java.lang.Long":
+                        List<Long> longList = new ArrayList<Long>();
+                        for (String str : arrayValue) {
+                            longList.add(Long.parseLong(str));
+                        }
+                        return longList;
+                    case "[B"://byte数组
+                        List<Object> byteArrayList = new ArrayList<Object>();
+                        for (String str : arrayValue) {
+                            byteArrayList.add(str);
+                        }
+                        return byteArrayList;
+                    case "java.util.ArrayList": {
+                        //解析二级
+                        valueData = valueData.substring(1, valueData.length() - 1);
+                        String[] split = valueData.split("\\], \\[");
+                        List<Object> listList = new ArrayList<Object>();
+                        for (String str : split) {
+                            List<Object> list = new ArrayList<Object>();
+                            String[] split1 = str.split(", ");
+                            for (String str1 : split1) {
+                                if (str1 != null) {
+                                    list.add(str1);
+                                } else {
+                                    list.add(str1);
+                                }
+                            }
+                            listList.add(list);
+                        }
+                        return listList;
+                    }
+                    case "java.util.HashMap": {
+                        //解析二级 Map {key1=value1, key2=value2}, {2=2, 22=22}
+                        List<Object> mapList = new ArrayList<Object>();
+                        valueData = valueData.substring(1, valueData.length() - 1);
+                        String[] split = valueData.split("\\}, \\{");//key1=value1, key2=value2}, {2=2, 22=22
+                        for (String str : split) {
+                            Map<Object, Object> map = new HashMap<>();
+                            String[] split1 = str.split(", ");//key1=value1, key2=value2
+                            for (String str1 : split1) {
+                                String[] split2 = str1.split("=");//key1=value1
+                                map.put(split2[0], split2[1]);
+                            }
+                            mapList.add(map);
+                        }
+                        return mapList;
+                    }
+                    default: {
+                        //非基础类型的数据处理
+
+                        //获取集合中实体类的数据类型
+                        Class<?> clazz = getClass();
+                        try {
+                            clazz = Class.forName(valueType);
+                        } catch (ClassNotFoundException e1) {
+                            e1.printStackTrace();
+                        }
+
+                        //解析集合数据
+                        arrayValue = valueData.split("\\},\\{");
+
+                        //生成集合数据并返回
+                        List<Object> mapList = new ArrayList<Object>();
+                        for (int i = 0; i < arrayValue.length; i++) {
+                            String str = arrayValue[i];
+                            if (i == 0) {
+                                str = str + "}";
+                            } else if (i == arrayValue.length - 1) {
+                                str = "{" + str;
+                            } else {
+                                str = "{" + str + "}";
+                            }
+                            Object o = null;
+                            try {
+                                o = JSON.fromJson(str, clazz);
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+                            mapList.add(o);
+                        }
+                        return mapList;
+                    }
+                }
+
+
+            } else if (type == Map.class) {
+                if (value == null || "null".equals(value)) return null;
+                //如果是 Map java.lang.String[key1, key2, key3]
+                //          java.lang.String[1号, 2号, 3号]
+
+                String[] split = value.split("\n");
+                if (split.length != 2) {
+                    return null;
+                }
+
+                String keys = split[0];//map-key
+                String values = split[1];//map-value
+
+                // Key 解析
+                int keysIndex = keys.indexOf("[");//解析普通类型
+                if (keysIndex == -1) {
+                    keysIndex = keys.indexOf("{");//解析特殊类型
+                }
+                String keysType = keys.substring(0, keysIndex);
+                String keysData = keys.substring(keysIndex + 1, keys.length() - 1);
+                String[] arraykeysData = keysData.split(",");//解析待带入的key值
+
+                // value 解析
+                int valuesIndex = values.indexOf("[");//解析普通类型
+                if (valuesIndex == -1) {
+                    valuesIndex = values.indexOf("{");//解析特殊类型
+                }
+                String valuesType = values.substring(0, valuesIndex);
+                String valuesData = values.substring(valuesIndex + 1, values.length() - 1);
+
+                Map<Object, Object> map = new HashMap<>();
+                Class<?> keysTypeClass = null;
+                Class<?> valuesTypeClass = null;
+                try {
+                    keysTypeClass = Class.forName(keysType);
+                    valuesTypeClass = Class.forName(valuesType);
+                } catch (ClassNotFoundException e) {
+                    e.printStackTrace();
+                }
+
+                //解析key数据
+                String[] keysDataArray = null;
+                if (returnType(keysTypeClass) == null) {
+                    //特殊类型
+                    keysDataArray = keysData.split("\\},\\{");
+                } else {
+                    //普通类型
+                    keysDataArray = keysData.split(", ");
+                }
+
+                //解析value数据
+                String[] valuesDataArray = null;
+                if (returnType(valuesTypeClass) == null) {
+                    //特殊类型
+                    valuesDataArray = valuesData.split("\\},\\{");
+
+                } else {
+                    //普通类型
+                    valuesDataArray = valuesData.split(", ");
+                }
+
+
+                Object keyObject = null;
+                Object valueObject = null;
+
+                //生成Map
+                for (int i = 0; i < keysDataArray.length; i++) {
+
+                    String keyStr = keysDataArray[i];
+                    String valueStr = valuesDataArray[i];
+
+                    //如果key是特殊类型就做特殊处理
+                    if (returnType(keysTypeClass) == null) {
+                        if (i == 0) {
+                            keyStr += "}";
+                        } else if (i == keysDataArray.length - 1) {
+                            keyStr = "{" + keyStr;
+                        } else {
+                            keyStr = "{" + keyStr + "}";
+                        }
+                        try {
+                            keyObject = JSON.fromJson(keyStr, keysTypeClass);
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                            keyObject = keyStr.toString();
+                        }
+                    } else {
+                        keyObject = keyStr.toString();
+                    }
+
+                    //如果value是特殊类型就做特殊处理
+                    if (returnType(valuesTypeClass) == null) {
+                        if (i == 0) {
+                            valueStr += "}";
+                        } else if (i == keysDataArray.length - 1) {
+                            valueStr = "{" + valueStr;
+                        } else {
+                            valueStr = "{" + valueStr + "}";
+                        }
+
+                        try {
+                            valueObject = JSON.fromJson(valueStr, valuesTypeClass);
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                            valueObject = valueStr.toString();
+                        }
+
+                    } else {
+                        valueObject = valueStr.toString();
+                    }
+
+                    map.put(keyObject, valueObject);
+
+
+                }
+
+                return map;
+
+            }
+
+
+            return null;
+        }
+
+        /**
+         * 返回类型
+         *
+         * @param type
+         * @return
+         */
+        public Class returnType(Class<?> type) {
+
+            switch (type.getName()) {
+                case "java.lang.String":
+                    return String.class;
+                case "java.lang.Integer":
+
+                    return Integer.class;
+                case "java.lang.Boolean":
+                    return Boolean.class;
+                case "java.lang.Double":
+                    return Double.class;
+                case "java.lang.Float":
+                    return Float.class;
+                case "java.sql.Time":
+                    return Time.class;
+                case "java.util.Date":
+                case "java.sql.Date":
+                    return Date.class;
+                case "java.lang.Long":
+                    return Long.class;
+                case "[B"://byte数组
+                    return Byte.class;
+                case "java.util.ArrayList": {
+                    return ArrayList.class;
+                }
+                case "java.util.HashMap": {
+                    return HashMap.class;
+                }
+                default:
+                    //特殊类型
+                    return null;
+            }
+        }
+
+        /**
+         * 返回类型
+         *
+         * @param type
+         * @return
+         */
+        public Object returnTypeDataValue(Object objValue, Class<?> type) {
+            if (objValue == null) return null;
+
+            String objValueStr = objValue.toString();
+
+            try {
+                switch (type.getName()) {
+                    case "java.lang.String":
+                        return String.valueOf(objValue);
+                    case "java.lang.Integer":
+                        return Integer.parseInt(objValueStr);
+                    case "java.lang.Boolean":
+                        return Boolean.parseBoolean(objValueStr);
+                    case "java.lang.Double":
+                        return Double.parseDouble(objValueStr);
+                    case "java.lang.Float":
+                        return Float.parseFloat(objValueStr);
+                    case "java.sql.Time":
+                        SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
+                        Date d2 = null;
+                        try {
+                            d2 = format2.parse(objValueStr);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        Time startTimeFmt = new Time(d2.getTime());
+                        return startTimeFmt;
+                    case "java.util.Date":
+                    case "java.sql.Date":
+                        try {
+                            Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(objValueStr);
+                            return date;
+                        } catch (ParseException e) {
+                            e.printStackTrace();
+                            return null;
+                        }
+                    case "java.lang.Long":
+                        return Long.parseLong(objValueStr);
+                    case "[B"://byte数组
+                        return Byte.parseByte(objValueStr);
+                    default:
+                        //特殊类型
+                        return null;
+                }
+            } catch (Exception e) {
+                return null;
+            }
+
+        }
+
+        /**
+         * 查询表数据总数量
+         *
+         * @param table
+         * @param sqLiteDatabase
+         * @return
+         */
+        public long queryTableDataCount(String table, SQLiteDatabase sqLiteDatabase) {
+            if (sqLiteDatabase == null || table == null) return 0;
+            Cursor cursor = sqLiteDatabase.rawQuery("select count(2) from " + table, null);
+            cursor.moveToFirst();
+            long count = cursor.getLong(0);
+            cursor.close();
+            return count;
+        }
+
+        /**
+         * 查询表数据总数量
+         *
+         * @param tableClass
+         * @param sqLiteDatabase
+         * @return
+         */
+        public long queryTableDataCount(Class<?> tableClass, SQLiteDatabase sqLiteDatabase) {
+            if (sqLiteDatabase == null || tableClass == null) return 0;
+            Cursor cursor = sqLiteDatabase.rawQuery("select count(2) from " + tableClass.getSimpleName(), null);
+            cursor.moveToFirst();
+            long count = cursor.getLong(0);
+            cursor.close();
+            return count;
+        }
+
+        /**
          * ======================================================== 表的 增删查改 代码 ========================================
          */
 
@@ -3431,7 +3798,7 @@ public class GT {
          * @return
          * @保存数据
          */
-        public Hibernate save(Object bean) {
+        public <T> Hibernate save(T bean) {
 
             if (bean == null) {
                 err(getLineInfo(2), "保存的对象为null，操作失败！");
@@ -3443,7 +3810,7 @@ public class GT {
             String simpleName = class1.getSimpleName();//获取表名
             //检查数据库中是否存在该表
             if (!isTable(simpleName)) {
-                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！");
+                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
                 status = false;
                 return this;
             }
@@ -3452,7 +3819,7 @@ public class GT {
             //解析并设置保存的数据
             ContentValues contentValues = new ContentValues();
             for (Field field : fields) {
-                field.setAccessible(true); // 设置些属性是可以访问的
+                field.setAccessible(true); // 设置属性是可以访问的
                 try {
                     Class<?> type = field.getType();//获取字段类型
                     String name = field.getName();//获取属性名
@@ -3519,16 +3886,71 @@ public class GT {
                         contentValues.put(name, (short) val);
                     } else if (byte[].class.equals(type)) {
                         contentValues.put(name, (byte[]) val);
-                    } else if (SQLValue.Text.class == type) {
+                    } else if (List.class == type || Map.class == type) { //存储 List 与 Map 类型的
                         if (val == null) {
-                            contentValues.put(name, "");
+                            contentValues.put(name, "null");
                             continue;
                         }
-                        contentValues.put(name, ((SQLValue.Text) val).getText().toString());
+
+                        String data = "";
+                        //如果是 List 类型的存储
+                        if (val.getClass() == ArrayList.class) {
+                            ArrayList<?> list = (ArrayList<?>) val;
+                            if (list.size() != 0) {
+                                Object o = list.get(0);
+                                if (o != null) {
+                                    Class aClass = returnType(o.getClass());//返回当前类型
+                                    if (aClass == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                        String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                                        data = o.getClass().getName() + jsonStr;
+                                    } else {
+                                        data = aClass.getName() + val.toString();
+                                    }
+                                } else {
+                                    data = val.toString();
+                                }
+                            } else {
+                                data = val.toString();
+                            }
+                        } else if (val.getClass() == HashMap.class) {
+                            Set<?> keys = ((HashMap<?, ?>) val).keySet();
+                            Collection<?> values = ((HashMap<?, ?>) val).values();
+                            if (values.size() != 0) {
+                                Object keyObj = keys.iterator().next();
+                                Object valObj = values.iterator().next();
+                                if (keyObj != null && valObj != null) {
+
+                                    String keysData = "";
+                                    String valuesData = "";
+
+                                    if (returnType(keyObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                        keysData = JSON.toJson(keys);//将 bean 转为 json;
+                                    } else {
+                                        keysData = keys.toString();
+                                    }
+
+                                    if (returnType(valObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                        valuesData = JSON.toJson(values);//将 bean 转为 json;
+                                    } else {
+                                        valuesData = values.toString();
+                                    }
+
+                                    data =
+                                            keyObj.getClass().getName() + keysData
+                                                    + "\n" +
+                                                    valObj.getClass().getName() + valuesData;
+                                } else {
+                                    data = val.toString();
+                                }
+                            } else {
+                                data = val.toString();
+                            }
+                        }
+
+                        contentValues.put(name, data);
                     } else {
-                        err(getLineInfo(2), "解析的表文件 [" + simpleName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                        status = false;
-                        return this;
+                        String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                        contentValues.put(name, jsonStr);
                     }
 
                 } catch (IllegalArgumentException | IllegalAccessException e) {
@@ -3557,9 +3979,9 @@ public class GT {
          * @return
          * @更新表
          */
-        public Hibernate update(Class<?> tableClass, Object bean, Object conditions, Object values) {
+        public Hibernate update(Class<?> tableClass, Object bean, Object conditions, Object values2) {
 
-            if (tableClass == null || bean == null || conditions == null || values == null) {
+            if (tableClass == null || bean == null || conditions == null || values2 == null) {
                 err(getLineInfo(2), "修改的数据为null，操作失败");
                 status = false;
                 return this;
@@ -3567,7 +3989,7 @@ public class GT {
 
             //监测是否为 String 或 String[] 类型
             String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
+            String valuesType = values2.getClass().getSimpleName();
             if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
                 err(getLineInfo(2), "修改的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
                 status = false;
@@ -3581,7 +4003,7 @@ public class GT {
 
             if (conditionsType.equals("String[]") && valuesType.equals("String[]")) {
                 String[] a = (String[]) conditions;
-                String[] b = (String[]) values;
+                String[] b = (String[]) values2;
 
                 if (a.length == 0 || b.length == 0) {
                     err(getLineInfo(2), "修改的条件或条件值为null，操作失败");
@@ -3608,10 +4030,10 @@ public class GT {
 
             String[] valuesArray = null;//解析筛选值
             if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
+                valuesArray = (String[]) values2;
             } else if (valuesType.equals("String")) {
                 valuesArray = new String[1];
-                valuesArray[0] = (String) values;
+                valuesArray[0] = (String) values2;
             }
 
 
@@ -3620,7 +4042,7 @@ public class GT {
             String simpleName = tableClass.getSimpleName();//获取表名
             //检查数据库中是否存在该表
             if (!isTable(simpleName)) {
-                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！");
+                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！..");
                 status = false;
                 return this;
             }
@@ -3637,12 +4059,10 @@ public class GT {
                         String name = field.getName();//获取属性名
                         Object val = field.get(bean);// 得到此属性的值
 
-
                         GT_Key annotation = field.getAnnotation(GT_Key.class);
                         if (annotation != null && annotation.autoincrement()) {//如果这个字段是Key并且是自增的就跳过
                             continue;
                         }
-
 
                         if (String.class == type) {
                             contentValues.put(name, (String) val);
@@ -3666,12 +4086,70 @@ public class GT {
                             contentValues.put(name, (short) val);
                         } else if (byte[].class == type) {
                             contentValues.put(name, (byte[]) val);
-                        } else if (SQLValue.Text.class == type) {
-                            contentValues.put(name, ((SQLValue.Text) val).getText().toString());
+                        } else if (List.class == type || Map.class == type) { //存储 List 与 Map 类型的
+                            if (val == null) {
+                                contentValues.put(name, "null");
+                                continue;
+                            }
+                            String data = "";
+                            //如果是 List 类型的存储
+                            if (val.getClass() == ArrayList.class) {
+                                ArrayList<?> list = (ArrayList<?>) val;
+                                if (list.size() != 0) {
+                                    Object o = list.get(0);
+                                    if (o != null) {
+                                        Class aClass = returnType(o.getClass());//返回当前类型
+                                        if (aClass == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                                            data = o.getClass().getName() + jsonStr;
+                                        } else {
+                                            data = aClass.getName() + val.toString();
+                                        }
+                                    } else {
+                                        data = val.toString();
+                                    }
+                                } else {
+                                    data = val.toString();
+                                }
+                            } else if (val.getClass() == HashMap.class) {
+                                Set<?> keys = ((HashMap<?, ?>) val).keySet();
+                                Collection<?> values = ((HashMap<?, ?>) val).values();
+                                if (values.size() != 0) {
+                                    Object keyObj = keys.iterator().next();
+                                    Object valObj = values.iterator().next();
+                                    if (keyObj != null && valObj != null) {
+
+                                        String keysData = "";
+                                        String valuesData = "";
+
+                                        if (returnType(keyObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                            keysData = JSON.toJson(keys);//将 bean 转为 json;
+                                        } else {
+                                            keysData = keys.toString();
+                                        }
+
+                                        if (returnType(valObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                            valuesData = JSON.toJson(values);//将 bean 转为 json;
+                                        } else {
+                                            valuesData = values.toString();
+                                        }
+
+                                        data =
+                                                keyObj.getClass().getName() + keysData
+                                                        + "\n" +
+                                                        valObj.getClass().getName() + valuesData;
+                                    } else {
+                                        data = val.toString();
+                                    }
+                                } else {
+                                    data = val.toString();
+                                }
+                            }
+
+                            contentValues.put(name, data);
                         } else {
-                            err(getLineInfo(2), "解析的表文件 [" + simpleName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                            status = false;
-                            return this;
+                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                            contentValues.put(name, jsonStr);
                         }
                     } catch (IllegalArgumentException | IllegalAccessException e) {
                         e.printStackTrace();
@@ -3742,7 +4220,6 @@ public class GT {
                         String name = field.getName();//获取属性名
                         Object val = field.get(bean);// 得到此属性的值
 
-
                         GT_Key annotation = field.getAnnotation(GT_Key.class);
                         if (annotation != null && annotation.autoincrement()) {//如果这个字段是Key并且是自增的就跳过
                             continue;
@@ -3770,12 +4247,70 @@ public class GT {
                             contentValues.put(name, (short) val);
                         } else if (byte[].class == type) {
                             contentValues.put(name, (byte[]) val);
-                        } else if (SQLValue.Text.class == type) {
-                            contentValues.put(name, ((SQLValue.Text) val).getText().toString());
+                        } else if (List.class == type || Map.class == type) { //存储 List 与 Map 类型的
+                            if (val == null) {
+                                contentValues.put(name, "null");
+                                continue;
+                            }
+                            String data = "";
+                            //如果是 List 类型的存储
+                            if (val.getClass() == ArrayList.class) {
+                                ArrayList<?> list = (ArrayList<?>) val;
+                                if (list.size() != 0) {
+                                    Object o = list.get(0);
+                                    if (o != null) {
+                                        Class aClass = returnType(o.getClass());//返回当前类型
+                                        if (aClass == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                                            data = o.getClass().getName() + jsonStr;
+                                        } else {
+                                            data = aClass.getName() + val.toString();
+                                        }
+                                    } else {
+                                        data = val.toString();
+                                    }
+                                } else {
+                                    data = val.toString();
+                                }
+                            } else if (val.getClass() == HashMap.class) {
+                                Set<?> keys = ((HashMap<?, ?>) val).keySet();
+                                Collection<?> values = ((HashMap<?, ?>) val).values();
+                                if (values.size() != 0) {
+                                    Object keyObj = keys.iterator().next();
+                                    Object valObj = values.iterator().next();
+                                    if (keyObj != null && valObj != null) {
+
+                                        String keysData = "";
+                                        String valuesData = "";
+
+                                        if (returnType(keyObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                            keysData = JSON.toJson(keys);//将 bean 转为 json;
+                                        } else {
+                                            keysData = keys.toString();
+                                        }
+
+                                        if (returnType(valObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                            valuesData = JSON.toJson(values);//将 bean 转为 json;
+                                        } else {
+                                            valuesData = values.toString();
+                                        }
+
+                                        data =
+                                                keyObj.getClass().getName() + keysData
+                                                        + "\n" +
+                                                        valObj.getClass().getName() + valuesData;
+                                    } else {
+                                        data = val.toString();
+                                    }
+                                } else {
+                                    data = val.toString();
+                                }
+                            }
+
+                            contentValues.put(name, data);
                         } else {
-                            err(getLineInfo(2), "解析的表文件 [" + simpleName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                            status = false;
-                            return this;
+                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                            contentValues.put(name, jsonStr);
                         }
                     } catch (IllegalArgumentException | IllegalAccessException e) {
                         e.printStackTrace();
@@ -3895,7 +4430,7 @@ public class GT {
 
             //检查数据库中是否存在该表
             if (!isTable(simpleName)) {
-                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！");
+                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！...");
                 status = false;
                 return this;
             }
@@ -4138,11 +4673,31 @@ public class GT {
                             } else if (byte[].class.equals(type)) {
                                 byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                 obj = value;
-                            } else if (SQLValue.Text.class == type) {
+                            } else if (List.class == type || Map.class == type) {
+
                                 String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = new SQLValue.Text<Object>(value);
+                                if (value == null || "null".equals(value)) {
+                                    obj = null;
+                                } else {
+                                    //第二次转换 List OR Map
+                                    obj = returnListOrMap(type, value);
+                                }
                             } else {
-                                err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                String name = field.getName();//获取属性名
+                                Object val = null;
+                                try {
+                                    val = field.get(bean);// 得到此属性的值
+                                } catch (IllegalAccessException e) {
+                                    e.printStackTrace();
+                                }
+                                try {
+                                    obj = JSON.fromJson(value, type);
+                                } catch (JSONException e) {
+                                    e.printStackTrace();
+                                }
+
                             }
                         }
 
@@ -4311,11 +4866,30 @@ public class GT {
                             } else if (byte[].class.equals(type)) {
                                 byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                 obj = value;
-                            } else if (SQLValue.Text.class == type) {
+                            } else if (List.class == type || Map.class == type) {
                                 String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = new SQLValue.Text<Object>(value);
+                                if (value == null || "null".equals(value)) {
+                                    obj = null;
+                                } else {
+                                    //第二次转换 List OR Map
+                                    obj = returnListOrMap(type, value);
+                                }
                             } else {
-                                err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                String name = field.getName();//获取属性名
+                                Object val = null;
+                                try {
+                                    val = field.get(bean);// 得到此属性的值
+                                } catch (IllegalAccessException e) {
+                                    e.printStackTrace();
+                                }
+                                try {
+                                    obj = JSON.fromJson(value, type);
+                                } catch (JSONException e) {
+                                    e.printStackTrace();
+                                }
+
                             }
                         }
 
@@ -4493,11 +5067,30 @@ public class GT {
                             } else if (byte[].class.equals(type)) {
                                 byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                 obj = value;
-                            } else if (SQLValue.Text.class == type) {
+                            } else if (List.class == type || Map.class == type) {
                                 String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = new SQLValue.Text<Object>(value);
+                                if (value == null || "null".equals(value)) {
+                                    obj = null;
+                                } else {
+                                    //第二次转换 List OR Map
+                                    obj = returnListOrMap(type, value);
+                                }
                             } else {
-                                err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                                String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                String name = field.getName();//获取属性名
+                                Object val = null;
+                                try {
+                                    val = field.get(bean);// 得到此属性的值
+                                } catch (IllegalAccessException e) {
+                                    e.printStackTrace();
+                                }
+                                try {
+                                    obj = JSON.fromJson(value, type);
+                                } catch (JSONException e) {
+                                    e.printStackTrace();
+                                }
+
                             }
                         }
 
@@ -4676,9 +5269,9 @@ public class GT {
                             } else if (byte[].class.equals(type)) {
                                 byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                 obj = value;
-                            } else if (SQLValue.Text.class == type) {
+                            } else if (List.class == type || Map.class == type) {
                                 String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = new SQLValue.Text<Object>(value);
+                                obj = value;
                             } else {
                                 err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
                             }
@@ -4858,9 +5451,9 @@ public class GT {
                             } else if (byte[].class.equals(type)) {
                                 byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                 obj = value;
-                            } else if (SQLValue.Text.class == type) {
+                            } else if (List.class == type || Map.class == type) {
                                 String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = new SQLValue.Text<Object>(value);
+                                obj = value;
                             } else {
                                 err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
                             }
@@ -4994,195 +5587,47 @@ public class GT {
                                 } else if (byte[].class.equals(type)) {
                                     byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                     obj = value;
-                                } else if (SQLValue.Text.class == type) {
+                                } else if (List.class == type || Map.class == type) {
+
                                     String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = new SQLValue.Text<Object>(value);
+                                    if (value == null || "null".equals(value)) {
+                                        obj = null;
+                                    } else {
+                                        //第二次转换 List OR Map
+                                        obj = returnListOrMap(type, value);
+                                    }
                                 } else {
-                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    String name = field.getName();//获取属性名
+                                    Object val = null;
+                                    try {
+                                        val = field.get(bean);// 得到此属性的值
+                                    } catch (IllegalAccessException e) {
+                                        e.printStackTrace();
+                                    }
+                                    try {
+                                        obj = JSON.fromJson(value, type);
+                                    } catch (JSONException e) {
+                                        e.printStackTrace();
+                                    }
+
                                 }
                             }
 
-                            if (obj != null) {
-                                try {
+                            try {
+                                if (obj != null) {
                                     field.set(bean, obj);
-                                    continue;
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
                                 }
+                                continue;
+                            } catch (Exception e) {
+//                                    e.printStackTrace();
+                                errs("查询数据中出现了无法转换的类型:" + e);
                             }
                         }
 
                     }
                     beanList.add(bean);//存入查询到的数据
-                    cursor.moveToNext();//移动到下一位
-                }
-            }
-            cursor.close();//释放资源
-
-            orderByStr = "";
-            limitStr = "";
-
-            return beanList;
-        }
-
-        /**
-         * @param tableNameClass
-         * @param condition
-         * @param values
-         * @param <T>
-         * @return
-         * @查询出指定条件的对应数据
-         */
-        public <T> List<T> queryAll(Class<T> tableNameClass, String condition, Object[] values) {
-
-            if (tableNameClass == null || condition == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
-            }
-
-            //监测条件
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!valuesType.equals("Object[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            String[] returnValue = null;//获取当前类的所有字段
-            List<String> tableAllValue = getTableAllValue(tableName);
-            if (tableAllValue != null && tableAllValue.size() > 0) {
-                returnValue = new String[tableAllValue.size()];
-                for (int i = 0; i < tableAllValue.size(); i++) {
-                    returnValue[i] = tableAllValue.get(i);
-                }
-            }
-
-            //添加条件值
-            List<Object> valueList = new ArrayList<>();
-            for (Object obj : values) {
-                valueList.add(obj);
-            }
-
-            //反射生成对象并注入
-            Cursor cursor = sqLiteDatabase2.query(tableName, null, null, null, null, null, orderByStr, limitStr);
-            List<T> beanList = new ArrayList<T>();//创建容器
-            if (cursor != null && cursor.getCount() > 0) {
-                cursor.moveToFirst();//移动到首位
-                for (int i = 0; i < cursor.getCount(); i++) {
-                    T bean = null;//定义泛型
-                    try {
-                        bean = tableNameClass.newInstance();//实体化
-                    } catch (IllegalAccessException e) {
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    } catch (InstantiationException e) {
-                        e.printStackTrace();
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    }
-
-                    Field[] fields = bean.getClass().getDeclaredFields();
-                    for (Field field : fields) {
-                        String valueName = field.getName();
-                        Class<?> type = field.getType();
-                        field.setAccessible(true);
-                        for (String str : (String[]) returnValue) {
-                            Object obj = null;
-                            if (str.equals(valueName)) {
-                                if (String.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (int.class == type || Integer.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (boolean.class == type || Boolean.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                    if (value == 1) {
-                                        obj = true;
-                                    } else if (value == 0) {
-                                        obj = false;
-                                    }
-                                } else if (double.class == type || Double.class == type) {
-                                    double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (float.class == type || Float.class == type) {
-                                    float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (Time.class == type) {
-                                    String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (time == null || time.length() == 0) {
-                                        time = new Time(System.currentTimeMillis()).toString();
-                                    }
-                                    SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                    Date d2 = null;
-                                    try {
-                                        d2 = format2.parse(time);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                    Time startTimeFmt = new Time(d2.getTime());
-                                    obj = startTimeFmt;
-                                } else if (Date.class == type || java.sql.Date.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    try {
-                                        Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                        obj = date;
-                                    } catch (ParseException e) {
-                                        e.printStackTrace();
-                                    }
-                                } else if (long.class == type || Long.class == type) {
-                                    long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (short.class == type || Short.class == type) {
-                                    short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (byte[].class.equals(type)) {
-                                    byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (SQLValue.Text.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = new SQLValue.Text<Object>(value);
-                                } else {
-                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                }
-                            }
-
-                            if (obj != null) {
-                                try {
-                                    field.set(bean, obj);
-                                    continue;
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        }
-
-                    }
-                    //存储匹配的实体类
-                    try {
-                        Class<?> aClass = bean.getClass();
-                        Field declaredField = aClass.getDeclaredField(condition);
-                        declaredField.setAccessible(true); // 设置些属性是可以访问的
-                        Object o = declaredField.get(bean);
-                        if (valueList.contains(o)) {
-                            beanList.add(bean);//存入查询到的数据
-                        }
-                    } catch (NoSuchFieldException | IllegalAccessException e) {
-                        e.printStackTrace();
-                    }
                     cursor.moveToNext();//移动到下一位
                 }
             }
@@ -5351,11 +5796,31 @@ public class GT {
                                 } else if (byte[].class.equals(type)) {
                                     byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                     obj = value;
-                                } else if (SQLValue.Text.class == type) {
+                                } else if (List.class == type || Map.class == type) {
+
                                     String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = new SQLValue.Text<Object>(value);
+                                    if (value == null || "null".equals(value)) {
+                                        obj = null;
+                                    } else {
+                                        //第二次转换 List OR Map
+                                        obj = returnListOrMap(type, value);
+                                    }
                                 } else {
-                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    String name = field.getName();//获取属性名
+                                    Object val = null;
+                                    try {
+                                        val = field.get(bean);// 得到此属性的值
+                                    } catch (IllegalAccessException e) {
+                                        e.printStackTrace();
+                                    }
+                                    try {
+                                        obj = JSON.fromJson(value, type);
+                                    } catch (JSONException e) {
+                                        e.printStackTrace();
+                                    }
+
                                 }
                             }
 
@@ -5547,11 +6012,31 @@ public class GT {
                                 } else if (byte[].class.equals(type)) {
                                     byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                     obj = value;
-                                } else if (SQLValue.Text.class == type) {
+                                } else if (List.class == type || Map.class == type) {
+
                                     String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = new SQLValue.Text<Object>(value);
+                                    if (value == null || "null".equals(value)) {
+                                        obj = null;
+                                    } else {
+                                        //第二次转换 List OR Map
+                                        obj = returnListOrMap(type, value);
+                                    }
                                 } else {
-                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    String name = field.getName();//获取属性名
+                                    Object val = null;
+                                    try {
+                                        val = field.get(bean);// 得到此属性的值
+                                    } catch (IllegalAccessException e) {
+                                        e.printStackTrace();
+                                    }
+                                    try {
+                                        obj = JSON.fromJson(value, type);
+                                    } catch (JSONException e) {
+                                        e.printStackTrace();
+                                    }
+
                                 }
                             }
 
@@ -5645,39 +6130,37 @@ public class GT {
                 tableList.clear();//清空
             }
 
-            boolean isReflect = true;//是否需要反射得到 class
+            boolean isReflect = false;//是否需要反射得到 class
             //解析路径 或 引用赋值
             String EnityPackagePath = "";
             if (scanTable instanceof Class<?>) {//添加单个的表
                 Class<?> classs = (Class<?>) scanTable;
                 tableList.add(classs);//添加到数据库表的集合中
-                isReflect = false;//已经是 class 无需反射
             } else if (scanTable instanceof String) {//添加该路径下所有表
                 EnityPackagePath = scanTable.toString();//如果是路径直接赋值
+                isReflect = true;
             } else if (scanTable instanceof List) {//添加该集合中所有表
                 tableList = (List<Class<?>>) scanTable;//如果是class 集合直接引用
-                isReflect = false;//已经是 class 无需反射
             } else if (scanTable instanceof Set) {//添加该集合中所有表
                 Set<Class<?>> tableSet = (Set<Class<?>>) scanTable;//如果是 Set 转换到 List 去
                 for (Class<?> classs : tableSet) {
                     tableList.add(classs);
                 }
-                isReflect = false;//已经是 class 无需反射
             } else if (scanTable instanceof Class<?>[]) {//添加该集合中所有表
                 Class<?>[] classArray = (Class<?>[]) scanTable;//如果是 Array 转换到 List 去
                 for (Class<?> classs : classArray) {
                     tableList.add(classs);
                 }
-                isReflect = false;//已经是 class 无需反射
             } else {
                 errs("当前不支持 " + scanTable.getClass() + "  类型。");
                 isCreateTable = false;
                 return this;
             }
+
             //检测扫描路径
             if (isReflect) {//如果需要反射就进行反射得到 class
                 if (!"".equals(EnityPackagePath)) {
-                    loadHibernateAnnotation(EnityPackagePath, context);
+                    loadHibernateAnnotation(EnityPackagePath, context);//加载数据库注解
                 } else {
                     errs("当前扫描数据库实体类的路径有错误！请检查该路径。EnityPackagePath = " + EnityPackagePath);
                     isCreateTable = false;
@@ -5765,12 +6248,13 @@ public class GT {
                         } else if (Date.class == type || java.sql.Date.class == type) {
                             KeyType = "DATE";
                         } else if (long.class == type || Long.class == type) {
-                            KeyType = "varchar(20)";
+//                            KeyType = "varchar(20)";
+                            KeyType = "LONG";
                         } else if (short.class == type || Short.class == type) {
                             KeyType = "varchar(6)";
                         } else if (byte[].class.equals(type)) {
                             KeyType = "BLOB";
-                        } else if (SQLValue.Text.class == type) {
+                        } else if (List.class == type || Map.class == type) {
                             KeyType = "TEXT";
                         } else {
                             err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
@@ -5780,9 +6264,9 @@ public class GT {
 
                         boolean autoincrement = initView.autoincrement();//获取 主键类型 注解值
                         if (autoincrement) {//自动增长
-                            if ("integer".equals(KeyType)) {
+                            if ("integer".equals(KeyType) || "LONG".equals(KeyType)) {
                                 tableSqlCode += field.getName() + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL";
-                            } else {
+                            }else {
                                 err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 不是int类型，暂不支持自增。");
                                 isCreateTable = false;
                                 return this;
@@ -5822,12 +6306,13 @@ public class GT {
                         sqlChar += (", " + tableStrName + "  VARCHAR(6)");
                     } else if (byte[].class.equals(type)) {
                         sqlChar += (", " + tableStrName + " BLOB");
-                    } else if (SQLValue.Text.class == type) {
+                    } else if (List.class == type || Map.class == type) {
                         sqlChar += (", " + tableStrName + " TEXT");
                     } else {
-                        err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                        isCreateTable = false;
-                        return this;
+//                        err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                        isCreateTable = false;
+                        sqlChar += (", " + tableStrName + " TEXT");
+//                        return this;
                     }
 
                 }
@@ -5878,11 +6363,35 @@ public class GT {
                 DatabaseHelper databaseHelper = new DatabaseHelper(context, DATABASE_NAME, null, DATABASE_VERSION);
                 try {
                     sqLiteDatabase2 = databaseHelper.getWritableDatabase();
+                    deleteUnnecessaryTable();//删除掉多余的表
                 } catch (RuntimeException e) {
                     errs(getLineInfo() + "数据库报错:" + e);
                 }
             }
+
+
             return this;
+        }
+
+        /**
+         * 删除掉多余的表,如系统自己创建的表
+         */
+        private void deleteUnnecessaryTable() {
+            //删除系统创建的多余表
+            List<String> okTableNameList = new ArrayList<>();
+            for (Class classz : tableList) {
+                okTableNameList.add(classz.getSimpleName());
+            }
+
+            for (String tableName : getSQLAllTableName()) {
+                if (!okTableNameList.contains(tableName)) {//判断当前创建的表是否为系统创建的表
+                    if (isTable(tableName)) {
+                        deleteTable(tableName).isStatus();//删除表
+                    }
+                }
+            }
+            okTableNameList.clear();
+            okTableNameList = null;
         }
 
         //====================================== 加载 包名扫描 SQL 注解 ======================================
@@ -6354,51 +6863,863 @@ public class GT {
     }
 
     /**
-     * JSON 接口解析
+     * JSON 接口解析 json 与 Bean 互转
      */
     public static class JSON {
 
-        private static JSONObject jsonObject;
-        private final static Gson gson = new Gson();
-
-        public JSONObject getJsonObject() {
-            return jsonObject;
-        }
-
-        private JSON() {
+        /**
+         * 将对象转换成Json字符串
+         *
+         * @param obj
+         * @return json类型字符串
+         */
+        public static String toJson(Object obj) {
+            JSONStringer js = new JSONStringer();
+            serialize(js, obj);
+            return js.toString();
         }
 
         /**
-         * @param JsonData
-         * @return
-         * @初始化JSON数据
+         * 序列化为JSON
+         *
+         * @param js json对象
+         * @param o  待需序列化的对象
          */
-        public JSON initJsonData(String JsonData) {
-            if (JsonData != null) {
+        private static void serialize(JSONStringer js, Object o) {
+            if (isNull(o)) {
                 try {
-                    jsonObject = new JSONObject(JsonData);
+                    js.value(null);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                return;
+            }
+
+            Class<?> clazz = o.getClass();
+            if (isObject(clazz)) { // 对象
+                serializeObject(js, o);
+            } else if (isArray(clazz)) { // 数组
+                serializeArray(js, o);
+            } else if (isCollection(clazz)) { // 集合
+                Collection<?> collection = (Collection<?>) o;
+                serializeCollect(js, collection);
+            } else if (isMap(clazz)) { // 集合
+                HashMap<?, ?> collection = (HashMap<?, ?>) o;
+                serializeMap(js, collection);
+            } else { // 单个值
+                try {
+                    js.value(o);
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
             }
-            return this;
         }
 
-        /*********************************  根据 Bean 获取数据*************************************/
         /**
-         * 根据 bean 类获取 bean 对象
+         * 序列化数组
          *
-         * @param aClass 指定 解析后的 bean 可续
-         * @return 返回 实体类
+         * @param js    json对象
+         * @param array 数组
          */
-        public static <T> T getBean(String string, Class<T> aClass) {
-            T o = null;
+        private static void serializeArray(JSONStringer js, Object array) {
             try {
-                o = gson.fromJson(string, aClass);
-            } catch (Exception exception) {
-                err(getLineInfo(1), "你的 JSON 解析类型不匹配，请检查  " + aClass + "  是否与请求的Json数据一致！");
+                js.array();
+                for (int i = 0; i < Array.getLength(array); ++i) {
+                    Object o = Array.get(array, i);
+                    serialize(js, o);
+                }
+                js.endArray();
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-            return o;
+        }
+
+        /**
+         * 序列化集合
+         *
+         * @param js         json对象
+         * @param collection 集合
+         */
+        private static void serializeCollect(JSONStringer js, Collection<?> collection) {
+            try {
+                js.array();
+                for (Object o : collection) {
+                    serialize(js, o);
+                }
+                js.endArray();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * 序列化Map
+         *
+         * @param js  json对象
+         * @param map map对象
+         */
+        private static void serializeMap(JSONStringer js, Map<?, ?> map) {
+            try {
+                js.object();
+                Map<?, Object> valueMap = (Map<?, Object>) map;
+                Iterator<? extends Map.Entry<?, Object>> it = valueMap.entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry<?, Object> entry = (Map.Entry<?, Object>) it.next();
+                    js.key(entry.getKey().toString());
+                    serialize(js, entry.getValue());
+                }
+                js.endObject();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * 序列化对象
+         *
+         * @param js  json对象
+         * @param obj 待序列化对象
+         */
+        private static void serializeObject(JSONStringer js, Object obj) {
+            try {
+                js.object();
+                Class<? extends Object> objClazz = obj.getClass();
+                //获取所有的数组
+                Method[] methods = objClazz.getDeclaredMethods();
+                //获取所有的字段
+                Field[] fields = objClazz.getDeclaredFields();
+                //遍历这个对象
+                for (Field field : fields) {
+                    try {
+                        String fieldType = field.getType().getSimpleName();
+                        String fieldGetName = parseMethodName(field.getName(), "get");
+                        if (!haveMethod(methods, fieldGetName)) {
+                            continue;
+                        }
+                        Method fieldGetMet = objClazz.getMethod(fieldGetName, new Class[]{});
+                        Object fieldVal = fieldGetMet.invoke(obj, new Object[]{});
+                        Object result = null;
+                        if ("Date".equals(fieldType)) {
+                            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+                            result = sdf.format((Date) fieldVal);
+
+                        } else {
+                            if (null != fieldVal) {
+                                result = fieldVal;
+                            }
+                        }
+                        js.key(field.getName());
+                        serialize(js, result);
+                    } catch (Exception e) {
+                        continue;
+                    }
+                }
+                js.endObject();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * 判断是否存在某属性的 get方法
+         *
+         * @param methods     引用方法的数组
+         * @param fieldMethod 方法名称
+         * @return true或者false
+         */
+        public static boolean haveMethod(Method[] methods, String fieldMethod) {
+            for (Method met : methods) {
+                if (fieldMethod.equals(met.getName())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * 拼接某属性的 get或者set方法
+         *
+         * @param fieldName  字段名称
+         * @param methodType 方法类型
+         * @return 方法名称
+         */
+        public static String parseMethodName(String fieldName, String methodType) {
+            if (null == fieldName || "".equals(fieldName)) {
+                return null;
+            }
+            return methodType + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+        }
+
+        /**
+         * 给字段赋值
+         *
+         * @param obj    实例对象
+         * @param valMap 值集合
+         */
+        public static void setFieldValue(Object obj, Map<String, String> valMap) {
+            Class<?> cls = obj.getClass();
+            // 取出bean里的所有方法
+            Method[] methods = cls.getDeclaredMethods();
+            Field[] fields = cls.getDeclaredFields();
+
+            for (Field field : fields) {
+                try {
+                    String setMetodName = parseMethodName(field.getName(), "set");
+                    if (!haveMethod(methods, setMetodName)) {
+                        continue;
+                    }
+                    Method fieldMethod = cls.getMethod(setMetodName, field
+                            .getType());
+                    String value = valMap.get(field.getName());
+                    if (null != value && !"".equals(value)) {
+                        String fieldType = field.getType().getSimpleName();
+                        if ("String".equals(fieldType)) {
+                            fieldMethod.invoke(obj, value);
+                        } else if ("Date".equals(fieldType)) {
+                            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+                            Date temp = sdf.parse(value);
+                            fieldMethod.invoke(obj, temp);
+                        } else if ("Integer".equals(fieldType)
+                                || "int".equals(fieldType)) {
+                            Integer intval = Integer.parseInt(value);
+                            fieldMethod.invoke(obj, intval);
+                        } else if ("Long".equalsIgnoreCase(fieldType)) {
+                            Long temp = Long.parseLong(value);
+                            fieldMethod.invoke(obj, temp);
+                        } else if ("Double".equalsIgnoreCase(fieldType)) {
+                            Double temp = Double.parseDouble(value);
+                            fieldMethod.invoke(obj, temp);
+                        } else if ("Boolean".equalsIgnoreCase(fieldType)) {
+                            Boolean temp = Boolean.parseBoolean(value);
+                            fieldMethod.invoke(obj, temp);
+                        } else {
+                            System.out.println("setFieldValue not supper type:" + fieldType);
+                        }
+                    }
+                } catch (Exception e) {
+                    continue;
+                }
+            }
+
+        }
+
+        /**
+         * bean对象转Map
+         *
+         * @param obj 实例对象
+         * @return map集合
+         */
+        public static Map<String, String> beanToMap(Object obj) {
+            Class<?> cls = obj.getClass();
+            Map<String, String> valueMap = new HashMap<String, String>();
+            // 取出bean里的所有方法
+            Method[] methods = cls.getDeclaredMethods();
+            Field[] fields = cls.getDeclaredFields();
+            for (Field field : fields) {
+                try {
+                    String fieldType = field.getType().getSimpleName();
+                    String fieldGetName = parseMethodName(field.getName(), "get");
+                    if (!haveMethod(methods, fieldGetName)) {
+                        continue;
+                    }
+                    Method fieldGetMet = cls.getMethod(fieldGetName, new Class[]{});
+                    Object fieldVal = fieldGetMet.invoke(obj, new Object[]{});
+                    String result = null;
+                    if ("Date".equals(fieldType)) {
+                        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
+                        result = sdf.format((Date) fieldVal);
+
+                    } else {
+                        if (null != fieldVal) {
+                            result = String.valueOf(fieldVal);
+                        }
+                    }
+                    valueMap.put(field.getName(), result);
+                } catch (Exception e) {
+                    continue;
+                }
+            }
+            return valueMap;
+
+        }
+
+        /**
+         * 给对象的字段赋值
+         *
+         * @param obj            类实例
+         * @param fieldSetMethod 字段方法
+         * @param fieldType      字段类型
+         * @param value
+         */
+        public static void setFiedlValue(Object obj, Method fieldSetMethod, String fieldType, Object value) {
+
+            try {
+                if (null != value && !"".equals(value)) {
+                    if ("String".equals(fieldType)) {
+                        fieldSetMethod.invoke(obj, value.toString());
+                    } else if ("Date".equals(fieldType)) {
+                        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
+                        Date temp = sdf.parse(value.toString());
+                        fieldSetMethod.invoke(obj, temp);
+                    } else if ("Integer".equals(fieldType)
+                            || "int".equals(fieldType)) {
+                        Integer intval = Integer.parseInt(value.toString());
+                        fieldSetMethod.invoke(obj, intval);
+                    } else if ("Long".equalsIgnoreCase(fieldType)) {
+                        Long temp = Long.parseLong(value.toString());
+                        fieldSetMethod.invoke(obj, temp);
+                    } else if ("Double".equalsIgnoreCase(fieldType)) {
+                        Double temp = Double.parseDouble(value.toString());
+                        fieldSetMethod.invoke(obj, temp);
+                    } else if ("Boolean".equalsIgnoreCase(fieldType)) {
+                        Boolean temp = Boolean.parseBoolean(value.toString());
+                        fieldSetMethod.invoke(obj, temp);
+                    } else if ("Map".equals(fieldType)) {
+
+                        Map map = fromJson(value.toString(), Map.class);
+
+
+                        fieldSetMethod.invoke(obj, map);
+                    } else if ("List".equals(fieldType)) {
+                        fieldSetMethod.invoke(obj, fromJson(value.toString(), List.class));
+                    } else if ("Set".equals(fieldType)) {
+                        fieldSetMethod.invoke(obj, fromJson(value.toString(), Set.class));
+                    } else {
+                        fieldSetMethod.invoke(obj, value);
+                    }
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        }
+
+        /**
+         * 将Map中存在JSON的数据转为 实体类
+         *
+         * @param mapJSON
+         * @param tClass
+         * @param <T>
+         * @return
+         */
+        public static <T> Map<?, T> mapJSONToMapObj(Map<?, ?> mapJSON, Class<T> tClass) {
+            Map<Object, T> map = null;
+            try {
+                map = fromJson(mapJSON.toString(), Map.class);
+                for (Object key : map.keySet()) {
+                    T o = map.get(key);
+                    T t = fromJson(o.toString(), tClass);
+                    map.put(key, t);
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            return map;
+        }
+
+        /**
+         * 反序列化简单对象
+         *
+         * @param jo    json对象
+         * @param clazz 实体类类型
+         * @return 反序列化后的实例
+         * @throws JSONException
+         */
+        public static <T> T fromJson(JSONObject jo, Class<T> clazz) throws JSONException {
+            if (clazz == null || isNull(jo)) {
+                return null;
+            }
+
+            T t = newInstance(clazz);
+            if (t == null) {
+                return null;
+            }
+            if (isMap(clazz)) {
+                setField(t, jo);
+            } else {
+                // 取出bean里的所有方法
+                Method[] methods = clazz.getDeclaredMethods();
+                Field[] fields = clazz.getDeclaredFields();
+                for (Field f : fields) {
+                    String setMetodName = parseMethodName(f.getName(), "set");
+                    if (!haveMethod(methods, setMetodName)) {
+                        continue;
+                    }
+                    try {
+                        Method fieldMethod = clazz.getMethod(setMetodName, f.getType());
+                        setField(t, fieldMethod, f, jo);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            return t;
+        }
+
+        /**
+         * 反序列化简单对象
+         *
+         * @param jsonStr json字符串
+         * @param clazz   实体类类型
+         * @return 反序列化后的实例
+         * @throws JSONException
+         */
+        public static <T> T fromJson(String jsonStr, Class<T> clazz) throws JSONException {
+            if (clazz == null || jsonStr == null || jsonStr.length() == 0) {
+                return null;
+            }
+
+            JSONObject jo = new JSONObject(jsonStr);
+            if (isNull(jo)) {
+                return null;
+            }
+
+            return fromJson(jo, clazz);
+        }
+
+        /**
+         * 反序列化数组对象
+         *
+         * @param ja    json数组
+         * @param clazz 实体类类型
+         * @return 反序列化后的数组
+         */
+        public static <T> T[] fromJsonArray(JSONArray ja, Class<T> clazz) {
+            if (clazz == null || isNull(ja)) {
+                return null;
+            }
+
+            int len = ja.length();
+
+            @SuppressWarnings("unchecked")
+            T[] array = (T[]) Array.newInstance(clazz, len);
+
+            for (int i = 0; i < len; ++i) {
+                try {
+                    JSONObject jo = ja.getJSONObject(i);
+                    T o = fromJson(jo, clazz);
+                    array[i] = o;
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            return array;
+        }
+
+
+        /**
+         * 反序列化数组对象
+         *
+         * @param jsonStr json字符串
+         * @param clazz   实体类类型
+         * @return 序列化后的数组
+         */
+        public static <T> T[] fromJsonArray(String jsonStr, Class<T> clazz) {
+            if (clazz == null || jsonStr == null || jsonStr.length() == 0) {
+                return null;
+            }
+            JSONArray jo = null;
+            try {
+                jo = new JSONArray(jsonStr);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+            if (isNull(jo)) {
+                return null;
+            }
+
+            return fromJsonArray(jo, clazz);
+        }
+
+        /**
+         * 反序列化泛型集合
+         *
+         * @param ja              json数组
+         * @param collectionClazz 集合类型
+         * @param genericType     实体类类型
+         * @return
+         * @throws JSONException
+         */
+        @SuppressWarnings("unchecked")
+        public static <T> Collection<T> parseCollection(JSONArray ja, Class<?> collectionClazz,
+                                                        Class<T> genericType) throws JSONException {
+
+            if (collectionClazz == null || genericType == null || isNull(ja)) {
+                return null;
+            }
+
+            Collection<T> collection = (Collection<T>) newInstance(collectionClazz);
+
+            for (int i = 0; i < ja.length(); ++i) {
+                try {
+                    JSONObject jo = ja.getJSONObject(i);
+                    T o = fromJson(jo, genericType);
+                    collection.add(o);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            return collection;
+        }
+
+        /**
+         * 反序列化泛型集合
+         *
+         * @param jsonStr         json字符串
+         * @param collectionClazz 集合类型
+         * @param genericType     实体类类型
+         * @return 反序列化后的数组
+         * @throws JSONException
+         */
+        public static <T> Collection<T> parseCollection(String jsonStr, Class<?> collectionClazz,
+                                                        Class<T> genericType) throws JSONException {
+            if (collectionClazz == null || genericType == null || jsonStr == null
+                    || jsonStr.length() == 0) {
+                return null;
+            }
+            JSONArray jo = null;
+            try {
+                //如果为数组，则此处转化时，需要去掉前面的键，直接后面的[]中的值
+                int index = jsonStr.indexOf("[");
+                String arrayString = null;
+
+                //获取数组的字符串
+                if (-1 != index) {
+                    arrayString = jsonStr.substring(index);
+                }
+
+                //如果为数组，使用数组转化
+                if (null != arrayString) {
+                    jo = new JSONArray(arrayString);
+                } else {
+                    jo = new JSONArray(jsonStr);
+                }
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+            if (isNull(jo)) {
+                return null;
+            }
+
+            return parseCollection(jo, collectionClazz, genericType);
+        }
+
+        /**
+         * 根据类型创建对象
+         *
+         * @param clazz 待创建实例的类型
+         * @return 实例对象
+         * @throws JSONException
+         */
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private static <T> T newInstance(Class<T> clazz) throws JSONException {
+            if (clazz == null)
+                return null;
+            T obj = null;
+            if (clazz.isInterface()) {
+                if (clazz.equals(Map.class)) {
+                    obj = (T) new HashMap();
+                } else if (clazz.equals(List.class)) {
+                    obj = (T) new ArrayList();
+                } else if (clazz.equals(Set.class)) {
+                    obj = (T) new HashSet();
+                } else {
+                    throw new JSONException("unknown interface: " + clazz);
+                }
+            } else {
+                try {
+                    obj = clazz.newInstance();//实体化
+                } catch (IllegalAccessException e) {
+                    return null;
+                } catch (InstantiationException e) {
+                    e.printStackTrace();
+                    return null;
+                }
+            }
+            return obj;
+        }
+
+        /**
+         * 设定Map的值
+         *
+         * @param obj 待赋值字段的对象
+         * @param jo  json实例
+         */
+        private static void setField(Object obj, JSONObject jo) {
+            try {
+                Iterator<String> keyIter = jo.keys();
+                String key;
+                Object value;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> valueMap = (Map<String, Object>) obj;
+                while (keyIter.hasNext()) {
+                    key = (String) keyIter.next();
+                    value = jo.get(key);
+                    valueMap.put(key, value);
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * 设定字段的值
+         *
+         * @param obj            待赋值字段的对象
+         * @param fieldSetMethod 字段方法名
+         * @param field          字段
+         * @param jo             json实例
+         */
+        private static void setField(Object obj, Method fieldSetMethod, Field field, JSONObject jo) {
+
+            String name = field.getName();
+            Class<?> clazz = field.getType();
+
+            try {
+                if (isArray(clazz)) { // 数组
+                    Class<?> c = clazz.getComponentType();
+                    JSONArray ja = jo.optJSONArray(name);
+                    if (!isNull(ja)) {
+                        Object array = fromJsonArray(ja, c);
+                        setFiedlValue(obj, fieldSetMethod, clazz.getSimpleName(), array);
+                    }
+                } else if (isCollection(clazz)) { // 泛型集合
+                    // 获取定义的泛型类型
+                    Class<?> c = null;
+                    Type gType = field.getGenericType();
+                    if (gType instanceof ParameterizedType) {
+                        ParameterizedType ptype = (ParameterizedType) gType;
+                        Type[] targs = ptype.getActualTypeArguments();
+                        if (targs.length > 0) {
+                            Type t = targs[0];
+                            c = (Class<?>) t;
+                        }
+                    }
+
+                    JSONArray ja = jo.optJSONArray(name);
+                    if (!isNull(ja)) {
+                        Object o = parseCollection(ja, clazz, c);
+                        setFiedlValue(obj, fieldSetMethod, clazz.getSimpleName(), o);
+                    }
+                } else if (isSingle(clazz)) { // 值类型
+                    Object o = jo.opt(name);
+                    if (o != null) {
+                        setFiedlValue(obj, fieldSetMethod, clazz.getSimpleName(), o);
+                    }
+                } else if (isObject(clazz)) { // 对象
+                    JSONObject j = jo.optJSONObject(name);
+                    if (!isNull(j)) {
+                        Object o = fromJson(j, clazz);
+                        setFiedlValue(obj, fieldSetMethod, clazz.getSimpleName(), o);
+                    }
+                } else if (isList(clazz) || isMap(clazz) || isSet(clazz)) { // list 或 Map 或 Set
+                    JSONObject j = jo.optJSONObject(name);
+                    if (!isNull(j)) {
+                        Object o = fromJson(j, clazz);
+                        setFiedlValue(obj, fieldSetMethod, clazz.getSimpleName(), o);
+                    }
+                } else {
+                    //或者位置类型
+                    JSONObject j = jo.optJSONObject(name);
+                    if (!isNull(j)) {
+                        Object o = fromJson(j, clazz);
+                        setFiedlValue(obj, fieldSetMethod, clazz.getSimpleName(), o);
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * 设定字段的值
+         *
+         * @param obj   待赋值字段的对象
+         * @param field 字段
+         * @param jo    json实例
+         */
+        @SuppressWarnings("unused")
+        private static void setField(Object obj, Field field, JSONObject jo) {
+            String name = field.getName();
+            Class<?> clazz = field.getType();
+            try {
+                if (isArray(clazz)) { // 数组
+                    Class<?> c = clazz.getComponentType();
+                    JSONArray ja = jo.optJSONArray(name);
+                    if (!isNull(ja)) {
+                        Object array = fromJsonArray(ja, c);
+                        field.set(obj, array);
+                    }
+                } else if (isCollection(clazz)) { // 泛型集合
+                    // 获取定义的泛型类型
+                    Class<?> c = null;
+                    Type gType = field.getGenericType();
+                    if (gType instanceof ParameterizedType) {
+                        ParameterizedType ptype = (ParameterizedType) gType;
+                        Type[] targs = ptype.getActualTypeArguments();
+                        if (targs != null && targs.length > 0) {
+                            Type t = targs[0];
+                            c = (Class<?>) t;
+                        }
+                    }
+                    JSONArray ja = jo.optJSONArray(name);
+                    if (!isNull(ja)) {
+                        Object o = parseCollection(ja, clazz, c);
+                        field.set(obj, o);
+                    }
+                } else if (isSingle(clazz)) { // 值类型
+                    Object o = jo.opt(name);
+                    if (o != null) {
+                        field.set(obj, o);
+                    }
+                } else if (isObject(clazz)) { // 对象
+                    JSONObject j = jo.optJSONObject(name);
+                    if (!isNull(j)) {
+                        Object o = fromJson(j, clazz);
+                        field.set(obj, o);
+                    }
+                } else if (isList(clazz)) { // 列表
+                    JSONObject j = jo.optJSONObject(name);
+                    if (!isNull(j)) {
+                        Object o = fromJson(j, clazz);
+                        field.set(obj, o);
+                    }
+                } else {
+                    throw new Exception("unknow type!");
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        /**
+         * 判断对象是否为空
+         *
+         * @param obj 实例
+         * @return
+         */
+        private static boolean isNull(Object obj) {
+            if (obj instanceof JSONObject) {
+                return JSONObject.NULL.equals(obj);
+            }
+            return obj == null;
+        }
+
+        /**
+         * 判断是否是值类型
+         *
+         * @param clazz
+         * @return
+         */
+        private static boolean isSingle(Class<?> clazz) {
+            return isBoolean(clazz) || isNumber(clazz) || isString(clazz);
+        }
+
+        /**
+         * 是否布尔值
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isBoolean(Class<?> clazz) {
+            return (clazz != null)
+                    && ((Boolean.TYPE.isAssignableFrom(clazz)) || (Boolean.class
+                    .isAssignableFrom(clazz)));
+        }
+
+        /**
+         * 是否数值
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isNumber(Class<?> clazz) {
+            return (clazz != null)
+                    && ((Byte.TYPE.isAssignableFrom(clazz)) || (Short.TYPE.isAssignableFrom(clazz))
+                    || (Integer.TYPE.isAssignableFrom(clazz))
+                    || (Long.TYPE.isAssignableFrom(clazz))
+                    || (Float.TYPE.isAssignableFrom(clazz))
+                    || (Double.TYPE.isAssignableFrom(clazz)) || (Number.class
+                    .isAssignableFrom(clazz)));
+        }
+
+        /**
+         * 判断是否是字符串
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isString(Class<?> clazz) {
+            return (clazz != null)
+                    && ((String.class.isAssignableFrom(clazz))
+                    || (Character.TYPE.isAssignableFrom(clazz)) || (Character.class
+                    .isAssignableFrom(clazz)));
+        }
+
+        /**
+         * 判断是否是对象
+         *
+         * @param clazz
+         * @return
+         */
+        private static boolean isObject(Class<?> clazz) {
+            return clazz != null && !isSingle(clazz) && !isArray(clazz) && !isCollection(clazz) && !isMap(clazz);
+        }
+
+        /**
+         * 判断是否是数组
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isArray(Class<?> clazz) {
+            return clazz != null && clazz.isArray();
+        }
+
+        /**
+         * 判断是否是集合
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isCollection(Class<?> clazz) {
+            return clazz != null && Collection.class.isAssignableFrom(clazz);
+        }
+
+        /**
+         * 判断是否是Map
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isMap(Class<?> clazz) {
+            return clazz != null && Map.class.isAssignableFrom(clazz);
+        }
+
+        /**
+         * 判断是否是列表
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isList(Class<?> clazz) {
+            return clazz != null && List.class.isAssignableFrom(clazz);
+        }
+
+        /**
+         * 判断是否是列表
+         *
+         * @param clazz
+         * @return
+         */
+        public static boolean isSet(Class<?> clazz) {
+            return clazz != null && Set.class.isAssignableFrom(clazz);
         }
 
     }
@@ -6550,6 +7871,125 @@ public class GT {
 
             }
         }
+
+
+        /**
+         * 下载工具
+         */
+        public static class DownloadUtil {
+
+            private static DownloadUtil downloadUtil;
+            private static OkHttpClient okHttpClient;
+
+            public static DownloadUtil get() {
+                if (downloadUtil == null) {
+                    downloadUtil = new DownloadUtil();
+                }
+                return downloadUtil;
+            }
+
+            public DownloadUtil() {
+                okHttpClient = new OkHttpClient();
+            }
+
+
+            /**
+             * @param url          下载连接
+             * @param destFileDir  下载的文件储存目录
+             * @param destFileName 下载文件名称，后面记得拼接后缀，否则手机没法识别文件类型
+             * @param listener     下载监听
+             */
+
+            public static void download(final String url, final String destFileDir, final String destFileName, final OnDownloadListener listener) {
+
+                Request request = new Request.Builder()
+                        .url(url)
+                        .build();
+
+                OkHttpClient client = new OkHttpClient();
+
+                //异步请求
+                okHttpClient.newCall(request).enqueue(new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        // 下载失败监听回调
+                        listener.onDownloadFailed(e);
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+
+                        InputStream is = null;
+                        byte[] buf = new byte[2048];
+                        int len = 0;
+                        FileOutputStream fos = null;
+
+                        //储存下载文件的目录
+                        File dir = new File(destFileDir);
+                        if (!dir.exists()) {
+                            dir.mkdirs();
+                        }
+                        File file = new File(dir, destFileName);
+
+                        try {
+
+                            is = response.body().byteStream();
+                            long total = response.body().contentLength();
+                            fos = new FileOutputStream(file);
+                            long sum = 0;
+                            while ((len = is.read(buf)) != -1) {
+                                fos.write(buf, 0, len);
+                                sum += len;
+                                int progress = (int) (sum * 1.0f / total * 100);
+                                //下载中更新进度条
+                                listener.onDownloading(progress);
+                            }
+                            fos.flush();
+                            //下载完成
+                            listener.onDownloadSuccess(file);
+                        } catch (Exception e) {
+                            listener.onDownloadFailed(e);
+                        } finally {
+
+                            try {
+                                if (is != null) {
+                                    is.close();
+                                }
+                                if (fos != null) {
+                                    fos.close();
+                                }
+                            } catch (IOException e) {
+
+                            }
+
+                        }
+
+
+                    }
+                });
+            }
+
+
+            public interface OnDownloadListener {
+
+                /**
+                 * 下载成功之后的文件
+                 */
+                void onDownloadSuccess(File file);
+
+                /**
+                 * 下载进度
+                 */
+                void onDownloading(int progress);
+
+                /**
+                 * 下载异常信息
+                 */
+
+                void onDownloadFailed(Exception e);
+            }
+        }
+
 
     }
 
@@ -6746,36 +8186,23 @@ public class GT {
     }
 
     /**
-     * 将网页图片 利用照腾讯X5 自定适应屏幕大小
+     * WebWiew 工具类
      */
-    public static class HtmlFormat {
-        /**
-         * 获取新的 上下文
-         *
-         * @param htmltext
-         * @return
-         */
-        public static String getNewContent(String htmltext) {
-            Document doc = Jsoup.parse(htmltext);
-            Elements elements = doc.getElementsByTag("img");
-            for (Element element : elements) {
-                element.attr("width", "100%").attr("height", "auto");
-            }
-            return doc.toString();
-        }
-    }
+    public static class WebViewUtils {
 
-    /**
-     * 将网页上的 JSON 数据取下来
-     * 如果在取数据的时候报错，请将 getHtmlData(urlApi) 方法放在 子线程中运行
-     * 网络请求需要放在 子线程中，主线程会直接报错。
-     */
-    public static class WebApi {
         /**
+         * 前提网络权限
+         * <uses-permission android:name="android.permission.INTERNET"/>
+         */
+
+        /**
+         * 将网页上的 JSON 数据取下来(需要放在子线程运行)
+         *
          * @param urlApi 请求 Api 接口的网址
          * @return 返回纯 JSON 字符串
          */
         public static String getHtmlData(String urlApi) throws Exception {
+            if (urlApi == null) return "The currently given HtmlURL is empty";
             URL url = new URL(urlApi);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
@@ -6796,55 +8223,178 @@ public class GT {
             inStream.close();
             return outStream.toByteArray();
         }
-    }
 
-    /**
-     * 加载 PC 版的网页
-     */
-    public static class loadPCHtml {
 
         /**
+         * 加载 PC 版的网页
+         *
          * @param webView 网页对象
          * @param url     要加载的网页
          */
-        public static void setWebViewLoadPC(WebView webView, String url) {
+        @SuppressLint("SetJavaScriptEnabled")
+        public static WebView loadPCHtml(Context context, WebView webView, String url, boolean isCache, OnLoadWebViewListener onLoadWebViewListener) {
+            if (webView == null) return null;
 
-            if (webView != null) {
-                webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
-                //支持js
-                webView.getSettings().setJavaScriptEnabled(true);
+            //设置PC网
+            webView.getSettings().setUserAgentString("Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36");
+            //支持获取手势焦点
+            webView.requestFocusFromTouch();
 
-                webView.getSettings().setUserAgentString("Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36");
-                //自适应屏幕
-                webView.getSettings().setUseWideViewPort(true);
-                webView.getSettings().setLoadWithOverviewMode(true);
-                //自动缩放
-                webView.getSettings().setBuiltInZoomControls(true);
-                webView.getSettings().setSupportZoom(true);
-                //支持获取手势焦点
-                webView.requestFocusFromTouch();
-                webView.setWebViewClient(new MyWeb());
-                webView.loadUrl(url);//加载网页
-            }
+            loadAppHtml(context,webView,url,isCache,onLoadWebViewListener);
+
+            return webView;
 
         }
 
-        private static class MyWeb extends WebViewClient {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                view.loadUrl(url);//在这里设置对应的操作
-                return false;
+
+        private static boolean isLoadSuccess = false;
+
+        /**
+         * 加载AppHtml网页
+         *
+         * @param webView
+         * @param url
+         */
+        @SuppressLint("SetJavaScriptEnabled")
+        public static WebView loadAppHtml(Context context, WebView webView, String url, boolean isCache, final OnLoadWebViewListener onLoadWebViewListener) {
+            if (webView == null || context == null) return webView;
+
+            //声明WebSettings子类
+            WebSettings webSettings = webView.getSettings();
+
+            //如果访问的页面中要与Javascript交互，则webview必须设置支持Javascript
+            webSettings.setJavaScriptEnabled(true);
+            // 若加载的 html 里有JS 在执行动画等操作，会造成资源浪费（CPU、电量）
+            // 在 onStop 和 onResume 里分别把 setJavaScriptEnabled() 给设置成 false 和 true 即可
+
+            //设置自适应屏幕，两者合用
+            webSettings.setUseWideViewPort(true); //将图片调整到适合webview的大小
+            webSettings.setLoadWithOverviewMode(true); // 缩放至屏幕的大小
+
+            //缩放操作
+            webSettings.setSupportZoom(true); //支持缩放，默认为true。是下面那个的前提。
+            webSettings.setBuiltInZoomControls(true); //设置内置的缩放控件。若为false，则该WebView不可缩放
+            webSettings.setDisplayZoomControls(false); //隐藏原生的缩放控件
+
+            //其他细节操作
+            webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK); //关闭webview中缓存
+            webSettings.setAllowFileAccess(true); //设置可以访问文件
+            webSettings.setJavaScriptCanOpenWindowsAutomatically(true); //支持通过JS打开新窗口
+            webSettings.setLoadsImagesAutomatically(true); //支持自动加载图片
+            webSettings.setDefaultTextEncodingName("utf-8");//设置编码格式
+
+
+            // 通过设置WebView的settings实现
+            String cacheDirPath = context.getFilesDir().getAbsolutePath() + "cache/";
+            webSettings.setDatabasePath(cacheDirPath);
+
+            if(isCache){
+                //使用缓存:
+                webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+                webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);//没网，则从本地获取，即离线加载
+
+                webSettings.setDomStorageEnabled(true); // 开启 DOM storage API 功能
+                webSettings.setDatabaseEnabled(true);   //开启 database storage API 功能
+                webSettings.setAppCacheEnabled(true);//开启 Application Caches 功能
+            }else{
+                //不使用缓存:
+                webSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+            }
+            //缓存模式如下：
+            //LOAD_CACHE_ONLY: 不使用网络，只读取本地缓存数据
+            //LOAD_DEFAULT: （默认）根据cache-control决定是否从网络上取数据。
+            //LOAD_NO_CACHE: 不使用缓存，只从网络获取数据.
+            //LOAD_CACHE_ELSE_NETWORK，只要本地有，无论是否过期，或者no-cache，都使用缓存中的数据。
+
+            //获得网页的加载进度并显示
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onProgressChanged(WebView view, int newProgress) {
+                    super.onProgressChanged(view, newProgress);
+                    if (newProgress <= 100 && !isLoadSuccess) {
+                        if (newProgress == 100) {
+                            isLoadSuccess = true;
+                        }
+                        onLoadWebViewListener.onLoadingProgress(view, newProgress);
+                    }
+                }
+
+            });
+
+
+            //设置加载Web的生命周期
+            webView.setWebViewClient(new WebViewClient() {
+
+                @Override
+                public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                    handler.proceed();    //表示等待证书响应
+                    // handler.cancel();      //表示挂起连接，为默认方式
+                    // handler.handleMessage(null);    //可做其他处理
+                }
+
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                    //复写shouldOverrideUrlLoading()方法，使得打开网页时不调用系统浏览器， 而是在本WebView中显示
+                    view.loadUrl(url);
+                    return true;
+                }
+
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    //设定加载开始的操作
+                    onLoadWebViewListener.onLoadStart(view, url, favicon);
+                }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    //设定加载结束的操作
+                    onLoadWebViewListener.onLoadClose(view, url);
+                }
+
+                @Override
+                public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                    //该方法传回了错误码，根据错误类型可以进行不同的错误分类处理
+                    onLoadWebViewListener.onLoadError(view, errorCode, description, failingUrl);
+                }
+
+            });
+
+
+            // 特别注意：5.1以上默认禁止了https和http混用，以下方式是开启
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                webView.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
             }
 
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
+            if (url != null) {
+                webView.loadUrl(url);
             }
 
-            @Override
-            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                super.onReceivedError(view, request, error);
-            }
+            return webView;
+
+        }
+
+        //加载网页接口
+        public interface OnLoadWebViewListener {
+
+            /**
+             * @加载开始
+             */
+            void onLoadStart(WebView view, String url, Bitmap favicon);
+
+            /**
+             * @加载中
+             */
+            void onLoadingProgress(WebView view, int progress);
+
+            /**
+             * @加载结束
+             */
+            void onLoadClose(WebView view, String url);
+
+            /**
+             * @加载错误
+             */
+            void onLoadError(WebView view, int errorCode, String description, String failingUrl);
 
         }
 
@@ -6988,6 +8538,24 @@ public class GT {
 
         }
 
+        /**
+         * 将多少秒转换成 时分秒 如：100秒 = 1分钟40秒
+         *
+         * @param seconds
+         * @return
+         */
+        public static String secondsToTime(int seconds) {
+            int h = seconds / 3600; // 小时
+            int m = (seconds % 3600) / 60; // 分钟
+            int s = (seconds % 3600) % 60; // 秒
+            if (h > 0) {
+                return h + "小时" + m + "分钟" + s + "秒";
+            }
+            if (m > 0) {
+                return m + "分钟" + s + "秒";
+            }
+            return s + "秒";
+        }
 
         /**
          * ***************日历工具的基础功能*******************
@@ -8340,38 +9908,6 @@ public class GT {
     }
 
     /**
-     * 图片优化类
-     */
-    public static class ImageOptimize {
-
-        private Activity activity;
-
-        public ImageOptimize() {
-        }
-
-        /**
-         * 初始化
-         *
-         * @param activity
-         */
-        public ImageOptimize(Activity activity) {
-            this.activity = activity;
-        }
-
-        /**
-         * 加载图片
-         *
-         * @param context        上下文
-         * @param ImageResources 要加载的图片资源
-         * @param imageView      加载到那个组件上
-         */
-        public static void loadImage(Context context, Object ImageResources, ImageView imageView) {
-            Glide.with(context).asDrawable().load(ImageResources).into(imageView);
-        }
-
-    }
-
-    /**
      * 手机屏幕操作
      */
     public static class ScreenOperation {
@@ -8458,10 +9994,11 @@ public class GT {
         }
 
         /**
+         * 分享文件
+         *
          * @param activity
          * @param sharTitle
          * @param filePath
-         * @分享文件
          */
         public static void shareFile(Activity activity, String sharTitle, String filePath) {
             Intent intent = new Intent(Intent.ACTION_SEND);// 发送多个文件
@@ -8473,9 +10010,10 @@ public class GT {
         }
 
         /**
+         * 弹出软件盘
+         *
          * @param editText
          * @param activity
-         * @弹出软件盘
          */
         public static void editKeyboard(EditText editText, Activity activity) {
             InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -8485,9 +10023,10 @@ public class GT {
         }
 
         /**
+         * 收起软键盘
+         *
          * @param editText
          * @param activity
-         * @收起软键盘
          */
         public static void editKeyShrink(EditText editText, Activity activity) {
             InputMethodManager inputMethodManager = (InputMethodManager) activity
@@ -8496,9 +10035,10 @@ public class GT {
         }
 
         /**
+         * 将字符串复制到粘贴板上
+         *
          * @param context
          * @param text
-         * @将字符串复制到粘贴板上
          */
         public static void copyToClipboard(Context context, String text) {
             ClipboardManager systemService = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
@@ -8506,10 +10046,11 @@ public class GT {
         }
 
         /**
+         * 保存图片
+         *
          * @param context  上下文
          * @param view     保存图片的组件
          * @param fileName 文件名
-         * @保存图片
          */
         public static void saveImage(Activity activity, View view, String savePath, String fileName) {
 
@@ -8549,9 +10090,10 @@ public class GT {
         }
 
         /**
+         * 获取App名字
+         *
          * @param activity
          * @return
-         * @获取App名字
          */
         public static String getAppName(Context context) {
             try {
@@ -8566,9 +10108,10 @@ public class GT {
         }
 
         /**
+         * 获取软件版本号
+         *
          * @param mContext
          * @return
-         * @获取软件版本号
          */
         public static int getVersionCode(Context mContext) {
             int versionCode = 0;
@@ -8582,9 +10125,10 @@ public class GT {
         }
 
         /**
+         * 获取版本号名称
+         *
          * @param context
          * @return
-         * @获取版本号名称
          */
         public static String getVerName(Context context) {
             String verName = "";
@@ -8597,11 +10141,12 @@ public class GT {
         }
 
         /**
+         * 解压文件
+         *
          * @param zipPtath        解压文件的路径
          * @param outputDirectory 解压后的输出路径
          * @param isDeleteZipPage 是否保留压缩文件
          * @throws IOException
-         * @解压文件
          */
         public static void unzipFile(String zipPtath, String outputDirectory, boolean isDeleteZipPage)
                 throws IOException {
@@ -8653,7 +10198,6 @@ public class GT {
                 zipEntry = zipInputStream.getNextEntry();
             }
             zipInputStream.close();
-            //	            log(TAG,"解压完成");
             if (isDeleteZipPage) {
                 new File(zipPtath).delete();// 删除当前补丁压缩包
             }
@@ -8661,9 +10205,10 @@ public class GT {
         }
 
         /**
+         * 获取文件夹中所有文件名
+         *
          * @param path
          * @return
-         * @获取文件夹中所有文件名
          */
         public static List<String> getFilesAllName(String path) {
             File file = new File(path);
@@ -8680,9 +10225,10 @@ public class GT {
         }
 
         /**
+         * 清空文件夹中所有文件
+         *
          * @param file         清空的文件路径
          * @param isSaveFolder 是否保存当前文件夹 true：b
-         * @清空文件夹中所有文件
          */
         public static void deleteAllFile(File file, boolean isSaveFolder) {
 
@@ -8701,17 +10247,19 @@ public class GT {
         }
 
         /**
+         * 获取手机根目录
+         *
          * @return
-         * @获取手机根目录
          */
         public static String getAppDirectory() {
             return Environment.getExternalStorageDirectory().toString();
         }
 
         /**
+         * 获取当前apk包名
+         *
          * @param context
          * @return
-         * @获取当前apk包名
          */
         public static String getPackageName(Context context) {
             try {
@@ -8806,84 +10354,126 @@ public class GT {
 
             /**
              * 内置 更新 APP 版本 注意
-             *
+             * <p>
              * 详细教程：https://blog.csdn.net/qq_39799899/article/details/102470084
-             *
-             * 1.在清单文件添加数据共享
-             * <application>
-             * ...
-             <!--数据共享-->
-             <provider
-             android:name="androidx.core.content.FileProvider"
-             android:authorities="自己包名.fileprovider"
-             android:grantUriPermissions="true"
-             android:exported="false">
-             <meta-data
-             android:name="android.support.FILE_PROVIDER_PATHS"
-             android:resource="@xml/file_paths" />
-             </provider>
-             * ...
-             * </<application>
-             *
-             * 2.添加 file_paths.xml 文件
-             * <paths>
-             *     <external-path path="." name="external_storage_root" />
-             * </paths>
-             *
+             * <p>
              * 3.记得添加权限
-             *  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" /> <!-- 写入手机权限 -->
-             *  <uses-permission android:name="android.permission.INTERNET" />  <!-- 网络权限 -->
-             *  <uses-permission android:name="android.permission.READ_PHONE_STATE" />  <!-- 读取手机权限 -->
-             *
+             * <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" /> <!-- 写入手机权限 -->
+             * <uses-permission android:name="android.permission.INTERNET" />  <!-- 网络权限 -->
+             * <uses-permission android:name="android.permission.READ_PHONE_STATE" />  <!-- 读取手机权限 -->
              */
+
+            //  判断是否停止
+            private static boolean mIsCancel = false;
+
+            public static boolean ismIsCancel() {
+                return mIsCancel;
+            }
 
             /**
-             * @param downloadUrl
-             * @param savePath
-             * @在网络下载文件到本地
-             * @下载服务器的APK
+             * 是否停止下载
+             *
+             * @param mIsCancel
              */
-            public static void downloadFile(final String downloadUrl, final String savePath) {
+            public static void setmIsCancel(boolean mIsCancel) {
+                UpdateApp.mIsCancel = mIsCancel;
+            }
 
-                Thread.runJava(new Runnable() {
+            /**
+             * 下载App
+             *
+             * @param appUrl
+             * @param appSavePath
+             * @param appSaveFileName
+             * @param listener
+             */
+            public static void downloadApp(final String appUrl, final String appSavePath, final String appSaveFileName, final OnDownloadListener listener) {
+
+                GT.Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
-                        File file = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + savePath);//记得加扩展名
-                        file.getParentFile().mkdir();
+                        HttpURLConnection conn;
                         try {
-                            file.createNewFile();
-                            URL url2 = new URL(downloadUrl);
-                            HttpURLConnection conn = (HttpURLConnection) url2.openConnection();
+                            conn = (HttpURLConnection) new URL(appUrl).openConnection();
                             conn.connect();
-                            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                                InputStream ips = conn.getInputStream();
-                                FileOutputStream fops = new FileOutputStream(file);
+                            InputStream is = conn.getInputStream();
+                            int length = conn.getContentLength();
 
-                                byte[] buf = new byte[1024];
-                                int read = ips.read(buf);
-                                while (read != -1) {
-                                    fops.write(buf, 0, read);
-                                    fops.flush();
-                                    read = ips.read(buf);
+                            File apkFile = new File(appSavePath, appSaveFileName);
+                            FileOutputStream fos = new FileOutputStream(apkFile);
+
+                            int count = 0;
+                            byte[] buffer = new byte[1024];
+                            while (!mIsCancel) {
+                                int numread = is.read(buffer);
+                                count += numread;
+                                // 计算进度条的当前位置
+                                int mProgress = (int) (((float) count / length) * 100);
+                                //下载中更新进度条
+                                listener.onDownloading(mProgress);
+                                if (numread < 0) {
+                                    //下载完成
+                                    listener.onDownloadSuccess(apkFile);
+                                    break;
                                 }
-                                fops.close();
-                                ips.close();
-                                conn.disconnect();
+                                fos.write(buffer, 0, numread);
                             }
-                        } catch (Exception e) {
-                            if (LOG.isGtLogTf()) {
-                                err(getLineInfo(1), "网络下载文件报错： " + e);
-                            }
+                            fos.close();
+                            is.close();
+
+                        } catch (IOException e) {
+                            listener.onDownloadFailed(e);
                         }
                     }
                 });
 
+
             }
 
+            public interface OnDownloadListener {
+
+                /**
+                 * 下载成功之后的文件
+                 */
+                void onDownloadSuccess(File file);
+
+                /**
+                 * 下载进度
+                 */
+                void onDownloading(int progress);
+
+                /**
+                 * 下载异常信息
+                 */
+
+                void onDownloadFailed(Exception e);
+            }
+
+
             /**
+             * 安装APK
+             *
              * @param apkPath
-             * @安装APK
-             * @安装新版本
+             * @安装新版本 1.在清单文件添加数据共享
+             * <application>
+             * ...
+             * <!--自动安装需要添加-->
+             * <provider
+             * android:name="androidx.core.content.FileProvider"
+             * android:authorities="自己包名.fileprovider"
+             * android:grantUriPermissions="true"
+             * android:exported="false">
+             * <meta-data
+             * android:name="android.support.FILE_PROVIDER_PATHS"
+             * android:resource="@xml/file_paths" />
+             * </provider>
+             * ...
+             * </<application>
+             * <p>
+             * 2.添加 file_paths.xml 文件
+             * <paths>
+             * <external-path path="." name="external_storage_root" />
+             * </paths>
              */
             public static void installNewApk(Activity activity, String apkPath) {
                 String url = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + apkPath;
@@ -8992,15 +10582,11 @@ public class GT {
 
                 if (RepairAPP.isGoingToFix(context)) {// 是否需要热修复
                     RepairAPP.loadFixedDex(context, Environment.getExternalStorageDirectory());// 加载补丁包
-                    //                    log("正在修复");
-
-                    //                    log("bug文件目录:" + repairBugFilePath);
 
                     // 解决 oat 文件的 bug
                     for (String path : ApplicationUtils.getFilesAllName(repairBugFilePath)) {
                         if (path.indexOf("oat") != -1) {
                             repairBugFilePath += "/oat";
-                            //                            log("【进入删除 oat 文件 bug】");
                             ApplicationUtils.deleteAllFile(new File(repairBugFilePath), false);
                         }
 
@@ -9455,22 +11041,15 @@ public class GT {
          */
         public static void whiteList(Activity activity) {
 
-            //监测当前应用是否在白名单中
-            boolean isIgnoring = false;//默认不是
-            PowerManager powerManager = (PowerManager) activity.getSystemService(Context.POWER_SERVICE);
-            if (powerManager != null) {
-                isIgnoring = powerManager.isIgnoringBatteryOptimizations(activity.getPackageName());
-            }
-
-            //如果不在白名单中
-            if (!isIgnoring) {
-                //那就向用户申请白名单权限
-                try {
+            //申请白名单
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PowerManager powerManager = (PowerManager) activity.getSystemService(POWER_SERVICE);
+                boolean hasIgnored = powerManager.isIgnoringBatteryOptimizations(activity.getPackageName());
+                //  判断当前APP是否有加入电池优化的白名单，如果没有，弹出加入电池优化的白名单的设置对话框。
+                if (!hasIgnored) {
                     Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
                     intent.setData(Uri.parse("package:" + activity.getPackageName()));
                     activity.startActivity(intent);
-                } catch (Exception e) {
-                    e.printStackTrace();
                 }
             }
 
@@ -10765,14 +12344,6 @@ public class GT {
 
         /**
          * Fragment切换方式管理 （仅供内部调用）
-         * <p>
-         * 在这里可以调用动画
-         * transaction.setCustomAnimations(
-         * R.anim.card_flip_right_in,
-         * R.anim.card_flip_left_out,
-         * R.anim.card_flip_left_in,
-         * R.anim.card_flip_right_out
-         * );
          *
          * @param fragmentId
          * @param transaction
@@ -10782,16 +12353,14 @@ public class GT {
         @SuppressLint("WrongConstant")
         private void fragmentSwitchingModeManagement(int fragmentId, FragmentTransaction transaction, Fragment fragment, Class<?> fragmentClass) {
 
+            //切换页面特效
+            cutEffects(transaction);
+
             switch (SWITCHING_MODE) {
                 case ACTIVITY:// Activity 切换方式
                 {
-                    /**
-                     * TRANSIT_FRAGMENT_OPEN : TRANSIT_FRAGMENT_CLOSE : TRANSIT_FRAGMENT_FADE 标准打开关闭动画
-                     * TRANSIT_FRAGMENT_FADE 淡入淡出
-                     *
-                     */
 
-//                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
+
                     transaction.add(fragmentId, fragment, fragmentClass.getName());
                     transaction.commit();
                     break;
@@ -10799,7 +12368,6 @@ public class GT {
 
                 case FRAGMENT:// Fragment 切换方式
                 {
-//                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
                     transaction.replace(fragmentId, fragment, fragmentClass.getName());
                     transaction.commit();
                     break;
@@ -10815,9 +12383,9 @@ public class GT {
 
                         for (Fragment fragment1 : getStackFragments()) {
                             if (fragmentClass.getName().equals(fragment1.getClass().getName())) {
-                                gt_fragment.getTransaction().show(fragment1).commit();
+                                transaction.show(fragment1).commit();
                             } else {
-                                gt_fragment.getTransaction().hide(fragment1).commit();
+                                transaction.hide(fragment1).commit();
                             }
                         }
 
@@ -10833,7 +12401,7 @@ public class GT {
 
                 default:    //如果是非法参数 那就默认使用 Activity 的启动方式
                 {
-//                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
+
                     transaction.add(fragmentId, fragment, fragmentClass.getName());
                     transaction.commit();
                 }
@@ -10843,6 +12411,124 @@ public class GT {
 
         }
 
+
+        /**
+         * 22种切换样式：
+         * 0    默认切换、       transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
+         * 1    X轴缩放、		transaction.setCustomAnimations(R.animator.scalex_enter, R.animator.scalex_exit, R.animator.scalex_enter, R.animator.scalex_exit);
+         * 2    Y轴缩放、		transaction.setCustomAnimations(R.animator.scaley_enter, R.animator.scaley_exit, R.animator.scaley_enter, R.animator.scaley_exit);
+         * 3    XY轴绽放、		transaction.setCustomAnimations(R.animator.scalexy_enter, R.animator.scalexy_exit, R.animator.scalexy_enter, R.animator.scalexy_exit);
+         * 4    淡入淡出、		transaction.setCustomAnimations(android.R.animator.fade_in, android.R.animator.fade_out, android.R.animator.fade_in, android.R.animator.fade_out);
+         * 5    水平翻页、		transaction.setCustomAnimations(R.animator.card_flip_horizontal_right_in, R.animator.card_flip_horizontal_left_out, R.animator.card_flip_horizontal_left_in, R.animator.card_flip_horizontal_right_out);
+         * 6    垂直翻页、		transaction.setCustomAnimations(R.animator.card_flip_vertical_right_in, R.animator.card_flip_vertical_left_out, R.animator.card_flip_vertical_left_in, R.animator.card_flip_vertical_right_out);
+         * 7    垂直滑动、		transaction.setCustomAnimations(R.animator.slide_fragment_vertical_right_in, R.animator.slide_fragment_vertical_left_out, R.animator.slide_fragment_vertical_left_in, R.animator.slide_fragment_vertical_right_out);
+         * 8    水平滑动、		transaction.setCustomAnimations(R.animator.slide_fragment_horizontal_right_in, R.animator.slide_fragment_horizontal_left_out, R.animator.slide_fragment_horizontal_left_in, R.animator.slide_fragment_horizontal_right_out);
+         * 9    向上推的水平滑动、transaction.setCustomAnimations(R.animator.slide_fragment_horizontal_right_in, R.animator.slide_fragment_vertical_left_out, R.animator.slide_fragment_vertical_left_in, R.animator.slide_fragment_horizontal_right_out);
+         * 10   向左推的垂直滑动、transaction.setCustomAnimations(R.animator.slide_fragment_vertical_right_in, R.animator.slide_fragment_horizontal_left_out, R.animator.slide_fragment_horizontal_left_in, R.animator.slide_fragment_vertical_right_out);
+         * 11   交叉的滑动、		transaction.setCustomAnimations(R.animator.glide_fragment_horizontal_in, R.animator.glide_fragment_horizontal_out, R.animator.glide_fragment_horizontal_in, R.animator.glide_fragment_horizontal_out);
+         * 12   会隐藏的滑动、    特殊
+         * 13   弹出、			transaction.setCustomAnimations(R.animator.stack_right_in, R.animator.stack_left_out, R.animator.stack_left_in, R.animator.stack_right_out);
+         * 14   魔方、 			transaction.setCustomAnimations(R.animator.cube_right_in, R.animator.cube_left_out, R.animator.cube_left_in, R.animator.cube_right_out);
+         * 15   向下旋转、		transaction.setCustomAnimations(R.animator.rotatedown_right_in, R.animator.rotatedown_left_out, R.animator.rotatedown_left_in, R.animator.rotatedown_right_out);
+         * 16   向上旋转、		transaction.setCustomAnimations(R.animator.rotateup_right_in, R.animator.rotateup_left_out, R.animator.rotateup_left_in, R.animator.rotateup_right_out);
+         * 17   手风琴、			transaction.setCustomAnimations(R.animator.accordion_right_in, R.animator.accordion_left_out, R.animator.accordion_left_in, R.animator.accordion_right_out);
+         * 18   水平翻转、 		transaction.setCustomAnimations(R.animator.table_horizontal_right_in, R.animator.table_horizontal_left_out, R.animator.table_horizontal_left_int, R.animator.table_horizontal_right_out);
+         * 19   垂直翻转、		transaction.setCustomAnimations(R.animator.table_vertical_right_in, R.animator.table_vertical_left_out, R.animator.table_vertical_left_int, R.animator.table_vertical_right_out);
+         * 20   左角落放大、		transaction.setCustomAnimations(R.animator.zoom_from_left_corner_right_in, R.animator.zoom_from_left_corner_left_out, R.animator.zoom_from_left_corner_left_in, R.animator.zoom_from_left_corner_right_out);
+         * 21   右角落放大、		transaction.setCustomAnimations(R.animator.zoom_from_right_corner_right_in, R.animator.zoom_from_right_corner_left_out, R.animator.zoom_from_right_corner_left_in, R.animator.zoom_from_right_corner_right_out);
+         */
+
+
+        private static int cutEffectsIndex = 0;//默认为标准切换特效
+        private static int enter = 0, exit = 0, popEnter = 0, popExit = 0;//设置自定义Fragment 切换
+
+        /**
+         * 设置自定义的 Fragment 切换特效
+         * @param enter
+         * @param exit
+         * @param popEnter
+         * @param popExit
+         */
+        public void setFragmentCutEffects(int enter, int exit, int popEnter, int popExit) {
+            cutEffectsIndex = -1;
+            this.enter = enter;
+            this.exit = exit;
+            this.popEnter = popEnter;
+            this.popExit = popExit;
+        }
+
+
+        public int getFragmentCutEffectsIndex() {
+            return cutEffectsIndex;
+        }
+
+        /**
+         * 设置切换特效
+         * 8 种切换样式：
+         * 0    默认切换、
+         * 1    X轴缩放、
+         * 2    Y轴缩放、
+         * 3    XY轴绽放、
+         * 4    淡入淡出、
+         * 5    水平翻页、
+         * 6    垂直翻页、
+         * 7    垂直滑动、
+         *
+         * @param cutEffectsIndex
+         */
+        public void setFragmentCutEffectsIndex(int cutEffectsIndex) {
+            GT_Fragment.cutEffectsIndex = cutEffectsIndex;
+        }
+
+        /**
+         * 切换特效
+         *
+         * @param transaction
+         */
+        private void cutEffects(FragmentTransaction transaction) {
+
+
+            switch (cutEffectsIndex) {
+
+                case 0:
+                    //Fragment内置的 淡入淡出
+                    transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
+                    break;
+                case 1:
+                    //X轴缩放
+                    transaction.setCustomAnimations(R.animator.scalex_enter, R.animator.scalex_exit, R.animator.scalex_enter, R.animator.scalex_exit);
+                    break;
+                case 2:
+                    //Y轴缩放
+                    transaction.setCustomAnimations(R.animator.scaley_enter, R.animator.scaley_exit, R.animator.scaley_enter, R.animator.scaley_exit);
+                    break;
+                case 3:
+                    //XY轴绽放
+                    transaction.setCustomAnimations(R.animator.scalexy_enter, R.animator.scalexy_exit, R.animator.scalexy_enter, R.animator.scalexy_exit);
+                    break;
+                case 4:
+                    //淡入淡出
+                    transaction.setCustomAnimations(android.R.animator.fade_in, android.R.animator.fade_out, android.R.animator.fade_in, android.R.animator.fade_out);
+                    break;
+                case 5:
+                    //水平翻页
+                    transaction.setCustomAnimations(R.animator.card_flip_horizontal_right_in, R.animator.card_flip_horizontal_left_out, R.animator.card_flip_horizontal_left_in, R.animator.card_flip_horizontal_right_out);
+                    break;
+                case 6:
+                    //垂直翻页
+                    transaction.setCustomAnimations(R.animator.card_flip_vertical_right_in, R.animator.card_flip_vertical_left_out, R.animator.card_flip_vertical_left_in, R.animator.card_flip_vertical_right_out);
+                    break;
+                default:
+                    //其它
+                    if(cutEffectsIndex == -1){
+                        transaction.setCustomAnimations(enter, exit, popEnter, popExit);//使用自定义的 Fragment 切换特效
+                    }
+                    break;
+
+            }
+
+
+        }
 
         //===================================================== 启动 Fragment 模式 ====================================
 
@@ -12881,6 +14567,34 @@ public class GT {
          */
         public abstract static class BaseActivity extends AppCompatActivity {
 
+            //切换Activity 动画
+            private static int cutIndex = 0;//GT内置提供的切换特效
+            private static int startAnim = 0;//用户自定义
+            private static int closeAnim = 0;//用户自定义
+
+            /**
+             * 设置 Activity 切换特效
+             * 1  淡入淡出
+             * 2  左右滑出
+             * 暂时仅支持该两种
+             * @param cutIndex
+             */
+            public void setActivityCutIndex(int cutIndex){
+                this.cutIndex = cutIndex;
+            }
+
+            /**
+             * 自定义 Activity 切换特效
+             * @param startAnim
+             * @param closeAnim
+             */
+            public void setActivityCut(int startAnim,int closeAnim){
+                this.startAnim = startAnim;
+                this.closeAnim = closeAnim;
+                cutIndex = -1;
+            }
+
+
             protected GT_Fragment gt_fragment;
 
             /**
@@ -12910,9 +14624,9 @@ public class GT {
             @Override
             protected void onCreate(Bundle savedInstanceState) {
                 super.onCreate(savedInstanceState);
+                gt_fragment = GT_Fragment.gt_fragment;
                 int loadLayout = loadLayout();
                 if (loadLayout != 0) {
-                    this.gt_fragment = GT_Fragment.gt_fragment;
                     initDrawView();// 设置绘制前的数据
                     setContentView(loadLayout);// 加载布局
                     initView(savedInstanceState);// 初始化 UI
@@ -12963,7 +14677,28 @@ public class GT {
              * @param activityClass
              */
             protected void startActivity(Class activityClass) {
+                GT.log("Start cutIndex:" + cutIndex);
+
                 GT.startAct(activityClass);
+                //切换动画
+                switch (cutIndex){
+                    case 1:
+                        //淡入淡出
+                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                        break;
+                    case 2:
+                        //左右滑动
+                        overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right);
+                        break;
+                    default:
+                        //用户自定义
+                        if(cutIndex == -1 && startAnim != 0 && closeAnim != 0){
+                            overridePendingTransition(startAnim, closeAnim);
+                        }
+                        break;
+                }
+
+
             }
 
             /**
@@ -13282,7 +15017,32 @@ public class GT {
 
             }
 
+            @Override
+            public void finish() {
+                GT.log("Close cutIndex:" + cutIndex);
 
+                super.finish();
+
+                //切换动画
+                switch (cutIndex){
+                    case 1:
+                        //淡入淡出
+                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                        break;
+                    case 2:
+                        //左右滑动
+                        overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right);
+                        break;
+                    default:
+                        //用户自定义
+                        if(cutIndex == -1 && startAnim != 0 && closeAnim != 0){
+                            overridePendingTransition(startAnim, closeAnim);
+                        }
+                        break;
+                }
+
+
+            }
         }
 
         /**
@@ -13293,7 +15053,6 @@ public class GT {
             @Override
             protected void onCreate(Bundle savedInstanceState) {
                 super.onCreate(savedInstanceState);
-                gt_fragment = GT_Fragment.gt_fragment;
                 initDrawView();// 设置绘制前的数据
                 initView(savedInstanceState);// 初始化 UI
                 loadData();// 功能方法
@@ -13490,11 +15249,6 @@ public class GT {
                     measureHeight = 400;
                 }
 
-                /*GT.log("RockerView", "onMeasure: --------------------------------------");
-                GT.log("RockerView", "onMeasure: widthMeasureSpec = " + widthMeasureSpec + " heightMeasureSpec = " + heightMeasureSpec);
-                GT.log("RockerView", "onMeasure: widthMode = " + widthMode + "  measureWidth = " + widthSize);
-                GT.log("RockerView", "onMeasure: heightMode = " + heightMode + "  measureHeight = " + widthSize);
-                GT.log("RockerView", "onMeasure: measureWidth = " + measureWidth + " measureHeight = " + measureHeight);*/
                 this.setMeasuredDimension(measureWidth, measureHeight);
             }
 
@@ -14221,12 +15975,10 @@ public class GT {
                     if (intent.hasExtra("state")) {
                         if (intent.getIntExtra("state", 0) == 0) {
                             if (LOG.GT_LOG_TF)
-                                log("耳机测试: 没插入耳机");
-                            headset_TF = false;
+                                headset_TF = false;
                         } else if (intent.getIntExtra("state", 0) == 1) {
                             if (LOG.GT_LOG_TF)
-                                log("耳机测试: 插入耳机");
-                            headset_TF = true;
+                                headset_TF = true;
                         }
                     }
                 }
@@ -15274,6 +17026,11 @@ public class GT {
 
         //主要用于注解 非 Activity 以外的
         public static void initAll(Object object, View view) {
+
+            if (object == null) {
+                return;
+            }
+
             Class<? extends Object> mClass = object.getClass();
 
             // SQL 注解
@@ -15289,6 +17046,10 @@ public class GT {
             initList(object, mClass);                      //为加载 List 成员变量初始化
             initMap(object, mClass);                       //为加载 Map 成员变量初始化
             initSet(object, mClass);                       //为加载 Set 成员变量初始化
+
+            if (view == null) {
+                return;
+            }
 
             // 组件、事件 注解
             initView(object, mClass, view);                 //为加载 组件 初始化
@@ -15308,6 +17069,8 @@ public class GT {
 
         //主要用于注解 Activity
         private static void initAll(Activity activity) {
+
+            if (activity == null) return;
 
             Class<? extends Activity> mClass = activity.getClass();
 
@@ -15359,16 +17122,16 @@ public class GT {
 
                 //初始化GT数据库
                 if (initView_Hibernate != null) {
-                    String sqlName = initView_Hibernate.sqlName();
-                    int sqlVersion = initView_Hibernate.sqlVersion();
-                    if (getGT().getactivity() == null) {
+                    String sqlName = initView_Hibernate.sqlName();//数据库名称
+                    int sqlVersion = initView_Hibernate.sqlVersion();//数据库版本号
+                    if (getGT().getActivity() == null) {
                         err(getLineInfo(2), "注入数据库失败！请在 Activity 中绑定GT注解");
                         return;
                     }
                     classObject = new Hibernate()
                             .init_1_SqlName(sqlName)            //设置SQL名称
                             .init_2_SqlVersion(sqlVersion)     //设置数据库版本
-                            .init_3_SqlTable(ApplicationUtils.getPackageName(getGT().getactivity()))        //设置创建或更新升级的数据库表
+                            .init_3_SqlTable(ApplicationUtils.getPackageName(getGT().getActivity()))        //设置创建或更新升级的数据库表
                             .init_4_Sql();
 
                     //实例注入
@@ -15653,10 +17416,6 @@ public class GT {
                         double[] valueDouble = initView.valueDouble();
                         boolean[] valueBoolean = initView.valueBoolean();
                         char[] valueChar = initView.valueChar();
-
-                        for (String key : valueKey) {
-                            log("key:" + key);
-                        }
 
                         if (valueObject.length != 0) {
                             for (int i = 0; i < valueKey.length; i++) {
@@ -16147,7 +17906,7 @@ public class GT {
                 //GT_Fragment 注解不为null
                 if (initView_GT_Fragment != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = getGT().getactivity();
+                    Activity activity = getGT().getActivity();
                     if (activity != null) {
                         GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
                     }
@@ -16170,7 +17929,7 @@ public class GT {
                 //GT_Fragment 注解不为null
                 if (initView_GT_Fragments != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = getGT().getactivity();
+                    Activity activity = getGT().getActivity();
                     if (activity != null) {
                         //获取注解的值
                         int layoutHome = initView_GT_Fragments.setLayoutHome();
@@ -16637,6 +18396,9 @@ public class GT {
          * @param activity
          */
         private static void initView(Activity activity, Class<? extends Activity> mClass) {
+
+            if (activity == null || mClass == null) return;
+
             Class<? extends Activity> clazz = activity.getClass();//获取该类信息
             Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
@@ -16730,32 +18492,23 @@ public class GT {
          */
         public AnnotationAssist(Object obj, Object annotation) {
 
-            if (LOG.GT_LOG_TF) {
-                log("obj:" + obj);
-                log("annotation:" + annotation);
-            }
-
             /**
              * 获取所有注解
              */
             obj = classToObject(obj);
             Annotation[] annotations = obj.getClass().getAnnotations();
-            if (LOG.GT_LOG_TF) log("---------------该类有所的注解---------------------");
             for (Annotation annotation1 : annotations) if (LOG.GT_LOG_TF) log(annotation1);
-            if (LOG.GT_LOG_TF) log("-------------------close--------------------------");
 
 
             /**
              * 获取声明注解	[Ljava.lang.annotation.Annotation;@28c97a5
              */
             Annotation[] deAnnos = obj.getClass().getDeclaredAnnotations();
-            if (LOG.GT_LOG_TF) log("被声明式注解标识过:" + deAnnos);
 
 
             if (annotation != null) {
                 //获取被 SubAnnotation 注解过的类
                 Annotation subAnnotation = obj.getClass().getAnnotation((Class<Annotation>) annotation);
-                if (LOG.GT_LOG_TF) log("该类被 [" + subAnnotation + "] 注解过");
             }
 
         }
@@ -16810,8 +18563,8 @@ public class GT {
          * @param runnable
          */
         public static void runAndroidAct(Runnable runnable) {
-            if (getGT().getactivity() != null) {
-                Activity activity = (Activity) getGT().getactivity();
+            if (getGT().getActivity() != null) {
+                Activity activity = (Activity) getGT().getActivity();
                 activity.runOnUiThread(runnable);
             } else {
                 log(getLineInfo(), "当前未绑定 Activity 无法使用该方法创建 UI 线程");
@@ -17776,6 +19529,17 @@ public class GT {
                      *
                      *
                      */
+
+
+    }
+
+//=============================================== 黑魔法 ===================================================
+
+    /**
+     * 黑魔法类
+     */
+    public static class DarknessMagic{
+
 
 
     }
