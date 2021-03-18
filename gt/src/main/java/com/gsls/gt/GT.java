@@ -210,7 +210,7 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.3.17
+ * 更新时间:2021.3.18
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p>
@@ -8510,6 +8510,37 @@ public class GT {
         }
 
         /**
+         * 获取中国日期
+         *
+         * @return
+         */
+        public static String getDateTime_CH() {
+            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");//设置日期格式
+            return df.format(new Date());   //获取当时间
+        }
+
+        /**
+         * 获取美国日期
+         *
+         * @return
+         */
+        public static String getDateTime_US() {
+            SimpleDateFormat df = new SimpleDateFormat("ss:mm:HH dd-MM-yyyy");//设置日期格式
+            return df.format(new Date());   //获取当时间
+        }
+
+        /**
+         * 日期格式
+         *
+         * @param dateTimeFormat
+         * @return
+         */
+        public static String getDateTime(String dateTimeFormat) {
+            SimpleDateFormat df = new SimpleDateFormat(dateTimeFormat);//设置日期格式
+            return df.format(new Date());   //获取当时间
+        }
+
+        /**
          * 初始化时间 基础功能
          */
         public GT_Date() {
@@ -8560,17 +8591,17 @@ public class GT {
          * ***************日历工具的基础功能*******************
          */
 
-        private String time;        //定义返回的 时间整体字符串
-        private String[] times;     //定义分割后产生的 年月日 / 时分秒 数组
-        private String[] ymd;       //定义分割后产生的 年月日 数组
-        private String[] hms;       //定义分割后产生的 时分秒 数组
+        private static String time;        //定义返回的 时间整体字符串
+        private static String[] times;     //定义分割后产生的 年月日 / 时分秒 数组
+        private static String[] ymd;       //定义分割后产生的 年月日 数组
+        private static String[] hms;       //定义分割后产生的 时分秒 数组
 
         /**
          * 获取当前星期
          *
          * @return
          */
-        public String getWeekOfDateString() {
+        public static String getWeekOfDateString() {
             String[] weekDays = {"星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"};
             Calendar cal = Calendar.getInstance();
             cal.setTime(new Date());
@@ -8586,7 +8617,7 @@ public class GT {
          *
          * @return
          */
-        public int getWeekOfDateInt() {
+        public static int getWeekOfDateInt() {
             int[] weekDays = {0, 1, 2, 3, 4, 5, 6};
             Calendar cal = Calendar.getInstance();
             cal.setTime(new Date());
@@ -8596,15 +8627,6 @@ public class GT {
             return weekDays[w];
         }
 
-
-        /**
-         * 获取当前时间
-         *
-         * @return
-         */
-        public String getTime() {
-            return time;
-        }
 
         /**
          * 获取当前 年月日

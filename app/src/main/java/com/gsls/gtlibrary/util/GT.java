@@ -211,7 +211,7 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.3.17
+ * 更新时间:2021.3.18
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p>
@@ -224,7 +224,7 @@ import static android.content.Context.POWER_SERVICE;
  * (4).GT_File 类 更名为 FileUtils 类, 史诗级增强, 增多许多实用性功能(轻轻松松自定义文件系统)
  * (5).新增 WebViewUtils 工具类，新增 loadPCHtml(加载PC网页) 、 loadAppHtml(加载App网页) 功能 在加载网页时，实时监听进度
  * (6).新增 ProgressDialogUtils 类 初始化简易的加载进度条。
- *
+ * <p>
  * 2.小更新与优化:
  * (1).增加 APP 错误日志捕获方法：GT.LOG.initAppErrLogTry(this);(如果想打印到本地，请打开本地打印：GT.LOG.LOG_FILE_TF = true;)
  * (2).新增 GT_Fragment 构建注解（具体教程请参考官网教程）
@@ -6266,7 +6266,7 @@ public class GT {
                         if (autoincrement) {//自动增长
                             if ("integer".equals(KeyType) || "LONG".equals(KeyType)) {
                                 tableSqlCode += field.getName() + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL";
-                            }else {
+                            } else {
                                 err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 不是int类型，暂不支持自增。");
                                 isCreateTable = false;
                                 return this;
@@ -8240,7 +8240,7 @@ public class GT {
             //支持获取手势焦点
             webView.requestFocusFromTouch();
 
-            loadAppHtml(context,webView,url,isCache,onLoadWebViewListener);
+            loadAppHtml(context, webView, url, isCache, onLoadWebViewListener);
 
             return webView;
 
@@ -8288,7 +8288,7 @@ public class GT {
             String cacheDirPath = context.getFilesDir().getAbsolutePath() + "cache/";
             webSettings.setDatabasePath(cacheDirPath);
 
-            if(isCache){
+            if (isCache) {
                 //使用缓存:
                 webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
                 webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);//没网，则从本地获取，即离线加载
@@ -8296,7 +8296,7 @@ public class GT {
                 webSettings.setDomStorageEnabled(true); // 开启 DOM storage API 功能
                 webSettings.setDatabaseEnabled(true);   //开启 database storage API 功能
                 webSettings.setAppCacheEnabled(true);//开启 Application Caches 功能
-            }else{
+            } else {
                 //不使用缓存:
                 webSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
             }
@@ -8511,6 +8511,37 @@ public class GT {
         }
 
         /**
+         * 获取中国日期
+         *
+         * @return
+         */
+        public static String getDateTime_CH() {
+            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");//设置日期格式
+            return df.format(new Date());   //获取当时间
+        }
+
+        /**
+         * 获取美国日期
+         *
+         * @return
+         */
+        public static String getDateTime_US() {
+            SimpleDateFormat df = new SimpleDateFormat("ss:mm:HH dd-MM-yyyy");//设置日期格式
+            return df.format(new Date());   //获取当时间
+        }
+
+        /**
+         * 日期格式
+         *
+         * @param dateTimeFormat
+         * @return
+         */
+        public static String getDateTime(String dateTimeFormat) {
+            SimpleDateFormat df = new SimpleDateFormat(dateTimeFormat);//设置日期格式
+            return df.format(new Date());   //获取当时间
+        }
+
+        /**
          * 初始化时间 基础功能
          */
         public GT_Date() {
@@ -8561,17 +8592,17 @@ public class GT {
          * ***************日历工具的基础功能*******************
          */
 
-        private String time;        //定义返回的 时间整体字符串
-        private String[] times;     //定义分割后产生的 年月日 / 时分秒 数组
-        private String[] ymd;       //定义分割后产生的 年月日 数组
-        private String[] hms;       //定义分割后产生的 时分秒 数组
+        private static String time;        //定义返回的 时间整体字符串
+        private static String[] times;     //定义分割后产生的 年月日 / 时分秒 数组
+        private static String[] ymd;       //定义分割后产生的 年月日 数组
+        private static String[] hms;       //定义分割后产生的 时分秒 数组
 
         /**
          * 获取当前星期
          *
          * @return
          */
-        public String getWeekOfDateString() {
+        public static String getWeekOfDateString() {
             String[] weekDays = {"星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"};
             Calendar cal = Calendar.getInstance();
             cal.setTime(new Date());
@@ -8587,7 +8618,7 @@ public class GT {
          *
          * @return
          */
-        public int getWeekOfDateInt() {
+        public static int getWeekOfDateInt() {
             int[] weekDays = {0, 1, 2, 3, 4, 5, 6};
             Calendar cal = Calendar.getInstance();
             cal.setTime(new Date());
@@ -8597,15 +8628,6 @@ public class GT {
             return weekDays[w];
         }
 
-
-        /**
-         * 获取当前时间
-         *
-         * @return
-         */
-        public String getTime() {
-            return time;
-        }
 
         /**
          * 获取当前 年月日
@@ -12444,6 +12466,7 @@ public class GT {
 
         /**
          * 设置自定义的 Fragment 切换特效
+         *
          * @param enter
          * @param exit
          * @param popEnter
@@ -12520,7 +12543,7 @@ public class GT {
                     break;
                 default:
                     //其它
-                    if(cutEffectsIndex == -1){
+                    if (cutEffectsIndex == -1) {
                         transaction.setCustomAnimations(enter, exit, popEnter, popExit);//使用自定义的 Fragment 切换特效
                     }
                     break;
@@ -14577,18 +14600,20 @@ public class GT {
              * 1  淡入淡出
              * 2  左右滑出
              * 暂时仅支持该两种
+             *
              * @param cutIndex
              */
-            public void setActivityCutIndex(int cutIndex){
+            public void setActivityCutIndex(int cutIndex) {
                 this.cutIndex = cutIndex;
             }
 
             /**
              * 自定义 Activity 切换特效
+             *
              * @param startAnim
              * @param closeAnim
              */
-            public void setActivityCut(int startAnim,int closeAnim){
+            public void setActivityCut(int startAnim, int closeAnim) {
                 this.startAnim = startAnim;
                 this.closeAnim = closeAnim;
                 cutIndex = -1;
@@ -14681,7 +14706,7 @@ public class GT {
 
                 GT.startAct(activityClass);
                 //切换动画
-                switch (cutIndex){
+                switch (cutIndex) {
                     case 1:
                         //淡入淡出
                         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
@@ -14692,7 +14717,7 @@ public class GT {
                         break;
                     default:
                         //用户自定义
-                        if(cutIndex == -1 && startAnim != 0 && closeAnim != 0){
+                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
                             overridePendingTransition(startAnim, closeAnim);
                         }
                         break;
@@ -15024,7 +15049,7 @@ public class GT {
                 super.finish();
 
                 //切换动画
-                switch (cutIndex){
+                switch (cutIndex) {
                     case 1:
                         //淡入淡出
                         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
@@ -15035,7 +15060,7 @@ public class GT {
                         break;
                     default:
                         //用户自定义
-                        if(cutIndex == -1 && startAnim != 0 && closeAnim != 0){
+                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
                             overridePendingTransition(startAnim, closeAnim);
                         }
                         break;
@@ -19538,8 +19563,7 @@ public class GT {
     /**
      * 黑魔法类
      */
-    public static class DarknessMagic{
-
+    public static class DarknessMagic {
 
 
     }
