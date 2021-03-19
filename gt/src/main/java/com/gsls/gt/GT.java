@@ -210,7 +210,7 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.3.18
+ * 更新时间:2021.3.19
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p>
@@ -6265,7 +6265,7 @@ public class GT {
                         if (autoincrement) {//自动增长
                             if ("integer".equals(KeyType) || "LONG".equals(KeyType)) {
                                 tableSqlCode += field.getName() + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL";
-                            }else {
+                            } else {
                                 err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 不是int类型，暂不支持自增。");
                                 isCreateTable = false;
                                 return this;
@@ -8004,7 +8004,7 @@ public class GT {
         /**
          * get请求封装
          */
-        public static void getRequest(final String url, final Map<String, Object> params, final OnLoadData listener) {
+        public static void getRequest(final String url, final Map<String, Object> params, final GT.HttpUtil.OnLoadData listener) {
             if (url == null || listener == null) {
                 return;
             }
@@ -8031,11 +8031,11 @@ public class GT {
         /**
          * get请求封装
          */
-        public static void getRequest(final String url, final OnLoadData listener) {
+        public static void getRequest(final String url, final GT.HttpUtil.OnLoadData listener) {
             if (url == null || listener == null) {
                 return;
             }
-            Thread.runJava(new Runnable() { //为请求网络数据开启子线程
+            GT.Thread.runJava(new Runnable() { //为请求网络数据开启子线程
                 @Override
                 public void run() {
                     try {
@@ -8067,7 +8067,7 @@ public class GT {
         /**
          * POST请求
          */
-        public static void postRequest(final String url, final String params, final OnLoadData listener) {
+        public static void postRequest(final String url, final String params, final GT.HttpUtil.OnLoadData listener) {
 
             /**
              * 将 Map 中的参数解析成想要的 post 参数
@@ -8157,11 +8157,11 @@ public class GT {
 
         }
 
-        private static void onError(final OnLoadData listener, final Exception onError) {
+        private static void onError(final GT.HttpUtil.OnLoadData listener, final Exception onError) {
             listener.onError(onError.toString());
         }
 
-        private static void onSuccess(final OnLoadData listener, HttpURLConnection con) throws IOException {
+        private static void onSuccess(final GT.HttpUtil.OnLoadData listener, HttpURLConnection con) throws IOException {
             InputStream inputStream = con.getInputStream();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();//创建内存输出流
             int len;
@@ -8239,7 +8239,7 @@ public class GT {
             //支持获取手势焦点
             webView.requestFocusFromTouch();
 
-            loadAppHtml(context,webView,url,isCache,onLoadWebViewListener);
+            loadAppHtml(context, webView, url, isCache, onLoadWebViewListener);
 
             return webView;
 
@@ -8287,7 +8287,7 @@ public class GT {
             String cacheDirPath = context.getFilesDir().getAbsolutePath() + "cache/";
             webSettings.setDatabasePath(cacheDirPath);
 
-            if(isCache){
+            if (isCache) {
                 //使用缓存:
                 webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
                 webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);//没网，则从本地获取，即离线加载
@@ -8295,7 +8295,7 @@ public class GT {
                 webSettings.setDomStorageEnabled(true); // 开启 DOM storage API 功能
                 webSettings.setDatabaseEnabled(true);   //开启 database storage API 功能
                 webSettings.setAppCacheEnabled(true);//开启 Application Caches 功能
-            }else{
+            } else {
                 //不使用缓存:
                 webSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
             }
@@ -10410,7 +10410,7 @@ public class GT {
              */
             public static void downloadApp(final String appUrl, final String appSavePath, final String appSaveFileName, final OnDownloadListener listener) {
 
-                Thread.runJava(new Runnable() {
+                GT.Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         HttpURLConnection conn;
@@ -12215,6 +12215,8 @@ public class GT {
 
             Class<?> setClass() default Builds.class;//设置预先加载的Fragment
 
+            int setStartMode() default GT_Fragment.STANDARD;//启动模式默认为默认模式
+
         }
 
         private GT_Fragment() {
@@ -12465,6 +12467,7 @@ public class GT {
 
         /**
          * 设置自定义的 Fragment 切换特效
+         *
          * @param enter
          * @param exit
          * @param popEnter
@@ -12541,7 +12544,7 @@ public class GT {
                     break;
                 default:
                     //其它
-                    if(cutEffectsIndex == -1){
+                    if (cutEffectsIndex == -1) {
                         transaction.setCustomAnimations(enter, exit, popEnter, popExit);//使用自定义的 Fragment 切换特效
                     }
                     break;
@@ -12948,7 +12951,7 @@ public class GT {
          * @param <T>
          * @return
          */
-        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Class<T> fragmentClass, Bundle bundle) {
+        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Class<T> fragmentClass, Bundle bundle, int startModel) {
             if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -12956,7 +12959,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragmentClass);
+                gt_fragment.startMode(startModel).startFragment(fragmentClass);
                 gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
@@ -12970,7 +12973,7 @@ public class GT {
          * @param <T>
          * @return
          */
-        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Fragment fragment, Bundle bundle) {
+        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, Fragment fragment, Bundle bundle, int startModel) {
             if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.fragmentManager = fragmentActivity.getSupportFragmentManager();
@@ -12978,7 +12981,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(fragment);
+                gt_fragment.startMode(startModel).startFragment(fragment);
                 gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
@@ -13009,7 +13012,7 @@ public class GT {
          * @param <T>
          * @return
          */
-        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Class<T> fragmentClass, Bundle bundle) {
+        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Class<T> fragmentClass, Bundle bundle, int startModel) {
             if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
@@ -13018,7 +13021,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragmentClass);
+                gt_fragment.startMode(startModel).startFragment(homeFragmentId, fragmentClass);
                 gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
@@ -13032,7 +13035,7 @@ public class GT {
          * @param <T>
          * @return
          */
-        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Fragment fragment, Bundle bundle) {
+        public static <T> GT_Fragment Build(FragmentActivity fragmentActivity, int homeFragmentId, Fragment fragment, Bundle bundle, int startModel) {
             if (bundle == null || GT_Fragment.fragmentManager == null) {
                 topFragmentName = "";//置空
                 GT_Fragment.homeFragmentId = homeFragmentId;
@@ -13041,7 +13044,7 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(GT_Fragment.HOME).startFragment(homeFragmentId, fragment);
+                gt_fragment.startMode(startModel).startFragment(homeFragmentId, fragment);
                 gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
@@ -13368,7 +13371,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
             }
 
             if (fragmentManager != null) {
@@ -13389,7 +13392,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
             }
 
             if (fragmentManager != null) {
@@ -13417,7 +13420,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
             }
 
             if (fragmentManager != null) {
@@ -13438,7 +13441,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
             }
 
             if (fragmentManager != null) {
@@ -13693,17 +13696,77 @@ public class GT {
                 }
             }
 
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragment(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragment(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
+
+
+            /**
+             * 跳转Fragment
+             *
+             * @param toFragment 跳转的Fragment
+             * @param startMode  跳转该Fragment的启动模式
+             */
+            protected void startFragment(Fragment toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment 跳转的Fragment
+             * @param startMode  跳转该Fragment的启动模式
+             */
+            protected void startFragment(Class<?> toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+                }
+            }
+
+            /**
+             * 跳转的Fragment
+             *
+             * @param fragmentId 跳转的容器
+             * @param toFragment 跳转的Fragment
+             * @param startMode  跳转该Fragment的启动模式
+             */
+            protected void startFragment(int fragmentId, Fragment toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * @param fragmentId 跳转的容器
+             * @param toFragment 跳转的Fragment
+             * @param startMode  跳转该Fragment的启动模式
+             */
+            protected void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+                }
+            }
+
 
             /**
              * @param toFragment
@@ -13753,7 +13816,7 @@ public class GT {
                     view = inflater.inflate(loadLayout(), container, false);
                 }
                 // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
-                GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
+                GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
                     @Override
                     public boolean onKey(View v, int keyCode, KeyEvent event) {
                         if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
@@ -14021,7 +14084,7 @@ public class GT {
                 }
 
                 // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
-                GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
+                GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
                     @Override
                     public boolean onKey(View v, int keyCode, KeyEvent event) {
                         if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
@@ -14150,7 +14213,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
                         }
                     }
                 }
@@ -14187,7 +14250,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
                         }
                     }
                 }
@@ -14223,7 +14286,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
                         }
                     }
                 }
@@ -14260,7 +14323,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
                         }
                     }
                 }
@@ -14598,18 +14661,20 @@ public class GT {
              * 1  淡入淡出
              * 2  左右滑出
              * 暂时仅支持该两种
+             *
              * @param cutIndex
              */
-            public void setActivityCutIndex(int cutIndex){
+            public void setActivityCutIndex(int cutIndex) {
                 this.cutIndex = cutIndex;
             }
 
             /**
              * 自定义 Activity 切换特效
+             *
              * @param startAnim
              * @param closeAnim
              */
-            public void setActivityCut(int startAnim,int closeAnim){
+            public void setActivityCut(int startAnim, int closeAnim) {
                 this.startAnim = startAnim;
                 this.closeAnim = closeAnim;
                 cutIndex = -1;
@@ -14685,7 +14750,7 @@ public class GT {
                     fragment = (DialogFragment) dialogFragmentClass.newInstance();
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();
-                } catch (InstantiationException e) {
+                } catch (java.lang.InstantiationException e) {
                     e.printStackTrace();
                 }
 
@@ -14702,7 +14767,7 @@ public class GT {
 
                 GT.startAct(activityClass);
                 //切换动画
-                switch (cutIndex){
+                switch (cutIndex) {
                     case 1:
                         //淡入淡出
                         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
@@ -14713,7 +14778,7 @@ public class GT {
                         break;
                     default:
                         //用户自定义
-                        if(cutIndex == -1 && startAnim != 0 && closeAnim != 0){
+                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
                             overridePendingTransition(startAnim, closeAnim);
                         }
                         break;
@@ -14742,17 +14807,81 @@ public class GT {
                 }
             }
 
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragment(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragment(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
+
+
+            /**
+             * 跳转Fragment
+             *
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(Fragment toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(Class<?> toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId 跳转的容器
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(int fragmentId, Fragment toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId 跳转的容器
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+                }
+            }
+
 
             /**
              * @param toFragment
@@ -14789,7 +14918,7 @@ public class GT {
             }
 
             protected GT_Fragment getGT_Fragment() {
-                return GT_Fragment.gt_fragment;
+                return GT.GT_Fragment.gt_fragment;
             }
 
             /**
@@ -15045,7 +15174,7 @@ public class GT {
                 super.finish();
 
                 //切换动画
-                switch (cutIndex){
+                switch (cutIndex) {
                     case 1:
                         //淡入淡出
                         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
@@ -15056,7 +15185,7 @@ public class GT {
                         break;
                     default:
                         //用户自定义
-                        if(cutIndex == -1 && startAnim != 0 && closeAnim != 0){
+                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
                             overridePendingTransition(startAnim, closeAnim);
                         }
                         break;
@@ -17929,7 +18058,7 @@ public class GT {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
                     Activity activity = getGT().getActivity();
                     if (activity != null) {
-                        GT_Fragment.gt_fragment = GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
+                        GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
                     }
 
                     classObject = GT_Fragment.gt_fragment;
@@ -17955,6 +18084,7 @@ public class GT {
                         //获取注解的值
                         int layoutHome = initView_GT_Fragments.setLayoutHome();
                         int layoutMain = initView_GT_Fragments.setLayoutMain();
+                        int startMode = initView_GT_Fragments.setStartMode();
 
                         //如果主界面为 null
                         if (layoutHome == 0) {
@@ -17963,13 +18093,13 @@ public class GT {
 
                         Class<?> aClass = initView_GT_Fragments.setClass();
                         if (layoutHome != 0 && aClass != GT_Fragment.Builds.class) {
-                            GT_Fragment.gt_fragment = GT_Fragment.Build((FragmentActivity) activity, layoutHome, aClass, activity.getIntent().getExtras());
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, aClass, activity.getIntent().getExtras(), startMode);
                         } else if (layoutHome != 0) {
-                            GT_Fragment.gt_fragment = GT_Fragment.Build((FragmentActivity) activity, layoutHome, activity.getIntent().getExtras());
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, activity.getIntent().getExtras());
                         } else if (aClass != GT_Fragment.Builds.class) {
-                            GT_Fragment.gt_fragment = GT_Fragment.Build((FragmentActivity) activity, aClass, activity.getIntent().getExtras());
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, aClass, activity.getIntent().getExtras(), startMode);
                         } else {
-                            GT_Fragment.gt_fragment = GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
+                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
                         }
 
                         //设置
@@ -18893,7 +19023,7 @@ public class GT {
 
     }
 
-    //GT 包官网：https://github.com/1079374315/GT
+//GT 包官网：https://github.com/1079374315/GT
 
     // 定义 GT 包 简易使用教程
     public interface CMD {
@@ -19559,13 +19689,11 @@ public class GT {
     /**
      * 黑魔法类
      */
-    public static class DarknessMagic{
-
+    public static class DarknessMagic {
 
 
     }
 
 }
-
 
 
