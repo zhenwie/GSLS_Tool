@@ -1,5 +1,7 @@
 package com.gsls.gtlibrary.activity;
 
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 
 import com.gsls.gtlibrary.R;
@@ -12,6 +14,13 @@ public class AndroidActivity extends GT.GT_Activity.AnnotationActivity {
     protected void initView(Bundle savedInstanceState) {
         build(this);
 
+
     }
 
+    @Override
+    protected void updateUi(Context context, Intent intent) {
+        super.updateUi(context, intent);
+
+
+    }
 }

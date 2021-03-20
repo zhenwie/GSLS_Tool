@@ -211,12 +211,10 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.3.19
+ * 更新时间:2021.3.20
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * <p>
- * <p>
- * 更新内容：（1.3.0 版本 大更新，工具类史诗级加强！）
+ * 更新内容：（1.3.0.1 版本 大更新，工具类史诗级加强！）
  * 1.重大更新内容：
  * (1).新增 SaveObject 类，采用序列化进行传递 Object(GT_Fragment|GT_Animation|Hibernate|GT_SharedPreferences|AppDataPool|均自动实现序列化)
  * (2).更新 JSON 类，史诗级增强，JSON 与 Bean 互转，还有许多其他功能方法待你探索（无需依赖gson库）
@@ -232,6 +230,11 @@ import static android.content.Context.POWER_SERVICE;
  * (4).增加Activity 启动 Fragment 或 DialogFragment 销毁后反馈给Activity 数据的操作，增加 Fragment 启动 DialogFragment 销毁反馈给Fragment 数据的操作
  * (5).UpdateApp App更新类优化,在下载时实时监听进度
  * (6).startActivity 、 startFragment 新增 切换动画，有内置动画，也可自定义动画,设置后会一直有效无需二次设置
+ * (7).基类 BaseActivity、BaseFragment、BaseDialogFragments，增加更新UI广播 updateUi(), 与 发送更新UI广播的方法 sendUpdateUiBroadcast()
+ * <p>
+ * 3.bug优化
+ * (1). 将GT库 minSdkVersion 调回 minSdkVersion = 16;
+ *
  *
  *
  *
@@ -3620,14 +3623,19 @@ public class GT {
          *
          * @param table
          * @param sqLiteDatabase
-         * @return
+         * @return 返回当前表数据总条数，如果当前表不存在则返回-1
          */
-        public long queryTableDataCount(String table, SQLiteDatabase sqLiteDatabase) {
-            if (sqLiteDatabase == null || table == null) return 0;
-            Cursor cursor = sqLiteDatabase.rawQuery("select count(2) from " + table, null);
-            cursor.moveToFirst();
-            long count = cursor.getLong(0);
-            cursor.close();
+        public long queryTableDataCount(String table) {
+            if (sqLiteDatabase2 == null || table == null) return -1;
+            long count = 0;
+            if (isTable(table)) {
+                Cursor cursor = sqLiteDatabase2.rawQuery("select count(2) from " + table, null);
+                cursor.moveToFirst();
+                count = cursor.getLong(0);
+                cursor.close();
+            } else {
+                count = -1;
+            }
             return count;
         }
 
@@ -3636,14 +3644,21 @@ public class GT {
          *
          * @param tableClass
          * @param sqLiteDatabase
-         * @return
+         * @return 返回当前表数据总条数，如果当前表不存在则返回-1
          */
-        public long queryTableDataCount(Class<?> tableClass, SQLiteDatabase sqLiteDatabase) {
-            if (sqLiteDatabase == null || tableClass == null) return 0;
-            Cursor cursor = sqLiteDatabase.rawQuery("select count(2) from " + tableClass.getSimpleName(), null);
-            cursor.moveToFirst();
-            long count = cursor.getLong(0);
-            cursor.close();
+        public long queryTableDataCount(Class<?> tableClass) {
+            if (sqLiteDatabase2 == null || tableClass == null) return -1;
+            long count = 0;
+            String tableName = tableClass.getSimpleName();
+            if (isTable(tableName)) {
+                Cursor cursor = sqLiteDatabase2.rawQuery("select count(2) from " + tableName, null);
+                cursor.moveToFirst();
+                count = cursor.getLong(0);
+                cursor.close();
+            } else {
+                count = -1;
+            }
+
             return count;
         }
 
@@ -13564,6 +13579,7 @@ public class GT {
                 if (activity == null) {
                     activity = GT_Fragment.gt_fragment.getActivity();
                 }
+
             }
 
             /**
@@ -13829,6 +13845,16 @@ public class GT {
                 this.gt_fragment = GT_Fragment.gt_fragment;
                 initBaseFragment(view);// 解决 在 add 的情况下 透明背景与点击穿透的问题
                 createView(view);
+
+                //注册广播
+                if (isRegisterBroadcastAction() && activity != null) {
+                    uiReceiver = new UiReceiver();
+                    //实例化过滤器并设置要过滤的广播
+                    IntentFilter intentFilter = new IntentFilter();
+                    intentFilter.addAction(getClass().getName());
+                    activity.registerReceiver(uiReceiver, intentFilter); //注册广播
+                }
+
                 return view;
             }
 
@@ -14057,6 +14083,73 @@ public class GT {
 
             }
 
+            //更新UI广播
+            private UiReceiver uiReceiver;//定义一个刷新UI的广播
+
+            //是否注册广播
+            protected boolean isRegisterBroadcastAction() {
+                return true;//默认是注册的
+            }
+
+            /**
+             * 通过广播更新UI
+             *
+             * @param context
+             * @param intent
+             */
+            protected void updateUi(Context context, Intent intent) {
+            }
+
+            /**
+             * 发送更新UI广播
+             *
+             * @param intent
+             */
+            protected void sendUpdateUiBroadcast(Intent intent) {
+
+                if (intent == null) {
+                    return;
+                }
+
+                if (activity == null && gt_fragment != null) {
+                    activity = gt_fragment.getActivity();
+                }
+
+                if (activity != null) {
+                    activity.sendBroadcast(intent);
+                }
+            }
+
+            /**
+             * 发送更新UI广播
+             *
+             * @param context
+             * @param intent
+             */
+            protected void sendUpdateUiBroadcast(Context context, Intent intent) {
+                if (context != null && intent != null) {
+                    context.sendBroadcast(intent);
+                }
+            }
+
+            /**
+             * 定义一个接收到消息后刷新UI的内部类广播
+             */
+            private class UiReceiver extends BroadcastReceiver {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    updateUi(context, intent);//刷新UI
+                }
+
+            }
+
+            @Override
+            public void onDestroy() {
+                if (uiReceiver != null && activity != null)
+                    activity.unregisterReceiver(uiReceiver); //注销广播
+                super.onDestroy();
+            }
+
         }
 
         /**
@@ -14116,7 +14209,7 @@ public class GT {
         /**
          * 用于辅助 DialogFragment
          */
-        public abstract static class BaseDialogFragments extends DialogFragment {
+        public abstract static class BaseDialogFragment extends DialogFragment {
 
             protected Activity activity;
             protected GT_Fragment gt_fragment;
@@ -14452,6 +14545,16 @@ public class GT {
                     }
                 });
                 this.gt_fragment = GT_Fragment.gt_fragment;
+
+                //注册广播
+                if (isRegisterBroadcastAction() && activity != null) {
+                    uiReceiver = new UiReceiver();
+                    //实例化过滤器并设置要过滤的广播
+                    IntentFilter intentFilter = new IntentFilter();
+                    intentFilter.addAction(getClass().getName());
+                    activity.registerReceiver(uiReceiver, intentFilter); //注册广播
+                }
+
             }
 
             /**
@@ -14576,12 +14679,80 @@ public class GT {
                 GT.toast_time(object, time);
             }
 
+
+            //更新UI广播
+            private UiReceiver uiReceiver;//定义一个刷新UI的广播
+
+            //是否注册广播
+            protected boolean isRegisterBroadcastAction() {
+                return true;//默认是注册的
+            }
+
+            /**
+             * 通过广播更新UI
+             *
+             * @param context
+             * @param intent
+             */
+            protected void updateUi(Context context, Intent intent) {
+            }
+
+            /**
+             * 发送更新UI广播
+             *
+             * @param intent
+             */
+            protected void sendUpdateUiBroadcast(Intent intent) {
+
+                if (intent == null) {
+                    return;
+                }
+
+                if (activity == null && gt_fragment != null) {
+                    activity = gt_fragment.getActivity();
+                }
+
+                if (activity != null) {
+                    activity.sendBroadcast(intent);
+                }
+            }
+
+            /**
+             * 发送更新UI广播
+             *
+             * @param context
+             * @param intent
+             */
+            protected void sendUpdateUiBroadcast(Context context, Intent intent) {
+                if (context != null && intent != null) {
+                    context.sendBroadcast(intent);
+                }
+            }
+
+            /**
+             * 定义一个接收到消息后刷新UI的内部类广播
+             */
+            private class UiReceiver extends BroadcastReceiver {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    updateUi(context, intent);//刷新UI
+                }
+
+            }
+
+            @Override
+            public void onDestroy() {
+                if (uiReceiver != null && activity != null)
+                    activity.unregisterReceiver(uiReceiver); //注销广播
+                super.onDestroy();
+            }
+
         }
 
         /**
          * 用于辅助 DialogFragment
          */
-        public abstract static class AnnotationDialogFragment extends BaseDialogFragments {
+        public abstract static class AnnotationDialogFragment extends BaseDialogFragment {
             // 布局ID
             private int resLayout;
 
@@ -14718,6 +14889,15 @@ public class GT {
                     setContentView(loadLayout);// 加载布局
                     initView(savedInstanceState);// 初始化 UI
                     loadData();// 功能方法
+                }
+
+                //注册广播
+                if (isRegisterBroadcastAction()) {
+                    uiReceiver = new UiReceiver();
+                    //实例化过滤器并设置要过滤的广播
+                    IntentFilter intentFilter = new IntentFilter();
+                    intentFilter.addAction(getClass().getName());
+                    registerReceiver(uiReceiver, intentFilter); //注册广播
                 }
 
             }
@@ -15194,6 +15374,43 @@ public class GT {
 
 
             }
+
+
+            //更新UI广播
+            private UiReceiver uiReceiver;//定义一个刷新UI的广播
+
+            //是否注册广播
+            protected boolean isRegisterBroadcastAction() {
+                return true;//默认是注册的
+            }
+
+            /**
+             * 通过广播更新UI
+             *
+             * @param context
+             * @param intent
+             */
+            protected void updateUi(Context context, Intent intent) {
+            }
+
+            /**
+             * 定义一个接收到消息后刷新UI的内部类广播
+             */
+            private class UiReceiver extends BroadcastReceiver {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    updateUi(context, intent);//刷新UI
+                }
+
+            }
+
+            @Override
+            public void onDestroy() {
+                if (uiReceiver != null)
+                    unregisterReceiver(uiReceiver); //注销广播
+                super.onDestroy();
+            }
+
         }
 
         /**
@@ -17365,7 +17582,6 @@ public class GT {
                     }
 
                 }
-
 
             }
         }
