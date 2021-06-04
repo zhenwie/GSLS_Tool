@@ -6,6 +6,7 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.Notification;
@@ -13,6 +14,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.ProgressDialog;
+import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -36,6 +38,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
@@ -60,18 +63,19 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.telephony.TelephonyManager;
+import android.text.Html;
 import android.text.TextUtils;
-import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.util.Base64;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -96,6 +100,8 @@ import android.webkit.WebViewClient;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -112,8 +118,9 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
-import com.blankj.utilcode.util.Utils;
 import com.gsls.gtlibrary.R;
 import com.lzy.okgo.callback.StringCallback;
 
@@ -211,29 +218,29 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.3.20
- * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/98891256
+ * 更新时间:2021.6.5
+ * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/category_9956339.html
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * 更新内容：（1.3.0.1 版本 大更新，工具类史诗级加强！）
+ * <p> GitHub https://github.com/1079374315/GT
+ * 更新内容：（1.3.0.2 版本）
  * 1.重大更新内容：
- * (1).新增 SaveObject 类，采用序列化进行传递 Object(GT_Fragment|GT_Animation|Hibernate|GT_SharedPreferences|AppDataPool|均自动实现序列化)
- * (2).更新 JSON 类，史诗级增强，JSON 与 Bean 互转，还有许多其他功能方法待你探索（无需依赖gson库）
- * (3).Hibernate 类 史诗级增强，支持较为复杂的关系映射(意味着可以在表里定义实体类)
- * (4).GT_File 类 更名为 FileUtils 类, 史诗级增强, 增多许多实用性功能(轻轻松松自定义文件系统)
- * (5).新增 WebViewUtils 工具类，新增 loadPCHtml(加载PC网页) 、 loadAppHtml(加载App网页) 功能 在加载网页时，实时监听进度
- * (6).新增 ProgressDialogUtils 类 初始化简易的加载进度条。
+ * (1).Hibernate 类的更新
+ * 1).Hibernate 数据库支持映射 “数组参数”、“多重继承关系”
+ * 2).新增初始化 Hibernate的方式，可在Application中进行初始化操作：GT.Hibernate.initialize(); 与 GT.Hibernate.getHibernate(); 获取
+ * 3).新增聚合函数：count(求次数)、sum(求总和)、max(求最大值)、min(求最小值)、average(求平均数)，后续待添加新的...
+ * 4).修改了增删查改的方式，优化增删查改的效率，增加了 saveAll() 保存数据方法，当前测试效率：存储10万条数据，09:07:53.199——09:07:59.646 耗时6秒多，具体详情还请参考方法说明
+ * 5).
+ * 6).
+ * 7).
+ * (2).新增悬浮窗封装类 GT_FloatingWindow 用于与 GT_Fragment 类似，具体使用教程请参考官网
+ * (3).新增 GT.GT_Adapters.BaseAdapter 基类
  * <p>
- * 2.小更新与优化:
- * (1).增加 APP 错误日志捕获方法：GT.LOG.initAppErrLogTry(this);(如果想打印到本地，请打开本地打印：GT.LOG.LOG_FILE_TF = true;)
- * (2).新增 GT_Fragment 构建注解（具体教程请参考官网教程）
- * (3).GT_Fragment 新增 DIALOG 切换方式 如：gt_fragment.switchingMode(GT.GT_Fragment.DIALOG); 让切换的Fragment 进行 hide / show 操作
- * (4).增加Activity 启动 Fragment 或 DialogFragment 销毁后反馈给Activity 数据的操作，增加 Fragment 启动 DialogFragment 销毁反馈给Fragment 数据的操作
- * (5).UpdateApp App更新类优化,在下载时实时监听进度
- * (6).startActivity 、 startFragment 新增 切换动画，有内置动画，也可自定义动画,设置后会一直有效无需二次设置
- * (7).基类 BaseActivity、BaseFragment、BaseDialogFragments，增加更新UI广播 updateUi(), 与 发送更新UI广播的方法 sendUpdateUiBroadcast()
- * <p>
- * 3.bug优化
- * (1). 将GT库 minSdkVersion 调回 minSdkVersion = 16;
+ * 2.新版本的优化
+ * (1).去掉所有基类自带的 log() toast() err() 类似等方法(不方便维护，故此版本去掉)
+ * (2).修复 GT_Fragment 使用发送UI广播时无法接收的问题，优化了使用 Dialog方式启动Fragment时出现的切换问题。
+ * 注意：在使用 Dialog 方式切换时，会默认将Fragment加入回退栈
+ * (3).修复 Fragment 与 DialogFragment 当焦点在EditText 时无法监听到返回事件
+ * (4).将 DialogFragment 与 GT_AlertDialog 移植到 GT_Dialog类进行统一管理
  *
  *
  *
@@ -253,10 +260,8 @@ public class GT {
 
     //================================== 所有属于 GT 类的属性 =======================================
     private static GT gtAndroid = null;          //定义 GT 对象
-    private static boolean isGTUtil = false;      //默认不加载 Util 类
     private static Toast toast;                  //吐司缓冲
-    private Activity activity;                     //设置 当前动态的 上下文对象
-    private static int logMaxLength = 3900;      //日志打印最大长度 默认是 3900 可修改
+    private Context activity;                     //设置 当前动态的 上下文对象
     //================================== 提供访问 GT 属性的接口======================================
 
     private GT() {
@@ -283,7 +288,7 @@ public class GT {
      *
      * @return
      */
-    public Activity getActivity() {
+    public Context getActivity() {
         return activity;
     }
 
@@ -293,7 +298,7 @@ public class GT {
      * @param activity
      * @Activity 为外部提供访问 GT Context 接口
      */
-    public void build(Activity activity) {
+    public void build(Context activity) {
         this.activity = activity;
         initGTUtilActivity();//初始化 GT 必要的工具
     }
@@ -314,63 +319,23 @@ public class GT {
      * @param view
      * @初始化必要工具 为外部提供访问 GT Context 接口
      */
-    public void build(Activity activity, Object object, View view) {
-        this.activity = activity;
+    public void build(Context context, Object object, View view) {
+        this.activity = context;
         initGTUtilFragment(object, view);//初始化 GT 必要的工具
-    }
-
-    public int getLogMaxLength() {
-        return logMaxLength;
-    }
-
-    public void setLogMaxLength(int logMaxLength) {
-        this.logMaxLength = logMaxLength;
     }
 
     //============================================= 加载 GT 必要的工具 =============================
 
-    /**
-     * 返回当前 是否加载注解
-     *
-     * @return
-     */
-    public boolean isAnnotation() {
-        return isGTUtil;
-    }
-
-    /**
-     * 设置是否初始化 GT 必要初始化的工具包
-     *
-     * @param isGTUtil
-     */
-    public static void setIsGTUtil(boolean isGTUtil) {
-        GT.isGTUtil = isGTUtil;
-    }
-
     //初始化 GT 必要的工具 主要用于  Activity 的页面
     private void initGTUtilActivity() {
-
         //GT 包内部默认加载的工具包
         AnnotationAssist.initAll((Activity) activity); //初始化 IOC 注解
-
-        //是否加载注解
-        if (isGTUtil) {//默认是加载的
-            Utils.init(activity);//初始化强大的 Utiles 工具
-        }
-
-
     }
 
     //初始化 GT 必要的工具  主要用于 非 Activity 的页面 如：Fragment、DialogFragment 等页面
     private void initGTUtilFragment(Object object, View view) {
         //GT 包内部默认加载的工具包
         AnnotationAssist.initAll(object, view); //初始化 IOC 注解
-
-        //是否加载注解
-        if (isGTUtil) {//默认不加载的
-            Utils.init(activity);//初始化 Utiles 工具
-        }
-
     }
 
     /**
@@ -392,7 +357,239 @@ public class GT {
         return "提示的文件  " + ste.getFileName() + "  行号 " + ste.getLineNumber();
     }
 
-    //============================================= 日志类 =========================================
+    //============================================= 调试功能 =========================================
+
+    /**
+     * 提示消息 Log
+     *
+     * @param msg object 类型的消息
+     */
+    public static void log(Object msg) {
+        if (LOG.LOG_TF) {
+            Log.i(LOG.LOG_TAG + "i", "------- " + msg);
+        }
+    }
+
+    /**
+     * @param mg
+     * @详细提示消息
+     */
+    public static void logs(Object mg) {
+        if (LOG.LOG_TF) {
+            String prefix = "";
+            prefix = LOG.getPrefix(LOG.lineInfoIndex);
+            log(prefix + mg);
+            if (LOG.LOG_FILE_TF) {// 打印到sd卡
+                if (TextUtils.isEmpty(prefix)) {
+                    prefix = LOG.getPrefix(LOG.lineInfoIndex);
+                }
+                LOG.writeToSdCard(LOG.path, prefix, mg);
+            }
+        }
+    }
+
+    /**
+     * 打印所有提示消息 Log
+     *
+     * @param msg object 类型的消息
+     */
+    public static void logAll(Object msg) {
+        if (LOG.LOG_TF) {
+
+            String strMsg = msg.toString();
+
+            if (strMsg.length() > LOG.logMaxLength) {
+                while (true) {
+                    String substring = strMsg.substring(0, LOG.logMaxLength);
+                    Log.i(LOG.LOG_TAG + "i", "------- " + substring);
+                    strMsg = strMsg.substring(LOG.logMaxLength);
+                    if (strMsg.length() <= LOG.logMaxLength) {
+                        Log.i(LOG.LOG_TAG + "i", strMsg);
+                        break;
+                    }
+                }
+            } else {
+                Log.i(LOG.LOG_TAG + "i", "------- " + msg);
+            }
+        }
+    }
+
+    /**
+     * 提示消息 Log
+     *
+     * @param msg object 类型的消息
+     */
+    public static void err(Object msg) {
+        if (LOG.LOG_TF) {
+            Log.e(LOG.LOG_TAG + "e", "------- " + msg);
+        }
+    }
+
+    /**
+     * @param mg
+     * @详细提示消息
+     */
+    public static void errs(Object mg) {
+        if (LOG.LOG_TF) {
+            String prefix = "";
+            prefix = LOG.getPrefix(LOG.lineInfoIndex);
+            err(prefix + mg);
+            if (LOG.LOG_FILE_TF) {// 打印到sd卡
+                if (TextUtils.isEmpty(prefix)) {
+                    prefix = LOG.getPrefix(LOG.lineInfoIndex);
+                }
+                LOG.writeToSdCard(LOG.path, prefix, mg);
+            }
+        }
+    }
+
+
+    /**
+     * 打印所有提示消息 Log
+     *
+     * @param msg object 类型的消息
+     */
+    public static void errAll(Object msg) {
+        if (LOG.LOG_TF) {
+            String strMsg = msg.toString();
+            if (strMsg.length() > LOG.logMaxLength) {
+                while (true) {
+                    String substring = strMsg.substring(0, LOG.logMaxLength);
+                    Log.e(LOG.LOG_TAG + "i", "------- " + substring);
+                    strMsg = strMsg.substring(LOG.logMaxLength);
+                    if (strMsg.length() <= LOG.logMaxLength) {
+                        Log.e(LOG.LOG_TAG + "i", strMsg);
+                        break;
+                    }
+                }
+            } else {
+                Log.e(LOG.LOG_TAG + "i", "------- " + msg);
+            }
+        }
+    }
+
+    /**
+     * 提示消息 Log
+     *
+     * @param title 日志标题
+     * @param msg   日志消息
+     */
+    public static void log(Object title, Object msg) {
+        if (LOG.LOG_TF) {
+            Log.i(LOG.LOG_TAG + "i",
+                    "------- Run" +
+                            "\n\n---------------------" + title + "------------------------\n" +
+                            "                   " + msg + "\n" +
+                            "---------------------" + title + "-----------------------\n\n" +
+                            "------- Close"
+            );
+        }
+
+    }
+
+    /**
+     * 打印所有提示消息 Log
+     *
+     * @param msg object 类型的消息
+     */
+    public static void logAll(Object title, Object msg) {
+        if (LOG.LOG_TF) {
+
+            Log.i(LOG.LOG_TAG + "i", "Run --------- " + title + " ---------");
+            String strMsg = msg.toString();
+            if (strMsg.length() > LOG.logMaxLength) {
+                while (true) {
+                    String substring = strMsg.substring(0, LOG.logMaxLength);
+                    Log.i(LOG.LOG_TAG + "i", "------- " + substring);
+                    strMsg = strMsg.substring(LOG.logMaxLength);
+                    if (strMsg.length() <= LOG.logMaxLength) {
+                        Log.i(LOG.LOG_TAG + "i", strMsg);
+                        break;
+                    }
+                }
+            } else {
+                Log.i(LOG.LOG_TAG + "i", "------- " + msg);
+            }
+
+            Log.i(LOG.LOG_TAG + "i", "--------- " + title + " --------- Close");
+
+        }
+    }
+
+    /**
+     * 提示消息 Log
+     *
+     * @param title 日志标题
+     * @param msg   日志消息
+     */
+    public static void err(Object title, Object msg) {
+        if (LOG.LOG_TF) {
+            Log.e(LOG.LOG_TAG + "e",
+                    "------- Run" +
+                            "\n\n---------------------" + title + "------------------------\n" +
+                            "                   " + msg + "\n" +
+                            "---------------------" + title + "-----------------------\n\n" +
+                            "------- Close"
+            );
+        }
+
+    }
+
+    /**
+     * 打印所有提示消息 Log
+     *
+     * @param msg object 类型的消息
+     */
+    public static void errAll(Object title, Object msg) {
+        if (LOG.LOG_TF) {
+
+            Log.e(LOG.LOG_TAG + "i", "Run --------- " + title + " ---------");
+            String strMsg = msg.toString();
+            if (strMsg.length() > LOG.logMaxLength) {
+                while (true) {
+                    String substring = strMsg.substring(0, LOG.logMaxLength);
+                    Log.e(LOG.LOG_TAG + "i", "------- " + substring);
+                    strMsg = strMsg.substring(LOG.logMaxLength);
+                    if (strMsg.length() <= LOG.logMaxLength) {
+                        Log.e(LOG.LOG_TAG + "i", strMsg);
+                        break;
+                    }
+                }
+            } else {
+                Log.e(LOG.LOG_TAG + "i", "------- " + msg);
+            }
+
+            Log.e(LOG.LOG_TAG + "i", "--------- " + title + " --------- Close");
+
+        }
+    }
+
+    /**
+     * @param obj
+     * @异常打印方法
+     */
+    public static void exception(Object tag) {
+        try {
+            throw new Exception(tag.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 抛异常，第几层
+     *
+     * @param tag
+     * @param number
+     */
+    public static void exception(Object tag, int number) {
+        try {
+            throw new Exception(tag.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+            GT.log(getLineInfo(number), "e:" + e);
+        }
+    }
 
     /**
      * @用于打详细日志的 LOG 框架
@@ -415,7 +612,16 @@ public class GT {
         public static boolean LOG_FILE_TF = false;  //控制是否打日志到本地(注意：打开比较耗内存资源，该功能仅用于测试，在上线时请关闭它)
         public static boolean GT_LOG_TF = false;    //控制内部所有的 Log 显示
         public static String LOG_TAG = "GT_";       //控制日志 TAG 值
-        public static int tier = 5;                 //控制日志截取第几层的信息
+        public static int logMaxLength = 3900;      //日志打印最大长度 默认是 3900 可修改
+        private static int lineInfoIndex = 5;        //日志当前属于的层数,默认是5级返回层级
+
+        public static int getLineInfoIndex() {
+            return lineInfoIndex;
+        }
+
+        public static void setLineInfoIndex(int lineInfoIndex) {
+            LOG.lineInfoIndex = lineInfoIndex;
+        }
 
         public static String getLogFilePath() {
             return logFilePath;
@@ -487,14 +693,6 @@ public class GT {
 
         public static void setLogTag(String logTag) {
             LOG_TAG = logTag;
-        }
-
-        public static int getTier() {
-            return tier;
-        }
-
-        public static void setTier(int tier) {
-            LOG.tier = tier;
         }
 
         public static String getPrintFileName() {
@@ -594,7 +792,6 @@ public class GT {
             AppErrLog.getInstance().init(activity);//初始化
         }
 
-
     }
 
     /**
@@ -686,237 +883,17 @@ public class GT {
     }
 
     /**
-     * 提示消息 Log
-     *
-     * @param msg object 类型的消息
+     * 调试显示类
+     * 1.支持 Log 可视化
+     * 2.Fragment 栈的可视化
+     * 3.Hibernate 数据表的可视化
      */
-    public static void log(Object msg) {
-        if (LOG.LOG_TF) {
-            Log.i(LOG.LOG_TAG + "i", "------- " + msg);
-        }
-    }
+    public static class DebugShow {
 
-    /**
-     * @param mg
-     * @详细提示消息
-     */
-    public static void logs(Object mg) {
-        if (LOG.LOG_TF) {
-            String prefix = "";
-            prefix = LOG.getPrefix(LOG.tier);
-            log(prefix + mg);
-            if (LOG.LOG_FILE_TF) {// 打印到sd卡
-                if (TextUtils.isEmpty(prefix)) {
-                    prefix = LOG.getPrefix(LOG.tier);
-                }
-                LOG.writeToSdCard(LOG.path, prefix, mg);
-            }
-        }
-    }
+        public static boolean isStartDebugShow = false;//默认不开起调试显示模式
 
-    /**
-     * 打印所有提示消息 Log
-     *
-     * @param msg object 类型的消息
-     */
-    public static void logAll(Object msg) {
-        if (LOG.LOG_TF) {
-
-            String strMsg = msg.toString();
-
-            if (strMsg.length() > logMaxLength) {
-                while (true) {
-                    String substring = strMsg.substring(0, logMaxLength);
-                    Log.i(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(logMaxLength);
-                    if (strMsg.length() <= logMaxLength) {
-                        Log.i(LOG.LOG_TAG + "i", strMsg);
-                        break;
-                    }
-                }
-            } else {
-                Log.i(LOG.LOG_TAG + "i", "------- " + msg);
-            }
-        }
-    }
-
-    /**
-     * 提示消息 Log
-     *
-     * @param msg object 类型的消息
-     */
-    public static void err(Object msg) {
-        if (LOG.LOG_TF) {
-            Log.e(LOG.LOG_TAG + "e", "------- " + msg);
-        }
-    }
-
-    /**
-     * @param mg
-     * @详细提示消息
-     */
-    public static void errs(Object mg) {
-        if (LOG.LOG_TF) {
-            String prefix = "";
-            prefix = LOG.getPrefix(LOG.tier);
-            err(prefix + mg);
-            if (LOG.LOG_FILE_TF) {// 打印到sd卡
-                if (TextUtils.isEmpty(prefix)) {
-                    prefix = LOG.getPrefix(LOG.tier);
-                }
-                LOG.writeToSdCard(LOG.path, prefix, mg);
-            }
-        }
-    }
-
-
-    /**
-     * 打印所有提示消息 Log
-     *
-     * @param msg object 类型的消息
-     */
-    public static void errAll(Object msg) {
-        if (LOG.LOG_TF) {
-            String strMsg = msg.toString();
-            if (strMsg.length() > logMaxLength) {
-                while (true) {
-                    String substring = strMsg.substring(0, logMaxLength);
-                    Log.e(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(logMaxLength);
-                    if (strMsg.length() <= logMaxLength) {
-                        Log.e(LOG.LOG_TAG + "i", strMsg);
-                        break;
-                    }
-                }
-            } else {
-                Log.e(LOG.LOG_TAG + "i", "------- " + msg);
-            }
-        }
-    }
-
-    /**
-     * 提示消息 Log
-     *
-     * @param title 日志标题
-     * @param msg   日志消息
-     */
-    public static void log(Object title, Object msg) {
-        if (LOG.LOG_TF) {
-            Log.i(LOG.LOG_TAG + "i",
-                    "------- Run" +
-                            "\n\n---------------------" + title + "------------------------\n" +
-                            "                   " + msg + "\n" +
-                            "---------------------" + title + "-----------------------\n\n" +
-                            "------- Close"
-            );
-        }
 
     }
-
-    /**
-     * 打印所有提示消息 Log
-     *
-     * @param msg object 类型的消息
-     */
-    public static void logAll(Object title, Object msg) {
-        if (LOG.LOG_TF) {
-
-            Log.i(LOG.LOG_TAG + "i", "Run --------- " + title + " ---------");
-            String strMsg = msg.toString();
-            if (strMsg.length() > logMaxLength) {
-                while (true) {
-                    String substring = strMsg.substring(0, logMaxLength);
-                    Log.i(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(logMaxLength);
-                    if (strMsg.length() <= logMaxLength) {
-                        Log.i(LOG.LOG_TAG + "i", strMsg);
-                        break;
-                    }
-                }
-            } else {
-                Log.i(LOG.LOG_TAG + "i", "------- " + msg);
-            }
-
-            Log.i(LOG.LOG_TAG + "i", "--------- " + title + " --------- Close");
-
-        }
-    }
-
-    /**
-     * 提示消息 Log
-     *
-     * @param title 日志标题
-     * @param msg   日志消息
-     */
-    public static void err(Object title, Object msg) {
-        if (LOG.LOG_TF) {
-            Log.e(LOG.LOG_TAG + "e",
-                    "------- Run" +
-                            "\n\n---------------------" + title + "------------------------\n" +
-                            "                   " + msg + "\n" +
-                            "---------------------" + title + "-----------------------\n\n" +
-                            "------- Close"
-            );
-        }
-
-    }
-
-    /**
-     * 打印所有提示消息 Log
-     *
-     * @param msg object 类型的消息
-     */
-    public static void errAll(Object title, Object msg) {
-        if (LOG.LOG_TF) {
-
-            Log.e(LOG.LOG_TAG + "i", "Run --------- " + title + " ---------");
-            String strMsg = msg.toString();
-            if (strMsg.length() > logMaxLength) {
-                while (true) {
-                    String substring = strMsg.substring(0, logMaxLength);
-                    Log.e(LOG.LOG_TAG + "i", "------- " + substring);
-                    strMsg = strMsg.substring(logMaxLength);
-                    if (strMsg.length() <= logMaxLength) {
-                        Log.e(LOG.LOG_TAG + "i", strMsg);
-                        break;
-                    }
-                }
-            } else {
-                Log.e(LOG.LOG_TAG + "i", "------- " + msg);
-            }
-
-            Log.e(LOG.LOG_TAG + "i", "--------- " + title + " --------- Close");
-
-        }
-    }
-
-    /**
-     * @param obj
-     * @异常打印方法
-     */
-    public static void exception(Object tag) {
-        try {
-            throw new Exception(tag.toString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * 抛异常，第几层
-     *
-     * @param tag
-     * @param number
-     */
-    public static void exception(Object tag, int number) {
-        try {
-            throw new Exception(tag.toString());
-        } catch (Exception e) {
-            e.printStackTrace();
-            GT.log(getLineInfo(number), "e:" + e);
-        }
-    }
-
 
     //============================================= 吐司类 =====================================
 
@@ -1160,496 +1137,6 @@ public class GT {
             toast.setText(content.toString());
         }
         toast.show();
-    }
-
-    //============================================= 对话框 =====================================
-
-    /**
-     * AlertDialog.Builder 对话框类
-     */
-    public static class GT_AlertDialog extends AlertDialog.Builder {
-
-        /**
-         * 初始化 上下文
-         *
-         * @param context
-         */
-        public GT_AlertDialog(Context context) {
-            super(context);
-        }
-
-        /**
-         * 设置按钮的对话框
-         *
-         * @param img             图标
-         * @param title           标题
-         * @param message         信息
-         * @param btnName         第一个按钮名称
-         * @param onClickListener 单击事件
-         * @return 返回对话框操作对象
-         */
-        public AlertDialog.Builder dialogButton(int img, String title, String message, String btnName, DialogInterface.OnClickListener onClickListener) {
-            setTitle(title).setIcon(img).setMessage(message);   //设置 标题、图标、消息
-            if (btnName != null && onClickListener != null) {
-                setNegativeButton(btnName, onClickListener);//设置单击事件
-            }
-            return this;
-        }
-
-        /**
-         * 设置列表选项对话框
-         * @param img       图标
-         * @param title     标题
-         * @param texts     类表项
-         * @return 返回对话框对象
-         */
-        /**
-         * @param img             图标
-         * @param title           标题
-         * @param items           类表项
-         * @param onClickListener 单击事件
-         * @return
-         */
-        public AlertDialog.Builder dialogList(int img, String title, final String[] items, DialogInterface.OnClickListener onClickListener) {
-            setIcon(img).setTitle(title);
-            if (items != null && onClickListener != null)
-                setItems(items, onClickListener); //添加列表项
-            return this;
-        }
-
-        /**
-         * 设置单选列表选项对话框
-         *
-         * @param img             图标
-         * @param title           标题
-         * @param item            列表项
-         * @param onClickListener 单击事件
-         * @return 返回对话框对象
-         */
-        public AlertDialog.Builder dialogSingleChoiceList(int img, String title, String[] item, DialogInterface.OnClickListener onClickListener) {
-            setIcon(img).setTitle(title);
-            if (item != null && onClickListener != null)
-                setSingleChoiceItems(item, 0, onClickListener);//设置按钮
-            return this;
-        }
-
-        /**
-         * 设置多选列表对话框
-         *
-         * @param img             图标
-         * @param title           标题
-         * @param items           列表
-         * @param onClickListener 单击事件
-         * @return 返回对话框对象
-         */
-        public AlertDialog.Builder dialogMultiChoice(int img, String title, final String[] items, DialogInterface.OnMultiChoiceClickListener onClickListener) {
-
-            final boolean[] checkedItems = new boolean[items.length];   //初始化选中状态
-
-            for (int i = 0; i < checkedItems.length; i++) {
-                checkedItems[i] = false;   //初始化默认选项
-            }
-            setIcon(img).setTitle(title);//设置 图标、标题
-            if (checkedItems != null && items != null && onClickListener != null)
-                setMultiChoiceItems(items, checkedItems, onClickListener);
-            return this;
-        }
-
-        /**
-         * 自定义的 Dialog
-         */
-        public static class ViewDialog {
-
-            private Dialog dialog;
-            private View view;
-
-            public Dialog getDialog() {
-                return dialog;
-            }
-
-            public View getView() {
-                return view;
-            }
-
-            /**
-             * 设置 ViewDialog 全屏 该方法需要在 show() 方法之后调用
-             *
-             * @param activity
-             * @return 用法如下：
-             * GT.GT_AlertDialog.ViewDialog viewDialog = new GT.GT_AlertDialog.ViewDialog()
-             * .initLayout(activity, R.layout.item_load, R.style.dialogNoBg, true, -1, 0, 0);
-             * viewDialog.getDialog().show();
-             * viewDialog.allWindow(activity);//放到此处
-             */
-            public ViewDialog allWindow(Activity activity) {
-                WindowManager windowManager = activity.getWindowManager();
-                Display display = windowManager.getDefaultDisplay();
-                WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.width = display.getWidth(); //设置宽度
-                lp.height = display.getHeight(); //设置宽度
-                dialog.getWindow().setAttributes(lp);
-                return this;
-            }
-
-            /**
-             * @param context 上下文
-             * @param layout  布局
-             * @return
-             */
-            public ViewDialog initLayout(Context context, int layout) {
-                dialog = new Dialog(context);
-                view = LayoutInflater.from(context).inflate(layout, null);
-                dialog.setContentView(view);
-                return this;
-            }
-
-            /**
-             * @param context 上下文
-             * @param layout  布局
-             * @param Style   设置样式
-             * @return
-             */
-            public ViewDialog initLayout(Context context, int layout, int Style) {
-                dialog = new Dialog(context);
-                dialog = new Dialog(context, Style);
-                view = LayoutInflater.from(context).inflate(layout, null);
-                dialog.setContentView(view);
-                return this;
-            }
-
-            /**
-             * @param context       上下文
-             * @param Style         样式
-             * @param clickExternal 外部是否可点击
-             * @param layout        布局
-             * @param transparency  透明度
-             * @param X             显示的 X 轴位置
-             * @param Y             显示的 Y 轴位置
-             * @return 当前类的对象
-             * <p>
-             * style 样式 参考：
-             * <style name="dialogNoBg">
-             * <item name="android:background">#00000000</item>
-             * <item name="android:windowBackground">@android:color/transparent</item>
-             * <item name="android:windowNoTitle">true</item>
-             * <item name="android:windowFullscreen">true</item>
-             * <item name="android:windowIsFloating">true</item>
-             * </style>
-             */
-            public ViewDialog initLayout(Context context, int layout, int Style, boolean clickExternal, int transparency, int X, int Y) {
-
-                if (Style != 0)
-                    dialog = new Dialog(context, Style);
-                else
-                    dialog = new Dialog(context);
-
-                dialog.setCancelable(clickExternal);       //设置点击外面不会消失 true为点击外面可以被取消，false 为点击外面不可被取消
-
-                view = LayoutInflater.from(context).inflate(layout, null);
-                dialog.setContentView(view);
-
-                if (transparency != -1)
-                    dialog.getWindow().setDimAmount(transparency);//设置昏暗度为0 则表示为透明， 如果是 -1 则是默认
-
-                //修改 自定义对话框的显示位置
-                android.view.Window dialogWindow = dialog.getWindow();//随意定义个Dialog
-                WindowManager.LayoutParams lp = dialogWindow.getAttributes();//实例化Window
-                //实例化Window操作者
-                lp.x = X; // 新位置X坐标
-                lp.y = Y; // 新位置Y坐标
-                dialogWindow.setAttributes(lp);
-
-                return this;
-            }
-
-        }
-
-        /**
-         * 加载自定义的 对话框 自带去掉边框
-         */
-        public static abstract class Loading_view extends ProgressDialog {
-
-            public Loading_view(Context context) {
-                super(context);
-            }
-
-            public Loading_view(Context context, int theme) {
-                super(context, theme);
-            }
-
-            @Override
-            protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
-                init(getContext());
-            }
-
-            /**
-             * 加载布局
-             *
-             * @param context
-             */
-            protected abstract void loadLayout(Context context);
-
-            /**
-             * 初始化布局
-             *
-             * @return
-             */
-            public abstract int initLayout();
-
-            private void init(Context context) {
-                setCancelable(true);
-                setCanceledOnTouchOutside(false);
-                setContentView(initLayout());//loading的xml文件
-
-                loadLayout(context);//加载布局
-
-                WindowManager.LayoutParams params = getWindow().getAttributes();
-                params.width = WindowManager.LayoutParams.WRAP_CONTENT;
-                params.height = WindowManager.LayoutParams.WRAP_CONTENT;
-                getWindow().setAttributes(params);
-            }
-
-            @Override
-            public void show() {//开启
-                super.show();
-            }
-
-            @Override
-            public void dismiss() {//关闭
-                super.dismiss();
-            }
-
-        }
-
-    }
-
-    /**
-     * 加载进度条
-     */
-    public static class ProgressDialogUtils {
-
-        /**
-         * 简易的进度条加载框
-         *
-         * @param context
-         * @param isCancelable 是否点击可取消
-         * @param message      消息内容
-         * @return
-         */
-        public static ProgressDialog initProgressBarDialog(Context context, boolean isCancelable, String message) {
-            ProgressDialog progressDialog = initCircleProgressDialog(context, isCancelable, message);
-            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);// 进度条 setProgress
-            return progressDialog;
-        }
-
-
-        /**
-         * 简易的圆圈加载框
-         *
-         * @param context
-         * @param isCancelable 是否点击可取消
-         * @param message      消息内容
-         * @return
-         */
-        public static ProgressDialog initCircleProgressDialog(Context context, boolean isCancelable, String message) {
-            ProgressDialog progressDialog = new ProgressDialog(context);
-            progressDialog.setCancelable(isCancelable);
-            if (message != null) {
-                progressDialog.setMessage(message);
-            }
-            return progressDialog;
-        }
-
-
-        /**
-         * 初始化进度条加载条
-         *
-         * @param context
-         * @param isCancelable    是否点击可取消
-         * @param icon            图标
-         * @param title           标题
-         * @param message         消息内容
-         * @param maxProgress     进度最大值
-         * @param dialogInterface 取消监听
-         * @return
-         */
-        public static ProgressDialog initProgressBarDialog(Context context, boolean isCancelable, int icon, String title, String message, int maxProgress, DialogInterface.OnCancelListener dialogInterface) {
-            ProgressDialog progressDialog = initCircleProgressDialog(context, isCancelable, icon, title, message, dialogInterface);
-            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);// 进度条 setProgress
-            progressDialog.setMax(maxProgress);
-            return progressDialog;
-        }
-
-
-        /**
-         * 初始化圆圈加载条
-         *
-         * @param context
-         * @param isCancelable    是否点击可取消
-         * @param icon            图标
-         * @param title           标题
-         * @param message         消息内容
-         * @param dialogInterface 取消监听
-         * @return
-         */
-        public static ProgressDialog initCircleProgressDialog(Context context, boolean isCancelable, int icon, String title, String message, DialogInterface.OnCancelListener dialogInterface) {
-            ProgressDialog progressDialog = new ProgressDialog(context);
-            progressDialog.setCancelable(isCancelable);
-
-            if (icon != -1) {
-                progressDialog.setIcon(icon);
-            }
-
-            if (title != null) {
-                progressDialog.setTitle(title);
-            }
-
-            if (message != null) {
-                progressDialog.setMessage(message);
-            }
-
-            if (isCancelable) {
-                if (dialogInterface != null) {
-                    progressDialog.setOnCancelListener(dialogInterface);//设置监听取消加载框事件
-                }
-            }
-
-            return progressDialog;
-        }
-
-    }
-
-    /**
-     * Notification 通知类
-     */
-    public static class GT_Notification {
-
-        private static int NOTIFYID = 0x1997; //通知id
-        private static String CHANEL_ID = "com.gsls.king";
-        private static String CHANEL_DESCRIPTION = "GT 描述";
-        private static String CHANEL_NAME = "GT_Android复习";
-
-        /**
-         * 设置 通知类的 code
-         *
-         * @param NotifyId
-         */
-        public GT_Notification setNotifyId(int NotifyId) {
-            NOTIFYID = NotifyId;
-            return this;
-        }
-
-        /**
-         * 设置 通知类的 id
-         *
-         * @param ChanelId
-         */
-        public GT_Notification setChanelId(String ChanelId) {
-            CHANEL_ID = ChanelId;
-            return this;
-        }
-
-        /**
-         * 设置 通知
-         *
-         * @param ChanelDescription
-         */
-        public GT_Notification setChanelDescription(String ChanelDescription) {
-            CHANEL_DESCRIPTION = ChanelDescription;
-            return this;
-        }
-
-        /**
-         * 设置通知 名字
-         *
-         * @param ChanelName
-         */
-        public GT_Notification setChanelName(String ChanelName) {
-            CHANEL_NAME = ChanelName;
-            return this;
-        }
-
-        private Activity activity;
-
-        /**
-         * 实例化 通知类
-         *
-         * @param activity
-         */
-        public GT_Notification(Activity activity) {
-            this.activity = activity;
-        }
-
-        /**
-         * 初始化 通知类
-         *
-         * @param icon       图标
-         * @param title      标题
-         * @param text       内容
-         * @param time       时间
-         * @param voiceTF    是否设置声音振动
-         * @param autoCancel 设置通知打开后自动消失
-         * @param cla        设置跳转的 页面
-         * @return 返回 通知类
-         */
-        public NotificationManagerCompat sendingNotice(int icon, String title, String text, int time, boolean voiceTF, boolean autoCancel, Class<?> cla) {
-
-            /**
-             * 由于 Notification.Builder 仅支持 Android 4.1及之后的版本，为了解决兼容性问题， Notification.Builder 仅支持 API 26 与 26 之前的版本
-             * Google 在 Android Support v4 中加入了 NotificationCompat.Builder 类
-             */
-            String channelId = createNotificationChannel(activity.getApplicationContext());//创建Notification Channel
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(activity, channelId);//创建Notification并与Channel关联
-
-            builder.setSmallIcon(icon);//设置通知图标
-            builder.setAutoCancel(autoCancel);//设置通知打开后自动消失
-            builder.setContentTitle(title);//设置标题
-            builder.setContentText(text);//设置内容
-            if (time == 0) builder.setWhen(System.currentTimeMillis());//设置系统当前时间为发送时间
-            else builder.setWhen(time);//设置用户设置的发送时间
-            if (voiceTF)
-                builder.setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);//设置默认的声音与默认的振动
-
-            if (cla != null) {    //如果 cla 不为空就设置跳转的页面
-                Intent intent = new Intent(activity, cla);
-                PendingIntent pi = PendingIntent.getActivity(activity, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-                builder.setContentIntent(pi);//设置通知栏 点击跳转
-            }
-
-            //发布通知
-            NotificationManagerCompat notificationManagerCompat = NotificationManagerCompat.from(activity.getApplicationContext());
-            notificationManagerCompat.notify(NOTIFYID, builder.build());
-            return notificationManagerCompat;
-        }
-
-        /**
-         * 创建通知
-         *
-         * @param context
-         * @return
-         */
-        private String createNotificationChannel(Context context) {
-            // O (API 26)及以上版本的通知需要NotificationChannels。
-            if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-
-                // 初始化NotificationChannel。
-                NotificationChannel notificationChannel = new NotificationChannel(CHANEL_ID, CHANEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
-                notificationChannel.setDescription(CHANEL_DESCRIPTION);
-
-                // 向系统添加 NotificationChannel。试图创建现有通知
-                // 通道的初始值不执行任何操作，因此可以安全地执行
-                // 启动顺序
-                NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-                assert notificationManager != null;
-                notificationManager.createNotificationChannel(notificationChannel);
-
-                return CHANEL_ID;
-            } else {
-                return null; // 为pre-O(26)设备返回 null
-            }
-        }
-
     }
 
     //============================================= 跳转页面 =====================================
@@ -2484,7 +1971,6 @@ public class GT {
             return path;
         }
 
-
         /**
          * 复制单个文件
          *
@@ -2599,6 +2085,56 @@ public class GT {
             }
         }
 
+        /**
+         * 获取文件夹中所有文件名
+         *
+         * @param path
+         * @return
+         */
+        public static List<String> getFilesAllName(String path) {
+            File file = new File(path);
+            File[] files = file.listFiles();
+            if (files == null) {
+                Log.e("error", "空目录");
+                return null;
+            }
+            List<String> s = new ArrayList<String>();
+            for (int i = 0; i < files.length; i++) {
+                s.add(files[i].getAbsolutePath());
+            }
+            return s;
+        }
+
+        /**
+         * 清空文件夹中所有文件
+         *
+         * @param file         清空的文件路径
+         * @param isSaveFolder 是否保存当前文件夹 true：b
+         */
+        public static void deleteAllFile(File file, boolean isSaveFolder) {
+
+            if (file.isDirectory()) {
+                File[] files = file.listFiles();
+                for (int i = 0; i < files.length; i++) {
+                    File f = files[i];
+                    deleteAllFile(f, isSaveFolder);
+                }
+                if (!isSaveFolder) {// 是否保留本文件夹
+                    file.delete();// 如要保留文件夹，只删除文件，请注释这行
+                }
+            } else if (file.exists()) {
+                file.delete();
+            }
+        }
+
+        /**
+         * 获取手机根目录
+         *
+         * @return
+         */
+        public static String getAppDirectory() {
+            return Environment.getExternalStorageDirectory().toString();
+        }
 
     }
 
@@ -2609,6 +2145,46 @@ public class GT {
 
         //=============================== 实例化 Hibernate 对象 ====================================
         private Context context;
+        private static Hibernate hibernate;
+
+        /**
+         * 初始化 Hibernate
+         *
+         * @param context     上下文
+         * @param SQLName     数据库名称
+         * @param sqlVersions 数据库版本
+         * @param scanTable   数据库映射类
+         * @return
+         */
+        public static Hibernate initialize(Context context, String SQLName, int sqlVersions, Object scanTable) {
+            if (hibernate == null) {
+                synchronized (GT.class) {
+                    if (hibernate == null) {
+                        hibernate = new Hibernate(context)
+                                .init_1_SqlName(SQLName)            //设置SQL名称
+                                .init_2_SqlVersion(sqlVersions)     //设置数据库版本
+                                .init_3_SqlTable(scanTable)         //设置创建或更新升级的数据库表
+                                .init_4_Sql();                      //数据库操作执行
+                    }
+                }
+            }
+            return hibernate;
+        }
+
+        public static Hibernate getHibernate() {
+            if (hibernate == null) {
+                synchronized (GT.class) {
+                    if (hibernate == null) {
+                        hibernate = new Hibernate()
+                                .init_1_SqlName(null)            //设置SQL名称
+                                .init_2_SqlVersion(-1)          //设置数据库版本
+                                .init_3_SqlTable(null)          //设置创建或更新升级的数据库表
+                                .init_4_Sql();                  //数据库操作执行
+                    }
+                }
+            }
+            return hibernate;
+        }
 
         public Hibernate() {
             Context context = getGT().getActivity();
@@ -2625,34 +2201,28 @@ public class GT {
 
         //=============================== 数据库注解 ====================================
 
+        //构建Hibernate
         @Target(ElementType.FIELD)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface Build {
             String sqlName() default "GT";//数据库默认名为 GT.db
 
             int sqlVersion() default 1;//数据库默认版本从 1
+
+            Class<?>[] sqlTables() default {};//数据库默认加载的数据库,如果设置了映射的表那就不再扫描bean与entity标注的类
         }
 
+        //设置映射标识
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface GT_Entity {
         }
 
+        //设置映射标识
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface GT_Bean {
-        }
-
-        @Target(ElementType.FIELD)
-        @Retention(RetentionPolicy.RUNTIME)
-        public @interface GT_Entitys {
-            Class<?>[] valueArray() default {};
-        }
-
-        @Target(ElementType.FIELD)
-        @Retention(RetentionPolicy.RUNTIME)
-        public @interface GT_Beans {
-            Class<?>[] valueArray() default {};
+            String sqlName() default "";//设置属于那个数据库的表,默认是空
         }
 
         //设置主键注解
@@ -2666,7 +2236,7 @@ public class GT {
         //修改表字段注解
         @Target({ElementType.FIELD})
         @Retention(RetentionPolicy.RUNTIME)
-        public @interface GT_DatabaseField {
+        public @interface GT_Update {
             String oldTableValue() default "";
 
             String defaultValue() default "";
@@ -2675,28 +2245,28 @@ public class GT {
         //不被持久化
         @Target({ElementType.FIELD})
         @Retention(RetentionPolicy.RUNTIME)
-        public @interface GT_OnNullValue {
+        public @interface GT_NotInit {
 
         }
 
         //=============================== 数据库属性 ====================================
-        private String DATABASE_NAME = "GT.db";   //数据库名称
-        private int DATABASE_VERSION = 1;         //数据库版本
+        private static String DATABASE_NAME = "GT.db";   //默认数据库名称(可修改)
+        private static int DATABASE_VERSION = 1;         //默认数据库版本(可升级)
 
-        public String getDATABASE_NAME() {
+        public static String getDATABASE_NAME() {
             return DATABASE_NAME;
         }
 
-        public void setDATABASE_NAME(String DATABASE_NAME) {
-            this.DATABASE_NAME = DATABASE_NAME;
+        public static void setDATABASE_NAME(String DATABASE_NAME) {
+            Hibernate.DATABASE_NAME = DATABASE_NAME;
         }
 
-        public int getDATABASE_VERSION() {
+        public static int getDATABASE_VERSION() {
             return DATABASE_VERSION;
         }
 
-        public void setDATABASE_VERSION(int DATABASE_VERSION) {
-            this.DATABASE_VERSION = DATABASE_VERSION;
+        public static void setDATABASE_VERSION(int DATABASE_VERSION) {
+            Hibernate.DATABASE_VERSION = DATABASE_VERSION;
         }
 
         //=============================== 数据库对象 ====================================
@@ -2724,8 +2294,10 @@ public class GT {
             //=================================== 第二步：添加创建表代码 ===================================
 
             /**
+             * 存储添加表SQL代码
+             *
              * @param tableCode 创建表的SQL代码
-             * @存储添加表SQL代码
+             * @创建数据库代码示例： CREATE TABLE Dome( domeID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, domeName VARCHAR(200), domeNumber INT)
              */
             public NoEntityTable addTableCode(String tableCode) {
                 if (tableCode != null) {
@@ -2783,7 +2355,7 @@ public class GT {
 
         }
 
-        public SQLiteDatabase getSqLiteDatabase() {
+        public SQLiteDatabase getSqliteDatabase() {
             return sqLiteDatabase2;
         }
 
@@ -2800,11 +2372,11 @@ public class GT {
         }
 
         /**
-         * @param sqLiteDatabase2
+         * @param sqLiteDatabase
          * @设置Hibernate数据库的SQL管理对象
          */
-        public void setSqLiteDatabase(SQLiteDatabase sqLiteDatabase2) {
-            this.sqLiteDatabase2 = sqLiteDatabase2;
+        public void setSqLiteDatabase(SQLiteDatabase sqLiteDatabase) {
+            this.sqLiteDatabase2 = sqLiteDatabase;
         }
 
         //=============================== 数据表路径 ====================================
@@ -2833,7 +2405,7 @@ public class GT {
         //=============================== 数据库管理 ====================================
 
         /**
-         * @数据库管理类
+         * @管理数据库核心类
          */
         private class DatabaseHelper extends SQLiteOpenHelper {
 
@@ -2877,7 +2449,6 @@ public class GT {
             public void onUpgrade(SQLiteDatabase sqLiteDatabase, int oldVersion, int newVersion) {
                 //更新开始
                 sqLiteDatabase2 = sqLiteDatabase;
-
                 //如果当前版本需要升级
                 if (oldVersion < newVersion) {
 
@@ -2951,7 +2522,7 @@ public class GT {
                         }
 
                         //第五步：删除数据库中多余无用的表
-                        for (String tableName : getSQLAllTableName()) {//获取数据库中所有的表
+                        for (String tableName : getSqlAllTableName()) {//获取数据库中所有的表
                             if (!"sqlite_sequence".equals(tableName)) {//过来掉系统自带的表
                                 if (!tableNameList.contains(tableName)) {//如果数据库表没有存在最新数据库更新的表名当中
                                     deleteTable(tableName);//删除当前无效的表
@@ -3022,6 +2593,8 @@ public class GT {
          * @获取表所有字段名
          */
         public List<String> getTableAllValue(Class<?> tableClass) {
+            if (tableClass == null || !isTable(tableClass.getSimpleName())) return null;
+
             String sql = "SELECT * FROM " + tableClass.getSimpleName() + " WHERE 0";
             Cursor tempCursor = sqLiteDatabase2.rawQuery(sql, null);
             try {
@@ -3063,7 +2636,7 @@ public class GT {
          * @return
          * @获取当前数据库所有表名称
          */
-        public List<String> getSQLAllTableName() {
+        public List<String> getSqlAllTableName() {
             List<String> strList = new ArrayList<>();
             Cursor cursor = sqLiteDatabase2.rawQuery("select name from sqlite_master where type='table' order by name", null);
             while (cursor.moveToNext()) {
@@ -3081,7 +2654,7 @@ public class GT {
          * @监测当前数据库是否存在此表
          */
         public boolean isTable(String tableName) {
-            List<String> sqlAllTableName = getSQLAllTableName();
+            List<String> sqlAllTableName = getSqlAllTableName();
             if (sqlAllTableName.contains(tableName)) {
                 return true;
             }
@@ -3094,7 +2667,7 @@ public class GT {
          * @监测当前数据库是否存在此表
          */
         public boolean isTable(Class<?> tableClass) {
-            List<String> sqlAllTableName = getSQLAllTableName();
+            List<String> sqlAllTableName = getSqlAllTableName();
             if (sqlAllTableName.contains(tableClass.getSimpleName())) {
                 return true;
             }
@@ -3246,7 +2819,7 @@ public class GT {
          * @param <T>
          * @return
          */
-        public Object returnListOrMap(Class<?> type, String value) {
+        private Object returnListOrMap(Class<?> type, String value) {
 
             if (type == List.class) {
                 if (value == null || "null".equals(value)) return null;
@@ -3527,7 +3100,7 @@ public class GT {
          * @param type
          * @return
          */
-        public Class returnType(Class<?> type) {
+        private Class returnType(Class<?> type) {
 
             switch (type.getName()) {
                 case "java.lang.String":
@@ -3568,7 +3141,7 @@ public class GT {
          * @param type
          * @return
          */
-        public Object returnTypeDataValue(Object objValue, Class<?> type) {
+        private Object returnTypeDataValue(Object objValue, Class<?> type) {
             if (objValue == null) return null;
 
             String objValueStr = objValue.toString();
@@ -3618,230 +3191,209 @@ public class GT {
 
         }
 
-        /**
-         * 查询表数据总数量
-         *
-         * @param table
-         * @param sqLiteDatabase
-         * @return 返回当前表数据总条数，如果当前表不存在则返回-1
-         */
-        public long queryTableDataCount(String table) {
-            if (sqLiteDatabase2 == null || table == null) return -1;
-            long count = 0;
-            if (isTable(table)) {
-                Cursor cursor = sqLiteDatabase2.rawQuery("select count(2) from " + table, null);
-                cursor.moveToFirst();
-                count = cursor.getLong(0);
-                cursor.close();
-            } else {
-                count = -1;
-            }
-            return count;
-        }
 
         /**
-         * 查询表数据总数量
-         *
-         * @param tableClass
-         * @param sqLiteDatabase
-         * @return 返回当前表数据总条数，如果当前表不存在则返回-1
-         */
-        public long queryTableDataCount(Class<?> tableClass) {
-            if (sqLiteDatabase2 == null || tableClass == null) return -1;
-            long count = 0;
-            String tableName = tableClass.getSimpleName();
-            if (isTable(tableName)) {
-                Cursor cursor = sqLiteDatabase2.rawQuery("select count(2) from " + tableName, null);
-                cursor.moveToFirst();
-                count = cursor.getLong(0);
-                cursor.close();
-            } else {
-                count = -1;
-            }
-
-            return count;
-        }
-
-        /**
-         * ======================================================== 表的 增删查改 代码 ========================================
+         * ======================================================== 表的 聚合函数 代码 ========================================
          */
 
         private boolean status = true;//当前增删查改的状态
         private int statusNumber = 0;//数据库操作返回值
 
+        // SQL 操作属性
+        private String conditions = null;       //条件
+        private String[] values = null;         //条件值
+        private String[] returnValues = null;   //返回字段
+        private String orderByStr = null;       //排序
+        private String limitStr = null;         //限量
+        private boolean isLast = false;         //是否查询到最后一条 默认从第一条查询
+
+        //初始化数据库参数
+        private void initSqlParameter() {
+            status = true;
+            statusNumber = 0;
+        }
+
+        //释放数据库参数
+        private void closeSqlParameter() {
+            values = null;
+            conditions = null;
+            conditions = null;
+            returnValues = null;
+            orderByStr = null;
+            limitStr = null;
+        }
+
         /**
+         * 设置返回参数
+         *
+         * @param returnValues
          * @return
-         * @当前数据库操作后的状态
+         */
+        public Hibernate setReturnValues(Object returnValues) {
+
+            String returnValueType = returnValues.getClass().getSimpleName();
+
+            if (!returnValueType.equals("String") && !returnValueType.equals("String[]")) {
+                err(getLineInfo(LOG.lineInfoIndex), "返回的数据 returnValue 类型仅支持String 与 String[]，操作失败");
+                status = false;
+                return null;
+            }
+
+            //解析查询条件值
+            String[] returnValues1 = new String[1];//解析筛选值
+            if (returnValueType.equals("String[]")) {
+                returnValues1 = (String[]) returnValues;
+            } else if (returnValueType.equals("String")) {
+                returnValues1[0] = (String) returnValues;
+            }
+
+            this.returnValues = returnValues1;
+            return this;
+        }
+
+        /**
+         * 条件参数
+         *
+         * @param conditions 条件
+         * @param values     值
+         * @return
+         */
+        public Hibernate setCondition(Object conditions, Object values) {
+
+            if (conditions == null || values == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "条件参数 为 null，操作失败");
+                status = false;
+                return this;
+            }
+
+            //监测条件
+            String conditionsType = conditions.getClass().getSimpleName();
+            String valuesType = values.getClass().getSimpleName();
+
+            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
+                err(getLineInfo(LOG.lineInfoIndex), "条件参数 conditionsType 类型仅支持String 与 String[]，操作失败");
+                status = false;
+                return this;
+            }
+
+            //解析查询条件 conditions （String）
+            String condition = "";//解析筛选条件
+            if (conditionsType.equals("String[]")) {
+                for (String str : (String[]) conditions) {
+                    condition += (str + " = ? and ");
+                }
+
+                //去掉最后一个多余 and
+                condition = condition.substring(0, condition.lastIndexOf("and"));
+            } else if (conditionsType.equals("String")) {
+                condition = (String) conditions;
+            }
+
+            //解析查询条件值
+            String[] valuesArray = new String[1];//解析筛选值
+            if (valuesType.equals("String[]")) {
+                valuesArray = (String[]) values;
+            } else {
+                valuesArray[0] = String.valueOf(values);
+            }
+
+            this.conditions = condition;
+            this.values = valuesArray;
+            return this;
+        }
+
+        /**
+         * 根据 orderByStr 进行倒序
+         * <p>
+         * 实例:limit(4).flashback("loginID"); 返回最后4条数据
+         *
+         * @param orderByStr 根据表的该字段返回最后的数据(倒序)
+         * @return
+         */
+        public Hibernate setFlashback(String orderByStr) {
+            this.orderByStr = orderByStr + " desc";
+            return this;
+        }
+
+        /**
+         * 当前页数显示多少条数据
+         * 实例：
+         * new int[]{20} 一个数表示，当前返回多少条数据
+         * new int[]{1,100} 两个数表示，第一页显示100条数据
+         *
+         * @param limitStr
+         * @return
+         */
+        public Hibernate setLimit(int[] limitStr) {
+            if (limitStr == null || limitStr.length < 1 || limitStr.length > 2) return this;
+            if (limitStr.length == 1) {
+                this.limitStr = limitStr[0] + "";
+            } else if (limitStr.length == 2) {
+                this.limitStr = limitStr[0] + "," + limitStr[1];
+            }
+            return this;
+        }
+
+        public boolean isLast() {
+            return isLast;
+        }
+
+        /**
+         * 是否查询最后一个内容
+         *
+         * @param last 默认为 false
+         */
+        public Hibernate setisLast(boolean last) {
+            isLast = last;
+            return this;
+        }
+
+        /**
+         * @return 当前数据库操作后的状态
          */
         public boolean isStatus() {
             return status;
         }
 
         /**
-         * @return
-         * @数据库操作返回值
+         * @return 数据库操作返回值
          */
         public int getStatusNumber() {
             return statusNumber;
         }
 
-
-        //============================================= 无实体类查询 =================================
-
         /**
-         * @param tableName     表名称
-         * @param contentValues 内容值
-         * @return
-         * @保存
+         * 保存和修改提取的添加父类的方法
+         *
+         * @param bean
+         * @param class1
+         * @param contentValues
+         * @param <T>
          */
-        public Hibernate save(String tableName, ContentValues contentValues) {
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "保存的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-            long insert = sqLiteDatabase2.insert(tableName, null, contentValues);
-            statusNumber = (int) insert;
-            //设置状态码
-            if (insert == -1) {
-                status = false;
+        private <T> void saveSuper(T bean, Class class1, ContentValues contentValues) {
+
+            Class superclass = class1.getSuperclass();
+
+            //递归去执行父类
+            if (Object.class != class1) {
+                saveSuper(bean, superclass, contentValues);
             } else {
-                status = true;
-            }
-            return this;
-        }
-
-        /**
-         * @param tableName     表名
-         * @param contentValues 内容值
-         * @param condition     条件
-         * @param valuesArray   条件值
-         * @return
-         * @修改
-         */
-        public Hibernate update(String tableName, ContentValues contentValues, String condition, String[] valuesArray) {
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "修改的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-            statusNumber = sqLiteDatabase2.update(tableName, contentValues, condition, valuesArray);
-            //进行更新
-            if (statusNumber == 0) {
-                status = false;
-            } else {
-                status = true;
+                return;
             }
 
-            return this;
-        }
-
-        /**
-         * @param tableName   表名
-         * @param condition   条件
-         * @param valuesArray 条件值
-         * @return
-         * @删除
-         */
-        public Hibernate delete(String tableName, String condition, String[] valuesArray) {
-            //进行删除
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "删除的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-            int update = sqLiteDatabase2.delete(tableName, condition, valuesArray);
-            if (update == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-            return this;
-        }
-
-        /**
-         * @param tableClass
-         * @return
-         * @删除所有表
-         */
-        public Hibernate deleteAll(String tableName) {
-
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "删除的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-            statusNumber = sqLiteDatabase2.delete(tableName, null, null);
-            //进行更新
-            if (statusNumber == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-
-            return this;
-        }
-
-        /**
-         * @param tableName   表名
-         * @param condition   条件
-         * @param valuesArray 条件值
-         * @return
-         * @查询
-         */
-        public Cursor query(String tableName, String condition, String[] valuesArray) {
-
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-            Cursor cursor = sqLiteDatabase2.query(tableName, null, condition, valuesArray, null, null, orderByStr, limitStr);
-            statusNumber = cursor.getCount();
-            orderByStr = "";
-            limitStr = "";
-            cursor.moveToFirst();
-            return cursor;
-        }
-
-        //============================================= 实体类查询 =================================
-
-        /**
-         * @param bean //要保存的对象
-         * @return
-         * @保存数据
-         */
-        public <T> Hibernate save(T bean) {
-
-            if (bean == null) {
-                err(getLineInfo(2), "保存的对象为null，操作失败！");
-                status = false;
-                return this;
-            }
-
-            Class<? extends Object> class1 = bean.getClass();
             String simpleName = class1.getSimpleName();//获取表名
-            //检查数据库中是否存在该表
-            if (!isTable(simpleName)) {
-                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
-                status = false;
-                return this;
-            }
+
             //获取所有成员变量
             Field[] fields = class1.getDeclaredFields();
-            //解析并设置保存的数据
-            ContentValues contentValues = new ContentValues();
             for (Field field : fields) {
                 field.setAccessible(true); // 设置属性是可以访问的
                 try {
                     Class<?> type = field.getType();//获取字段类型
                     String name = field.getName();//获取属性名
                     Object val = field.get(bean);// 得到此属性的值
-
                     GT_Key annotation = field.getAnnotation(GT_Key.class);
-                    if (annotation != null && annotation.autoincrement()) {//如果这个字段是Key并且是 "自增" 的就跳过
+                    GT_NotInit notInit = field.getAnnotation(GT_NotInit.class);
+                    if (annotation != null && annotation.autoincrement() || notInit != null) {//如果这个字段是Key并且是 "自增",或是不映射字段 的就跳过
                         continue;
                     }
 
@@ -3901,6 +3453,38 @@ public class GT {
                         contentValues.put(name, (short) val);
                     } else if (byte[].class.equals(type)) {
                         contentValues.put(name, (byte[]) val);
+                    }
+
+
+                    //数组类型
+                    else if (String[].class == type) {
+                        //String[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (int[].class == type) {
+                        //int[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (boolean[].class == type) {
+                        //boolean[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (double[].class == type) {
+                        //double[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (float[].class == type) {
+                        //float[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (long[].class == type) {
+                        //long[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (short[].class == type) {
+                        //short[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
                     } else if (List.class == type || Map.class == type) { //存储 List 与 Map 类型的
                         if (val == null) {
                             contentValues.put(name, "null");
@@ -3970,1586 +3554,530 @@ public class GT {
 
                 } catch (IllegalArgumentException | IllegalAccessException e) {
                     e.printStackTrace();
-                    exception(getLineInfo(2) + "数据出现问题");
+                    exception(getLineInfo(LOG.lineInfoIndex) + "数据出现问题");
                     status = false;
-                    return this;
+                    return;
                 }
             }
-            //数据库操作
-            long insert = sqLiteDatabase2.insert(simpleName, null, contentValues);
-            statusNumber = (int) insert;
-            //设置状态码
-            if (insert == -1) {
-                status = false;
-            } else {
-                status = true;
-            }
-            return this;
+
+            return;
         }
 
         /**
-         * @param bean       更新的表数据(实体类)
-         * @param conditions 修改条件
-         * @param values     修改条件对应值
-         * @return
-         * @更新表
-         */
-        public Hibernate update(Class<?> tableClass, Object bean, Object conditions, Object values2) {
-
-            if (tableClass == null || bean == null || conditions == null || values2 == null) {
-                err(getLineInfo(2), "修改的数据为null，操作失败");
-                status = false;
-                return this;
-            }
-
-            //监测是否为 String 或 String[] 类型
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values2.getClass().getSimpleName();
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "修改的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return this;
-            }
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "修改的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return this;
-            }
-
-            if (conditionsType.equals("String[]") && valuesType.equals("String[]")) {
-                String[] a = (String[]) conditions;
-                String[] b = (String[]) values2;
-
-                if (a.length == 0 || b.length == 0) {
-                    err(getLineInfo(2), "修改的条件或条件值为null，操作失败");
-                    status = false;
-                    return this;
-                }
-
-                if (a.length != b.length) {
-                    err(getLineInfo(2), "修改的数据的条件与条件值不匹配，操作失败");
-                    status = false;
-                    return this;
-                }
-            }
-
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
-                }
-                condition = condition.substring(0, condition.lastIndexOf("and"));//去掉最后一个多余 and
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
-            }
-
-            String[] valuesArray = null;//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values2;
-            } else if (valuesType.equals("String")) {
-                valuesArray = new String[1];
-                valuesArray[0] = (String) values2;
-            }
-
-
-            statusNumber = 0;
-            Class<? extends Object> class1 = bean.getClass();
-            String simpleName = tableClass.getSimpleName();//获取表名
-            //检查数据库中是否存在该表
-            if (!isTable(simpleName)) {
-                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！..");
-                status = false;
-                return this;
-            }
-
-            //判断更新对象是 实体类 还是 ContentValues 对象
-            if (ContentValues.class != bean.getClass()) {
-                ContentValues contentValues = new ContentValues();
-
-                Field[] fields = class1.getDeclaredFields();//获取所有成员变量
-                for (Field field : fields) {
-                    field.setAccessible(true); // 设置些属性是可以访问的
-                    try {
-                        Class<?> type = field.getType();//获取字段类型
-                        String name = field.getName();//获取属性名
-                        Object val = field.get(bean);// 得到此属性的值
-
-                        GT_Key annotation = field.getAnnotation(GT_Key.class);
-                        if (annotation != null && annotation.autoincrement()) {//如果这个字段是Key并且是自增的就跳过
-                            continue;
-                        }
-
-                        if (String.class == type) {
-                            contentValues.put(name, (String) val);
-                        } else if (int.class == type) {
-                            contentValues.put(name, (int) val);
-                        } else if (Integer.class == type) {
-                            contentValues.put(name, (Integer) val);
-                        } else if (boolean.class == type || Boolean.class == type) {
-                            contentValues.put(name, (boolean) val);
-                        } else if (double.class == type || Double.class == type) {
-                            contentValues.put(name, (double) val);
-                        } else if (float.class == type || Float.class == type) {
-                            contentValues.put(name, (float) val);
-                        } else if (Time.class == type) {
-                            contentValues.put(name, String.valueOf((Time) val));
-                        } else if (Date.class == type || java.sql.Date.class == type) {
-                            contentValues.put(name, String.valueOf((Date) val));
-                        } else if (long.class == type || Long.class == type) {
-                            contentValues.put(name, (long) val);
-                        } else if (short.class == type || Short.class == type) {
-                            contentValues.put(name, (short) val);
-                        } else if (byte[].class == type) {
-                            contentValues.put(name, (byte[]) val);
-                        } else if (List.class == type || Map.class == type) { //存储 List 与 Map 类型的
-                            if (val == null) {
-                                contentValues.put(name, "null");
-                                continue;
-                            }
-                            String data = "";
-                            //如果是 List 类型的存储
-                            if (val.getClass() == ArrayList.class) {
-                                ArrayList<?> list = (ArrayList<?>) val;
-                                if (list.size() != 0) {
-                                    Object o = list.get(0);
-                                    if (o != null) {
-                                        Class aClass = returnType(o.getClass());//返回当前类型
-                                        if (aClass == null) {//如果是特殊类型 ，那就进过json 处理 再存储
-                                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
-                                            data = o.getClass().getName() + jsonStr;
-                                        } else {
-                                            data = aClass.getName() + val.toString();
-                                        }
-                                    } else {
-                                        data = val.toString();
-                                    }
-                                } else {
-                                    data = val.toString();
-                                }
-                            } else if (val.getClass() == HashMap.class) {
-                                Set<?> keys = ((HashMap<?, ?>) val).keySet();
-                                Collection<?> values = ((HashMap<?, ?>) val).values();
-                                if (values.size() != 0) {
-                                    Object keyObj = keys.iterator().next();
-                                    Object valObj = values.iterator().next();
-                                    if (keyObj != null && valObj != null) {
-
-                                        String keysData = "";
-                                        String valuesData = "";
-
-                                        if (returnType(keyObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
-                                            keysData = JSON.toJson(keys);//将 bean 转为 json;
-                                        } else {
-                                            keysData = keys.toString();
-                                        }
-
-                                        if (returnType(valObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
-                                            valuesData = JSON.toJson(values);//将 bean 转为 json;
-                                        } else {
-                                            valuesData = values.toString();
-                                        }
-
-                                        data =
-                                                keyObj.getClass().getName() + keysData
-                                                        + "\n" +
-                                                        valObj.getClass().getName() + valuesData;
-                                    } else {
-                                        data = val.toString();
-                                    }
-                                } else {
-                                    data = val.toString();
-                                }
-                            }
-
-                            contentValues.put(name, data);
-                        } else {
-                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
-                            contentValues.put(name, jsonStr);
-                        }
-                    } catch (IllegalArgumentException | IllegalAccessException e) {
-                        e.printStackTrace();
-                        exception(getLineInfo(2) + "保存数据出现问题");
-                        status = false;
-                        return this;
-                    }
-                }
-                statusNumber = sqLiteDatabase2.update(simpleName, contentValues, condition, valuesArray);
-            } else {
-                statusNumber = sqLiteDatabase2.update(simpleName, (ContentValues) bean, condition, valuesArray);
-            }
-
-            //进行更新
-            if (statusNumber == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-
-            return this;
-        }
-
-        /**
-         * @param tableClass 修改哪张表
-         * @param bean       修改表的 实体类 或 ContentValues 值
-         * @param keyValue   修改表里的那个ID行数据
-         * @return
-         * @修改表
-         */
-        public Hibernate update(Class<?> tableClass, Object bean, Object keyValue) {
-
-            //判空
-            if (bean == null || keyValue == null || tableClass == null) {
-                err(getLineInfo(2), "修改的参数为null，操作失败");
-                status = false;
-                return this;
-            }
-
-            //初始化与获取必要属性
-            ContentValues contentValues = new ContentValues();
-            Class<? extends Object> class1 = bean.getClass();
-            String simpleName = tableClass.getSimpleName();//获取表名
-            statusNumber = 0;
-
-            //判断这个表是否存在
-            List<String> tableAllValue = null;
-            if (isTable(simpleName)) {
-                tableAllValue = getTableAllValue(simpleName);
-                if (tableAllValue == null || tableAllValue.size() == 0) {
-                    err(getLineInfo(2), "修改的表数据为空，操作失败");
-                    status = false;
-                    return this;
-                }
-            } else {
-                err(getLineInfo(2), "修改的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-
-            //判断更新对象是 实体类 还是 ContentValues 对象
-            if (ContentValues.class != bean.getClass()) {
-                Field[] fields = class1.getDeclaredFields();//获取所有成员变量
-                for (Field field : fields) {
-                    field.setAccessible(true); // 设置些属性是可以访问的
-                    try {
-                        Class<?> type = field.getType();//获取字段类型
-                        String name = field.getName();//获取属性名
-                        Object val = field.get(bean);// 得到此属性的值
-
-                        GT_Key annotation = field.getAnnotation(GT_Key.class);
-                        if (annotation != null && annotation.autoincrement()) {//如果这个字段是Key并且是自增的就跳过
-                            continue;
-                        }
-
-                        if (String.class == type) {
-                            contentValues.put(name, (String) val);
-                        } else if (int.class == type) {
-                            contentValues.put(name, (int) val);
-                        } else if (Integer.class == type) {
-                            contentValues.put(name, (Integer) val);
-                        } else if (boolean.class == type || Boolean.class == type) {
-                            contentValues.put(name, (boolean) val);
-                        } else if (double.class == type || Double.class == type) {
-                            contentValues.put(name, (double) val);
-                        } else if (float.class == type || Float.class == type) {
-                            contentValues.put(name, (float) val);
-                        } else if (Time.class == type) {
-                            contentValues.put(name, String.valueOf((Time) val));
-                        } else if (Date.class == type || java.sql.Date.class == type) {
-                            contentValues.put(name, String.valueOf((Date) val));
-                        } else if (long.class == type || Long.class == type) {
-                            contentValues.put(name, (long) val);
-                        } else if (short.class == type || Short.class == type) {
-                            contentValues.put(name, (short) val);
-                        } else if (byte[].class == type) {
-                            contentValues.put(name, (byte[]) val);
-                        } else if (List.class == type || Map.class == type) { //存储 List 与 Map 类型的
-                            if (val == null) {
-                                contentValues.put(name, "null");
-                                continue;
-                            }
-                            String data = "";
-                            //如果是 List 类型的存储
-                            if (val.getClass() == ArrayList.class) {
-                                ArrayList<?> list = (ArrayList<?>) val;
-                                if (list.size() != 0) {
-                                    Object o = list.get(0);
-                                    if (o != null) {
-                                        Class aClass = returnType(o.getClass());//返回当前类型
-                                        if (aClass == null) {//如果是特殊类型 ，那就进过json 处理 再存储
-                                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
-                                            data = o.getClass().getName() + jsonStr;
-                                        } else {
-                                            data = aClass.getName() + val.toString();
-                                        }
-                                    } else {
-                                        data = val.toString();
-                                    }
-                                } else {
-                                    data = val.toString();
-                                }
-                            } else if (val.getClass() == HashMap.class) {
-                                Set<?> keys = ((HashMap<?, ?>) val).keySet();
-                                Collection<?> values = ((HashMap<?, ?>) val).values();
-                                if (values.size() != 0) {
-                                    Object keyObj = keys.iterator().next();
-                                    Object valObj = values.iterator().next();
-                                    if (keyObj != null && valObj != null) {
-
-                                        String keysData = "";
-                                        String valuesData = "";
-
-                                        if (returnType(keyObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
-                                            keysData = JSON.toJson(keys);//将 bean 转为 json;
-                                        } else {
-                                            keysData = keys.toString();
-                                        }
-
-                                        if (returnType(valObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
-                                            valuesData = JSON.toJson(values);//将 bean 转为 json;
-                                        } else {
-                                            valuesData = values.toString();
-                                        }
-
-                                        data =
-                                                keyObj.getClass().getName() + keysData
-                                                        + "\n" +
-                                                        valObj.getClass().getName() + valuesData;
-                                    } else {
-                                        data = val.toString();
-                                    }
-                                } else {
-                                    data = val.toString();
-                                }
-                            }
-
-                            contentValues.put(name, data);
-                        } else {
-                            String jsonStr = JSON.toJson(val);//将 bean 转为 json
-                            contentValues.put(name, jsonStr);
-                        }
-                    } catch (IllegalArgumentException | IllegalAccessException e) {
-                        e.printStackTrace();
-                        exception(getLineInfo(2) + "数据出现问题");
-                        status = false;
-                        return this;
-                    }
-                }
-                statusNumber = sqLiteDatabase2.update(simpleName, contentValues, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});
-            } else {
-                statusNumber = sqLiteDatabase2.update(simpleName, (ContentValues) bean, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});
-            }
-
-            //进行更新
-            if (statusNumber == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-
-            return this;
-        }
-
-        /**
-         * @param tableClass
+         * 保存和修改的操作核心方法
+         *
+         * @param bean
          * @param contentValues
-         * @return
-         * @更新这张表全部数据
-         */
-        public Hibernate updateAll(Class<?> tableClass, ContentValues contentValues) {
-
-            //判空
-            if (contentValues == null || tableClass == null) {
-                err(getLineInfo(2), "修改的参数为null，操作失败");
-                status = false;
-                return this;
-            }
-
-            //初始化与获取必要属性
-            String simpleName = tableClass.getSimpleName();//获取表名
-            statusNumber = 0;
-
-            //判断这个表是否存在
-            if (!isTable(simpleName)) {
-                err(getLineInfo(2), "修改的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-            statusNumber = sqLiteDatabase2.update(simpleName, contentValues, null, null);
-            //进行更新
-            if (statusNumber == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-
-            return this;
-        }
-
-        /**
-         * @param beanClass  删除那张表数据
-         * @param conditions 删除条件
-         * @param values     删除条件对应值
-         * @return
-         * @删除表
-         */
-        public Hibernate delete(Class<?> beanClass, Object conditions, Object values) {
-
-            if (beanClass == null) {
-                err(getLineInfo(2), "删除的 beanClass 数据为null，操作失败");
-                return this;
-            }
-
-            if (conditions == null) {
-                err(getLineInfo(2), "删除的 conditions 数据为null，操作失败");
-                return this;
-            }
-
-            if (values == null) {
-                err(getLineInfo(2), "删除的 values 数据为null，操作失败");
-                return this;
-            }
-
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                return this;
-            }
-
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                return this;
-            }
-
-            if (conditionsType.equals("String[]") && valuesType.equals("String[]")) {
-                String[] a = (String[]) conditions;
-                String[] b = (String[]) values;
-
-                if (a.length == 0 || b.length == 0) {
-                    err(getLineInfo(2), "删除的条件或条件值为null，操作失败");
-                    status = false;
-                    return this;
-                }
-
-                if (a.length != b.length) {
-                    err(getLineInfo(2), "删除的数据的条件与条件值不匹配，操作失败");
-                    status = false;
-                    return this;
-                }
-            }
-
-
-            Class<? extends Object> class1 = beanClass;
-            String simpleName = class1.getSimpleName();//获取表名
-
-            //检查数据库中是否存在该表
-            if (!isTable(simpleName)) {
-                err(getLineInfo(2), "当前数据库中 " + simpleName + " 表不存在，操作失败！...");
-                status = false;
-                return this;
-            }
-
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
-                }
-                condition = condition.substring(0, condition.lastIndexOf("and"));//去掉最后一个多余 and
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
-            }
-
-            String[] valuesArray = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
-            } else if (valuesType.equals("String")) {
-                valuesArray[0] = (String) values;
-            }
-
-            //进行更新
-            int update = sqLiteDatabase2.delete(simpleName, condition, valuesArray);
-
-            if (update == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-
-            return this;
-        }
-
-        /**
-         * @param beanClass 删除的表
-         * @param keyValue  删除的ID
-         * @return
-         * @更具ID删除
-         */
-        public Hibernate delete(Class<?> beanClass, Object keyValue) {
-
-            if (beanClass == null) {
-                err(getLineInfo(2), "删除的 beanClass 数据为null，操作失败");
-                return this;
-            }
-
-            if (keyValue == null) {
-                err(getLineInfo(2), "删除的 values 数据为null，操作失败");
-                return this;
-            }
-
-            Class<? extends Object> class1 = beanClass;
-            String simpleName = class1.getSimpleName();//获取表名
-
-            //检查数据库中是否存在该表
-            //判断这个表是否存在
-            List<String> tableAllValue = null;
-            if (isTable(simpleName)) {
-                tableAllValue = getTableAllValue(simpleName);
-                if (tableAllValue == null || tableAllValue.size() == 0) {
-                    err(getLineInfo(2), "修改的表数据为空，操作失败");
-                    status = false;
-                    return this;
-                }
-            } else {
-                err(getLineInfo(2), "修改的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-
-            //进行更新
-            int update = sqLiteDatabase2.delete(simpleName, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});
-
-            if (update == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-
-            return this;
-        }
-
-        /**
-         * @param tableClass
-         * @return
-         * @删除所有表
-         */
-        public Hibernate deleteAll(Class<?> tableClass) {
-
-            //初始化与获取必要属性
-            String simpleName = tableClass.getSimpleName();//获取表名
-            statusNumber = 0;
-
-            //判断这个表是否存在
-            if (!isTable(simpleName)) {
-                err(getLineInfo(2), "修改的表不存在，操作失败");
-                status = false;
-                return this;
-            }
-            statusNumber = sqLiteDatabase2.delete(simpleName, null, null);
-            //进行更新
-            if (statusNumber == 0) {
-                status = false;
-            } else {
-                status = true;
-            }
-
-            return this;
-        }
-
-        // SQL 查询
-
-        private String orderByStr = "";//排序
-        private String limitStr = "";//限量
-
-        public Hibernate flashback(String orderByStr) {
-            this.orderByStr = orderByStr + " desc";
-            return this;
-        }
-
-        public Hibernate limit(int limitStr) {
-            this.limitStr = limitStr + "";
-            return this;
-        }
-
-        public Hibernate limit(int limitStart, int limitEnd) {
-            this.limitStr = limitStart + "," + limitEnd;
-            return this;
-        }
-
-        /**
-         * @param tableNameClass 查询的表
-         * @param values         查询ID
          * @param <T>
-         * @return
-         * @根据表ID查询数据
          */
-        public <T> T query(Class<T> tableNameClass, Object values) {
+        private <T> void saveAddUpdateOperation(T bean, ContentValues contentValues) {
 
-            if (tableNameClass == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
+            initSqlParameter();
+
+            Class<?> class1 = bean.getClass();//当前类
+            Class<?> superclass = class1.getSuperclass();//获取父类
+            //递归去执行父类
+            if (Object.class != superclass) {
+                saveSuper(bean, superclass, contentValues);//使用保存父类的方法进行保存
             }
 
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            T bean = null;//定义泛型
-            try {
-                bean = tableNameClass.newInstance();//实体化
-            } catch (IllegalAccessException e) {
-//                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            }
-
-            String[] returnValue = null;//获取当前类的所有字段
-            List<String> tableAllValue = getTableAllValue(tableName);
-            if (tableAllValue != null && tableAllValue.size() > 0) {
-                returnValue = new String[tableAllValue.size()];
-                for (int i = 0; i < tableAllValue.size(); i++) {
-                    returnValue[i] = tableAllValue.get(i);
-                }
-            }
-
-            Field[] fields = bean.getClass().getDeclaredFields();
-
+            //获取所有成员变量
+            Field[] fields = class1.getDeclaredFields();
+            //解析并设置保存的数据
             for (Field field : fields) {
-                String valueName = field.getName();
-                Class<?> type = field.getType();
-                field.setAccessible(true);
+                field.setAccessible(true); // 设置属性是可以访问的
+                try {
+                    Class<?> type = field.getType();//获取字段类型
+                    String name = field.getName();//获取属性名
+                    Object val = field.get(bean);// 得到此属性的值
 
-                //反射生成对象并注入
-                Cursor cursor = sqLiteDatabase2.query(tableName, returnValue, tableAllValue.get(0) + " = ?", new String[]{values.toString()}, null, null, null);
-                if (cursor != null && cursor.getCount() > 0) {
-                    cursor.moveToFirst();//移动到首位
-                    for (String str : returnValue) {
-                        Object obj = null;
-                        if (str.equals(valueName)) {
-                            if (String.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (int.class == type || Integer.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (boolean.class == type || Boolean.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                if (value == 1) {
-                                    obj = true;
-                                } else if (value == 0) {
-                                    obj = false;
-                                }
-                            } else if (double.class == type || Double.class == type) {
-                                double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (float.class == type || Float.class == type) {
-                                float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (Time.class == type) {
-                                String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (time == null || time.length() == 0) {
-                                    time = new Time(System.currentTimeMillis()).toString();
-                                }
-                                SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                Date d2 = null;
-                                try {
-                                    d2 = format2.parse(time);
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                                Time startTimeFmt = new Time(d2.getTime());
-                                obj = startTimeFmt;
-                            } else if (Date.class == type || java.sql.Date.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                try {
-                                    Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                    obj = date;
-                                } catch (ParseException e) {
-                                    e.printStackTrace();
-                                }
-                            } else if (long.class == type || Long.class == type) {
-                                long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (short.class == type || Short.class == type) {
-                                short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (byte[].class.equals(type)) {
-                                byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (List.class == type || Map.class == type) {
+                    GT_Key annotation = field.getAnnotation(GT_Key.class);
+                    GT_NotInit notInit = field.getAnnotation(GT_NotInit.class);
+                    if (annotation != null && annotation.autoincrement() || notInit != null) {//如果这个字段是Key并且是 "自增",或是不映射字段 的就跳过
+                        continue;
+                    }
 
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (value == null || "null".equals(value)) {
-                                    obj = null;
+                    if (String.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, "");
+                            continue;
+                        }
+                        contentValues.put(name, (String) val);
+                    } else if (int.class == type || Integer.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, 0);
+                            continue;
+                        }
+                        contentValues.put(name, (int) val);
+                    } else if (boolean.class == type || Boolean.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, false);
+                            continue;
+                        }
+                        contentValues.put(name, (boolean) val);
+                    } else if (double.class == type || Double.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, 0);
+                            continue;
+                        }
+                        contentValues.put(name, (double) val);
+                    } else if (float.class == type || Float.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, 0);
+                            continue;
+                        }
+                        contentValues.put(name, (float) val);
+                    } else if (Time.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, "");
+                            continue;
+                        }
+                        contentValues.put(name, String.valueOf((Time) val));
+                    } else if (Date.class == type || java.sql.Date.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, "");
+                            continue;
+                        }
+                        contentValues.put(name, String.valueOf((Date) val));
+                    } else if (long.class == type || Long.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, 0);
+                            continue;
+                        }
+                        contentValues.put(name, (long) val);
+                    } else if (short.class == type || Short.class == type) {
+                        if (val == null) {
+                            contentValues.put(name, 0);
+                            continue;
+                        }
+                        contentValues.put(name, (short) val);
+                    } else if (byte[].class.equals(type)) {
+                        contentValues.put(name, (byte[]) val);
+                    }
+
+
+                    //数组类型
+                    else if (String[].class == type) {
+                        //String[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (int[].class == type) {
+                        //int[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (boolean[].class == type) {
+                        //boolean[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (double[].class == type) {
+                        //double[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (float[].class == type) {
+                        //float[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (long[].class == type) {
+                        //long[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (short[].class == type) {
+                        //short[]
+                        String valueData = JSON.toJson(val);
+                        contentValues.put(name, valueData);
+                    } else if (List.class == type || Map.class == type) { //存储 List 与 Map 类型的
+                        if (val == null) {
+                            contentValues.put(name, "null");
+                            continue;
+                        }
+                        String data = "";
+                        //如果是 List 类型的存储
+                        if (val.getClass() == ArrayList.class) {
+                            ArrayList<?> list = (ArrayList<?>) val;
+                            if (list.size() != 0) {
+                                Object o = list.get(0);
+                                if (o != null) {
+                                    Class aClass = returnType(o.getClass());//返回当前类型
+                                    if (aClass == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                        String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                                        data = o.getClass().getName() + jsonStr;
+                                    } else {
+                                        data = aClass.getName() + val.toString();
+                                    }
                                 } else {
-                                    //第二次转换 List OR Map
-                                    obj = returnListOrMap(type, value);
+                                    data = val.toString();
                                 }
                             } else {
-//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                String name = field.getName();//获取属性名
-                                Object val = null;
-                                try {
-                                    val = field.get(bean);// 得到此属性的值
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                                try {
-                                    obj = JSON.fromJson(value, type);
-                                } catch (JSONException e) {
-                                    e.printStackTrace();
-                                }
-
+                                data = val.toString();
                             }
-                        }
+                        } else if (val.getClass() == HashMap.class) {
+                            Set<?> keys = ((HashMap<?, ?>) val).keySet();
+                            Collection<?> values = ((HashMap<?, ?>) val).values();
+                            if (values.size() != 0) {
+                                Object keyObj = keys.iterator().next();
+                                Object valObj = values.iterator().next();
+                                if (keyObj != null && valObj != null) {
 
-                        if (obj != null) {
-                            try {
-                                field.set(bean, obj);
-                                continue;
-                            } catch (IllegalAccessException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
+                                    String keysData = "";
+                                    String valuesData = "";
 
-                }
-                cursor.close();//释放资源
-            }
+                                    if (returnType(keyObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                        keysData = JSON.toJson(keys);//将 bean 转为 json;
+                                    } else {
+                                        keysData = keys.toString();
+                                    }
 
-            return bean;
-        }
+                                    if (returnType(valObj.getClass()) == null) {//如果是特殊类型 ，那就进过json 处理 再存储
+                                        valuesData = JSON.toJson(values);//将 bean 转为 json;
+                                    } else {
+                                        valuesData = values.toString();
+                                    }
 
-        /**
-         * @param tableNameClass 查询的表
-         * @param conditions     查询条件
-         * @param values         查询条件值
-         * @param <T>
-         * @return
-         * @查询一条数据
-         */
-        public <T> T query(Class<T> tableNameClass, Object conditions, Object values) {
-
-            if (tableNameClass == null || conditions == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
-            }
-
-            //监测条件
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //解析查询条件 conditions （String）
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
-                }
-
-                //去掉最后一个多余 and
-                condition = condition.substring(0, condition.lastIndexOf("and"));
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
-            }
-
-            //解析查询条件值
-            String[] valuesArray = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
-            } else if (valuesType.equals("String")) {
-                valuesArray[0] = (String) values;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            T bean = null;//定义泛型
-            try {
-                bean = tableNameClass.newInstance();//实体化
-            } catch (IllegalAccessException e) {
-//                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            }
-
-            String[] returnValue = null;//获取当前类的所有字段
-            List<String> tableAllValue = getTableAllValue(tableName);
-            if (tableAllValue != null && tableAllValue.size() > 0) {
-                returnValue = new String[tableAllValue.size()];
-                for (int i = 0; i < tableAllValue.size(); i++) {
-                    returnValue[i] = tableAllValue.get(i);
-                }
-            }
-
-            for (Field field : bean.getClass().getDeclaredFields()) {
-                String valueName = field.getName();
-                Class<?> type = field.getType();
-                field.setAccessible(true);
-
-                //反射生成对象并注入
-                Cursor cursor = sqLiteDatabase2.query(tableName, returnValue, condition, valuesArray, null, null, null);
-                if (cursor != null && cursor.getCount() > 0) {
-                    cursor.moveToFirst();//移动到首位
-                    for (String str : returnValue) {
-                        Object obj = null;
-                        if (str.equals(valueName)) {
-                            if (String.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (int.class == type || Integer.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (boolean.class == type || Boolean.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                if (value == 1) {
-                                    obj = true;
-                                } else if (value == 0) {
-                                    obj = false;
-                                }
-                            } else if (double.class == type || Double.class == type) {
-                                double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (float.class == type || Float.class == type) {
-                                float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (Time.class == type) {
-                                String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (time == null || time.length() == 0) {
-                                    time = new Time(System.currentTimeMillis()).toString();
-                                }
-                                SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                Date d2 = null;
-                                try {
-                                    d2 = format2.parse(time);
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                                Time startTimeFmt = new Time(d2.getTime());
-                                obj = startTimeFmt;
-                            } else if (Date.class == type || java.sql.Date.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                try {
-                                    Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                    obj = date;
-                                } catch (ParseException e) {
-                                    e.printStackTrace();
-                                }
-                            } else if (long.class == type || Long.class == type) {
-                                long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (short.class == type || Short.class == type) {
-                                short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (byte[].class.equals(type)) {
-                                byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (List.class == type || Map.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (value == null || "null".equals(value)) {
-                                    obj = null;
+                                    data =
+                                            keyObj.getClass().getName() + keysData
+                                                    + "\n" +
+                                                    valObj.getClass().getName() + valuesData;
                                 } else {
-                                    //第二次转换 List OR Map
-                                    obj = returnListOrMap(type, value);
+                                    data = val.toString();
                                 }
                             } else {
-//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                String name = field.getName();//获取属性名
-                                Object val = null;
-                                try {
-                                    val = field.get(bean);// 得到此属性的值
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                                try {
-                                    obj = JSON.fromJson(value, type);
-                                } catch (JSONException e) {
-                                    e.printStackTrace();
-                                }
-
+                                data = val.toString();
                             }
                         }
 
-                        if (obj != null) {
-                            try {
-                                field.set(bean, obj);
-                                continue;
-                            } catch (IllegalAccessException e) {
-                                e.printStackTrace();
-                            }
-                        }
+                        contentValues.put(name, data);
+                    } else {
+                        String jsonStr = JSON.toJson(val);//将 bean 转为 json
+                        contentValues.put(name, jsonStr);
                     }
 
+                } catch (IllegalArgumentException | IllegalAccessException e) {
+                    e.printStackTrace();
+                    exception(getLineInfo(LOG.lineInfoIndex) + "数据出现问题");
+                    status = false;
+                    return;
                 }
-                cursor.close();//释放资源
             }
 
-            return bean;
         }
 
-        /**
-         * @param tableNameClass 查询的表
-         * @param returnValue    返回的字段
-         * @param conditions     查询条件
-         * @param values         查询条件值
-         * @param <T>
-         * @return
-         * @查询一条数据
-         */
-        public <T> T query(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
+        //查询父类
+        private <T> void querySuper(T bean, Class<?> class1, String[] tableChar, Cursor cursor) {
 
-            if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
+            //递归查询父类字段
+            Class<?> superclass = class1.getSuperclass();
+            if (Object.class != superclass) {
+                querySuper(bean, superclass, tableChar, cursor);
+            } else {
+                //如果已经到基类Object那就不再递归了
+                return;
             }
 
-            //监测条件
-            String returnValueType = returnValue.getClass().getSimpleName();
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!returnValueType.equals("String") && !returnValueType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 returnValue 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //解析查询条件 conditions （String）
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
-                }
-
-                //去掉最后一个多余 and
-                condition = condition.substring(0, condition.lastIndexOf("and"));
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
-            }
-
-            //解析查询条件值
-            String[] returnValues = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                returnValues = (String[]) returnValue;
-            } else if (valuesType.equals("String")) {
-                returnValues[0] = (String) returnValue;
-            }
-
-            //解析查询条件值
-            String[] valuesArray = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
-            } else if (valuesType.equals("String")) {
-                valuesArray[0] = (String) values;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            T bean = null;//定义泛型
-            try {
-                bean = tableNameClass.newInstance();//实体化
-            } catch (IllegalAccessException e) {
-//                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            }
-
-            Field[] fields = bean.getClass().getDeclaredFields();
-
+            Field[] fields = superclass.getDeclaredFields();
             for (Field field : fields) {
                 String valueName = field.getName();
                 Class<?> type = field.getType();
                 field.setAccessible(true);
+                for (String str : tableChar) {
+                    Object obj = null;
+                    if (str.equals(valueName)) {
+                        if (String.class == type) {
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            obj = value;
+                        } else if (int.class == type || Integer.class == type) {
+                            int value = cursor.getInt(cursor.getColumnIndex(valueName));
+                            obj = value;
+                        } else if (boolean.class == type || Boolean.class == type) {
+                            int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
+                            if (value == 1) {
+                                obj = true;
+                            } else if (value == 0) {
+                                obj = false;
+                            }
+                        } else if (double.class == type || Double.class == type) {
+                            double value = cursor.getDouble(cursor.getColumnIndex(valueName));
+                            obj = value;
+                        } else if (float.class == type || Float.class == type) {
+                            float value = cursor.getFloat(cursor.getColumnIndex(valueName));
+                            obj = value;
+                        } else if (Time.class == type) {
+                            String time = cursor.getString(cursor.getColumnIndex(valueName));
+                            if (time == null || time.length() == 0) {
+                                time = new Time(System.currentTimeMillis()).toString();
+                            }
+                            SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
+                            Date d2 = null;
+                            try {
+                                d2 = format2.parse(time);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                            Time startTimeFmt = new Time(d2.getTime());
+                            obj = startTimeFmt;
+                        } else if (Date.class == type || java.sql.Date.class == type) {
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            try {
+                                Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
+                                obj = date;
+                            } catch (ParseException e) {
+                                e.printStackTrace();
+                            }
+                        } else if (long.class == type || Long.class == type) {
+                            long value = cursor.getLong(cursor.getColumnIndex(valueName));
+                            obj = value;
+                        } else if (short.class == type || Short.class == type) {
+                            short value = cursor.getShort(cursor.getColumnIndex(valueName));
+                            obj = value;
+                        } else if (byte[].class.equals(type)) {
+                            byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
+                            obj = value;
+                        }
 
-                //反射生成对象并注入
-                Cursor cursor = sqLiteDatabase2.query(tableName, returnValues, condition, valuesArray, null, null, null);
-                if (cursor != null && cursor.getCount() > 0) {
-                    cursor.moveToFirst();//移动到首位
-                    for (String str : (String[]) returnValue) {
-                        Object obj = null;
-                        if (str.equals(valueName)) {
-                            if (String.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (int.class == type || Integer.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (boolean.class == type || Boolean.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                if (value == 1) {
-                                    obj = true;
-                                } else if (value == 0) {
-                                    obj = false;
-                                }
-                            } else if (double.class == type || Double.class == type) {
-                                double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (float.class == type || Float.class == type) {
-                                float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (Time.class == type) {
-                                String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (time == null || time.length() == 0) {
-                                    time = new Time(System.currentTimeMillis()).toString();
-                                }
-                                SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                Date d2 = null;
-                                try {
-                                    d2 = format2.parse(time);
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                                Time startTimeFmt = new Time(d2.getTime());
-                                obj = startTimeFmt;
-                            } else if (Date.class == type || java.sql.Date.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                try {
-                                    Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                    obj = date;
-                                } catch (ParseException e) {
-                                    e.printStackTrace();
-                                }
-                            } else if (long.class == type || Long.class == type) {
-                                long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (short.class == type || Short.class == type) {
-                                short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (byte[].class.equals(type)) {
-                                byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (List.class == type || Map.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (value == null || "null".equals(value)) {
-                                    obj = null;
+
+                        //数组类型
+                        else if (String[].class == type) {
+                            //String[]
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            if (value == null) {
+                                obj = null;
+                            } else if ("[]".equals(value)) {
+                                obj = new String[]{};
+                            } else if (value.length() >= 5) {
+                                obj = value.substring(2, value.length() - 2).split("\",\"");
+                            }
+                        } else if (int[].class == type) {
+                            //int[]
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            int[] intArr = null;
+                            if (value == null) {
+                                obj = null;
+                            } else if ("[]".equals(value)) {
+                                obj = new int[]{};
+                            } else if (value.length() >= 3) {
+                                value = value.substring(1, value.length() - 1);
+
+                                if (value.indexOf(",") != -1) {
+                                    String[] split = value.split(",");
+                                    intArr = new int[split.length];
+                                    for (int p = 0; p < split.length; p++) {
+                                        intArr[p] = Integer.parseInt(split[p]);
+                                    }
                                 } else {
-                                    //第二次转换 List OR Map
-                                    obj = returnListOrMap(type, value);
+                                    intArr = new int[]{Integer.parseInt(value)};
                                 }
-                            } else {
-//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                String name = field.getName();//获取属性名
-                                Object val = null;
-                                try {
-                                    val = field.get(bean);// 得到此属性的值
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                                try {
-                                    obj = JSON.fromJson(value, type);
-                                } catch (JSONException e) {
-                                    e.printStackTrace();
-                                }
-
                             }
-                        }
+                            obj = intArr;
+                        } else if (boolean[].class == type) {
+                            //boolean[]
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            boolean[] booleanArr = null;
+                            if (value == null) {
+                                obj = null;
+                            } else if ("[]".equals(value)) {
+                                obj = new boolean[]{};
+                            } else if (value.length() >= 3) {
+                                value = value.substring(1, value.length() - 1);
 
-                        if (obj != null) {
+                                if (value.indexOf(",") != -1) {
+                                    String[] split = value.split(",");
+                                    booleanArr = new boolean[split.length];
+                                    for (int p = 0; p < split.length; p++) {
+                                        booleanArr[p] = Boolean.parseBoolean(split[p]);
+                                    }
+                                } else {
+                                    booleanArr = new boolean[]{Boolean.parseBoolean(value)};
+                                }
+                            }
+                            obj = booleanArr;
+                        } else if (double[].class == type) {
+                            //double[]
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            double[] doubleArr = null;
+                            if (value == null) {
+                                obj = null;
+                            } else if ("[]".equals(value)) {
+                                obj = new double[]{};
+                            } else if (value.length() >= 3) {
+                                value = value.substring(1, value.length() - 1);
+
+                                if (value.indexOf(",") != -1) {
+                                    String[] split = value.split(",");
+                                    doubleArr = new double[split.length];
+                                    for (int p = 0; p < split.length; p++) {
+                                        doubleArr[p] = Double.parseDouble(split[p]);
+                                    }
+                                } else {
+                                    doubleArr = new double[]{Double.parseDouble(value)};
+                                }
+                            }
+                            obj = doubleArr;
+                        } else if (float[].class == type) {
+                            //float[]
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            float[] floatArr = null;
+                            if (value == null) {
+                                obj = null;
+                            } else if ("[]".equals(value)) {
+                                obj = new float[]{};
+                            } else if (value.length() >= 3) {
+                                value = value.substring(1, value.length() - 1);
+
+                                if (value.indexOf(",") != -1) {
+                                    String[] split = value.split(",");
+                                    floatArr = new float[split.length];
+                                    for (int p = 0; p < split.length; p++) {
+                                        floatArr[p] = Float.parseFloat(split[p]);
+                                    }
+                                } else {
+                                    floatArr = new float[]{Float.parseFloat(value)};
+                                }
+                            }
+                            obj = floatArr;
+                        } else if (long[].class == type) {
+                            //long[]
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            long[] longArr = null;
+                            if (value == null) {
+                                obj = null;
+                            } else if ("[]".equals(value)) {
+                                obj = new long[]{};
+                            } else if (value.length() >= 3) {
+                                value = value.substring(1, value.length() - 1);
+
+                                if (value.indexOf(",") != -1) {
+                                    String[] split = value.split(",");
+                                    longArr = new long[split.length];
+                                    for (int p = 0; p < split.length; p++) {
+                                        longArr[p] = Long.parseLong(split[p]);
+                                    }
+                                } else {
+                                    longArr = new long[]{Long.parseLong(value)};
+                                }
+                            }
+                            obj = longArr;
+                        } else if (short[].class == type) {
+                            //short[]
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            short[] shortArr = null;
+                            if (value == null) {
+                                obj = null;
+                            } else if ("[]".equals(value)) {
+                                obj = new short[]{};
+                            } else if (value.length() >= 3) {
+                                value = value.substring(1, value.length() - 1);
+
+                                if (value.indexOf(",") != -1) {
+                                    String[] split = value.split(",");
+                                    shortArr = new short[split.length];
+                                    for (int p = 0; p < split.length; p++) {
+                                        shortArr[p] = Short.parseShort(split[p]);
+                                    }
+                                } else {
+                                    shortArr = new short[]{Short.parseShort(value)};
+                                }
+                            }
+                            obj = shortArr;
+                        } else if (List.class == type || Map.class == type) {
+
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            if (value == null || "null".equals(value)) {
+                                obj = null;
+                            } else {
+                                //第二次转换 List OR Map
+                                obj = returnListOrMap(type, value);
+                            }
+                        } else {
+//                                    err(getLineInfo(LOG.lineInfoIndex), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                            String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            String name = field.getName();//获取属性名
+                            Object val = null;
                             try {
-                                field.set(bean, obj);
-                                continue;
+                                val = field.get(bean);// 得到此属性的值
                             } catch (IllegalAccessException e) {
                                 e.printStackTrace();
                             }
-                        }
-                    }
-
-                }
-                cursor.close();//释放资源
-            }
-
-            return bean;
-        }
-
-        /**
-         * @param tableNameClass
-         * @param returnValue
-         * @param conditions
-         * @param values
-         * @param <T>
-         * @return
-         * @查询最后一条数据
-         */
-        public <T> T queryLast(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
-
-            if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
-            }
-
-            //监测条件
-            String returnValueType = returnValue.getClass().getSimpleName();
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!returnValueType.equals("String") && !returnValueType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 returnValue 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //解析查询条件 conditions （String）
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
-                }
-
-                //去掉最后一个多余 and
-                condition = condition.substring(0, condition.lastIndexOf("and"));
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
-            }
-
-            //解析查询条件值
-            String[] returnValues = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                returnValues = (String[]) returnValue;
-            } else if (valuesType.equals("String")) {
-                returnValues[0] = (String) returnValue;
-            }
-
-            //解析查询条件值
-            String[] valuesArray = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
-            } else if (valuesType.equals("String")) {
-                valuesArray[0] = (String) values;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            T bean = null;//定义泛型
-            try {
-                bean = tableNameClass.newInstance();//实体化
-            } catch (IllegalAccessException e) {
-//                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            }
-
-            Field[] fields = bean.getClass().getDeclaredFields();
-
-            for (Field field : fields) {
-                String valueName = field.getName();
-                Class<?> type = field.getType();
-                field.setAccessible(true);
-
-                //反射生成对象并注入
-                Cursor cursor = sqLiteDatabase2.query(tableName, returnValues, condition, valuesArray, null, null, null);
-
-                if (cursor != null && cursor.getCount() > 0) {
-                    cursor.moveToLast();//移动到最后一位
-                    for (String str : (String[]) returnValue) {
-                        Object obj = null;
-                        if (str.equals(valueName)) {
-                            if (String.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (int.class == type || Integer.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (boolean.class == type || Boolean.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                if (value == 1) {
-                                    obj = true;
-                                } else if (value == 0) {
-                                    obj = false;
-                                }
-                            } else if (double.class == type || Double.class == type) {
-                                double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (float.class == type || Float.class == type) {
-                                float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (Time.class == type) {
-                                String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (time == null || time.length() == 0) {
-                                    time = new Time(System.currentTimeMillis()).toString();
-                                }
-                                SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                Date d2 = null;
-                                try {
-                                    d2 = format2.parse(time);
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                                Time startTimeFmt = new Time(d2.getTime());
-                                obj = startTimeFmt;
-                            } else if (Date.class == type || java.sql.Date.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                try {
-                                    Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                    obj = date;
-                                } catch (ParseException e) {
-                                    e.printStackTrace();
-                                }
-                            } else if (long.class == type || Long.class == type) {
-                                long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (short.class == type || Short.class == type) {
-                                short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (byte[].class.equals(type)) {
-                                byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (List.class == type || Map.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else {
-                                err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                            }
-                        }
-
-                        if (obj != null) {
                             try {
-                                field.set(bean, obj);
-                                continue;
-                            } catch (IllegalAccessException e) {
+                                obj = JSON.fromJson(value, type);
+                            } catch (JSONException e) {
                                 e.printStackTrace();
                             }
+
                         }
                     }
-                }
-                cursor.close();//释放资源
-            }
 
-            return bean;
-        }
-
-        /**
-         * @param tableNameClass
-         * @param returnValue
-         * @param conditions
-         * @param values
-         * @param <T>
-         * @return
-         * @查询第一条数据
-         */
-        public <T> T queryFirst(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
-
-            if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
-            }
-
-            //监测条件
-            String returnValueType = returnValue.getClass().getSimpleName();
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!returnValueType.equals("String") && !returnValueType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 returnValue 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //解析查询条件 conditions （String）
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
-                }
-
-                //去掉最后一个多余 and
-                condition = condition.substring(0, condition.lastIndexOf("and"));
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
-            }
-
-            //解析查询条件值
-            String[] returnValues = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                returnValues = (String[]) returnValue;
-            } else if (valuesType.equals("String")) {
-                returnValues[0] = (String) returnValue;
-            }
-
-            //解析查询条件值
-            String[] valuesArray = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
-            } else if (valuesType.equals("String")) {
-                valuesArray[0] = (String) values;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            T bean = null;//定义泛型
-            try {
-                bean = tableNameClass.newInstance();//实体化
-            } catch (IllegalAccessException e) {
-//                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-                err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                status = false;
-                return null;
-            }
-
-            Field[] fields = bean.getClass().getDeclaredFields();
-
-            for (Field field : fields) {
-                String valueName = field.getName();
-                Class<?> type = field.getType();
-                field.setAccessible(true);
-
-                //反射生成对象并注入
-                Cursor cursor = sqLiteDatabase2.query(tableName, returnValues, condition, valuesArray, null, null, null);
-
-                if (cursor != null && cursor.getCount() > 0) {
-                    cursor.moveToFirst();//移动到首位
-                    for (String str : (String[]) returnValue) {
-                        Object obj = null;
-                        if (str.equals(valueName)) {
-                            if (String.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (int.class == type || Integer.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (boolean.class == type || Boolean.class == type) {
-                                int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                if (value == 1) {
-                                    obj = true;
-                                } else if (value == 0) {
-                                    obj = false;
-                                }
-                            } else if (double.class == type || Double.class == type) {
-                                double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (float.class == type || Float.class == type) {
-                                float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (Time.class == type) {
-                                String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                if (time == null || time.length() == 0) {
-                                    time = new Time(System.currentTimeMillis()).toString();
-                                }
-                                SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                Date d2 = null;
-                                try {
-                                    d2 = format2.parse(time);
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                                Time startTimeFmt = new Time(d2.getTime());
-                                obj = startTimeFmt;
-                            } else if (Date.class == type || java.sql.Date.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                try {
-                                    Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                    obj = date;
-                                } catch (ParseException e) {
-                                    e.printStackTrace();
-                                }
-                            } else if (long.class == type || Long.class == type) {
-                                long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (short.class == type || Short.class == type) {
-                                short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (byte[].class.equals(type)) {
-                                byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else if (List.class == type || Map.class == type) {
-                                String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                obj = value;
-                            } else {
-                                err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                            }
-                        }
-
+                    try {
                         if (obj != null) {
-                            try {
-                                field.set(bean, obj);
-                                continue;
-                            } catch (IllegalAccessException e) {
-                                e.printStackTrace();
-                            }
+                            field.set(bean, obj);
                         }
+                        continue;
+                    } catch (Exception e) {
+//                                    e.printStackTrace();
+                        errs("查询数据中出现了无法转换的类型:" + e);
                     }
                 }
-                cursor.close();//释放资源
-            }
 
-            return bean;
+            }
         }
 
-        //多个查询
+        //查询核心方法
+        private <T> List<T> queryCoreAlgorithm(Class<T> tableNameClass, boolean isQueryAll) {
 
-        /**
-         * @param tableNameClass
-         * @param <T>
-         * @return
-         * @根据表查询出表中所有数据
-         */
-        public <T> List<T> queryAll(Class<T> tableNameClass) {
+            String tableName = tableNameClass.getSimpleName();//获取表名称
 
-            if (tableNameClass == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
             //判断这个表是否存在
             if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
+                err(getLineInfo(LOG.lineInfoIndex), "查询的表不存在，操作失败");
                 status = false;
                 return null;
             }
 
-            String[] returnValue = null;//获取当前类的所有字段
-            List<String> tableAllValue = getTableAllValue(tableName);
-            if (tableAllValue != null && tableAllValue.size() > 0) {
-                returnValue = new String[tableAllValue.size()];
-                for (int i = 0; i < tableAllValue.size(); i++) {
-                    returnValue[i] = tableAllValue.get(i);
+            //获取查询该表的返回字段
+            if (returnValues == null) {
+                List<String> tableAllValue = getTableAllValue(tableName);
+                if (tableAllValue != null && tableAllValue.size() > 0) {
+                    returnValues = new String[tableAllValue.size()];
+                    for (int i = 0; i < tableAllValue.size(); i++) {
+                        returnValues[i] = tableAllValue.get(i);
+                    }
                 }
             }
+            List<T> beanList = new ArrayList<T>();//创建容器
+
+            //初始化数据库参数
+            initSqlParameter();
 
             //反射生成对象并注入
-            Cursor cursor = sqLiteDatabase2.query(tableName, null, null, null, null, null, orderByStr, limitStr);
-            List<T> beanList = new ArrayList<T>();//创建容器
+            Cursor cursor = sqLiteDatabase2.query(tableName, returnValues, conditions, values, null, null, orderByStr, limitStr);
             if (cursor != null && cursor.getCount() > 0) {
-                cursor.moveToFirst();//移动到首位
+                if (isLast()) {
+                    cursor.moveToLast();//移动到最后一位
+                } else {
+                    cursor.moveToFirst();//移动到首位
+                }
                 for (int i = 0; i < cursor.getCount(); i++) {
                     T bean = null;//定义泛型
                     try {
                         bean = tableNameClass.newInstance();//实体化
                     } catch (IllegalAccessException e) {
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
+                        err(getLineInfo(LOG.lineInfoIndex), "数据库操作 实体类缺少无参构造，操作失败e：" + e);
                         status = false;
                         return null;
                     } catch (InstantiationException e) {
                         e.printStackTrace();
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
+                        err(getLineInfo(LOG.lineInfoIndex), "数据库操作 实体类缺少无参构造，操作失败e：" + e);
                         status = false;
                         return null;
                     }
+
+                    //递归查询父类
+                    querySuper(bean, tableNameClass, returnValues, cursor);
 
                     Field[] fields = bean.getClass().getDeclaredFields();
                     for (Field field : fields) {
                         String valueName = field.getName();
                         Class<?> type = field.getType();
                         field.setAccessible(true);
-                        for (String str : (String[]) returnValue) {
+                        for (String str : returnValues) {
                             Object obj = null;
                             if (str.equals(valueName)) {
                                 if (String.class == type) {
@@ -5602,6 +4130,152 @@ public class GT {
                                 } else if (byte[].class.equals(type)) {
                                     byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
                                     obj = value;
+                                }
+
+
+                                //数组类型
+                                else if (String[].class == type) {
+                                    //String[]
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    if (value == null) {
+                                        obj = null;
+                                    } else if ("[]".equals(value)) {
+                                        obj = new String[]{};
+                                    } else if (value.length() >= 5) {
+                                        obj = value.substring(2, value.length() - 2).split("\",\"");
+                                    }
+                                } else if (int[].class == type) {
+                                    //int[]
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    int[] intArr = null;
+                                    if (value == null) {
+                                        obj = null;
+                                    } else if ("[]".equals(value)) {
+                                        obj = new int[]{};
+                                    } else if (value.length() >= 3) {
+                                        value = value.substring(1, value.length() - 1);
+
+                                        if (value.indexOf(",") != -1) {
+                                            String[] split = value.split(",");
+                                            intArr = new int[split.length];
+                                            for (int p = 0; p < split.length; p++) {
+                                                intArr[p] = Integer.parseInt(split[p]);
+                                            }
+                                        } else {
+                                            intArr = new int[]{Integer.parseInt(value)};
+                                        }
+                                    }
+                                    obj = intArr;
+                                } else if (boolean[].class == type) {
+                                    //boolean[]
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    boolean[] booleanArr = null;
+                                    if (value == null) {
+                                        obj = null;
+                                    } else if ("[]".equals(value)) {
+                                        obj = new boolean[]{};
+                                    } else if (value.length() >= 3) {
+                                        value = value.substring(1, value.length() - 1);
+
+                                        if (value.indexOf(",") != -1) {
+                                            String[] split = value.split(",");
+                                            booleanArr = new boolean[split.length];
+                                            for (int p = 0; p < split.length; p++) {
+                                                booleanArr[p] = Boolean.parseBoolean(split[p]);
+                                            }
+                                        } else {
+                                            booleanArr = new boolean[]{Boolean.parseBoolean(value)};
+                                        }
+                                    }
+                                    obj = booleanArr;
+                                } else if (double[].class == type) {
+                                    //double[]
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    double[] doubleArr = null;
+                                    if (value == null) {
+                                        obj = null;
+                                    } else if ("[]".equals(value)) {
+                                        obj = new double[]{};
+                                    } else if (value.length() >= 3) {
+                                        value = value.substring(1, value.length() - 1);
+
+                                        if (value.indexOf(",") != -1) {
+                                            String[] split = value.split(",");
+                                            doubleArr = new double[split.length];
+                                            for (int p = 0; p < split.length; p++) {
+                                                doubleArr[p] = Double.parseDouble(split[p]);
+                                            }
+                                        } else {
+                                            doubleArr = new double[]{Double.parseDouble(value)};
+                                        }
+                                    }
+                                    obj = doubleArr;
+                                } else if (float[].class == type) {
+                                    //float[]
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    float[] floatArr = null;
+                                    if (value == null) {
+                                        obj = null;
+                                    } else if ("[]".equals(value)) {
+                                        obj = new float[]{};
+                                    } else if (value.length() >= 3) {
+                                        value = value.substring(1, value.length() - 1);
+
+                                        if (value.indexOf(",") != -1) {
+                                            String[] split = value.split(",");
+                                            floatArr = new float[split.length];
+                                            for (int p = 0; p < split.length; p++) {
+                                                floatArr[p] = Float.parseFloat(split[p]);
+                                            }
+                                        } else {
+                                            floatArr = new float[]{Float.parseFloat(value)};
+                                        }
+                                    }
+                                    obj = floatArr;
+                                } else if (long[].class == type) {
+                                    //long[]
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    long[] longArr = null;
+                                    if (value == null) {
+                                        obj = null;
+                                    } else if ("[]".equals(value)) {
+                                        obj = new long[]{};
+                                    } else if (value.length() >= 3) {
+                                        value = value.substring(1, value.length() - 1);
+
+                                        if (value.indexOf(",") != -1) {
+                                            String[] split = value.split(",");
+                                            longArr = new long[split.length];
+                                            for (int p = 0; p < split.length; p++) {
+                                                longArr[p] = Long.parseLong(split[p]);
+                                            }
+                                        } else {
+                                            longArr = new long[]{Long.parseLong(value)};
+                                        }
+                                    }
+                                    obj = longArr;
+                                } else if (short[].class == type) {
+                                    //short[]
+                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                    short[] shortArr = null;
+                                    if (value == null) {
+                                        obj = null;
+                                    } else if ("[]".equals(value)) {
+                                        obj = new short[]{};
+                                    } else if (value.length() >= 3) {
+                                        value = value.substring(1, value.length() - 1);
+
+                                        if (value.indexOf(",") != -1) {
+                                            String[] split = value.split(",");
+                                            shortArr = new short[split.length];
+                                            for (int p = 0; p < split.length; p++) {
+                                                shortArr[p] = Short.parseShort(split[p]);
+                                            }
+                                        } else {
+                                            shortArr = new short[]{Short.parseShort(value)};
+                                        }
+                                    }
+                                    obj = shortArr;
                                 } else if (List.class == type || Map.class == type) {
 
                                     String value = cursor.getString(cursor.getColumnIndex(valueName));
@@ -5612,7 +4286,7 @@ public class GT {
                                         obj = returnListOrMap(type, value);
                                     }
                                 } else {
-//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                                    err(getLineInfo(LOG.lineInfoIndex), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
                                     String value = cursor.getString(cursor.getColumnIndex(valueName));
                                     String name = field.getName();//获取属性名
                                     Object val = null;
@@ -5643,453 +4317,839 @@ public class GT {
 
                     }
                     beanList.add(bean);//存入查询到的数据
-                    cursor.moveToNext();//移动到下一位
+
+                    //是否查询全部
+                    if (isQueryAll) {
+                        cursor.moveToNext();//移动到下一位
+                    } else {
+                        //查询到一个后退出
+                        break;
+                    }
                 }
             }
             cursor.close();//释放资源
 
-            orderByStr = "";
-            limitStr = "";
-
+            //释放数据库参数
+            closeSqlParameter();
             return beanList;
         }
 
         /**
+         * 将该实体类中的真正主键设置为条件与条件值
+         *
+         * @param bean
          * @param <T>
-         * @param tableNameClass 查询的表
-         * @param conditions     查询条件
-         * @param values         查询条件值
-         * @return
-         * @查询多条数据
          */
-        public <T> List<T> queryAll(Class<T> tableNameClass, Object conditions, Object values) {
+        private <T> void setConditionsKeyValue(T bean, Class<?> aClass) {
 
-            if (tableNameClass == null || conditions == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
-                status = false;
-                return null;
+            Class<?> superclass = aClass.getSuperclass();//父类
+            if (superclass != Object.class) {
+                setConditionsKeyValue(bean, superclass);//递归调用
             }
 
-            //监测条件
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //解析查询条件 conditions （String）
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
+            for (Field field : aClass.getDeclaredFields()) {
+                field.setAccessible(true); // 设置属性是可以访问的
+                GT_Key annotation = field.getAnnotation(GT_Key.class);
+                if (annotation != null) {
+                    try {
+                        String name = field.getName();//获取属性名
+                        Object val = field.get(bean);// 得到此属性的值
+//                            log("当前主键是:" + "name:" + name + "  val:" + val);
+                        conditions = name + " = ?";
+                        values = new String[]{val.toString()};
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    }
+                    break;
                 }
+            }
+        }
 
-                //去掉最后一个多余 and
-                condition = condition.substring(0, condition.lastIndexOf("and"));
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
+        /**
+         * 获取表数据总数量
+         *
+         * @param tableClass
+         * @return 返回当前表数据总条数，如果当前表不存在则返回-1
+         */
+        public long count(Class<?> tableClass) {
+            if (tableClass == null) return -1;
+            long count = 0;
+            String tableName = tableClass.getSimpleName();
+            if (isTable(tableName)) {
+                String sqlCode = "select count(1) from " + tableName;//默认计数语句
+                if (conditions != null && values != null) {
+                    sqlCode += " where " + conditions;
+                }
+                Cursor cursor = sqLiteDatabase2.rawQuery(sqlCode, values);
+                if (cursor != null && cursor.moveToFirst()) {
+                    count = cursor.getLong(0);
+                }
+                cursor.close();
+            } else {
+                count = -1;
             }
 
-            //解析查询条件值
-            String[] valuesArray = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
-            } else if (valuesType.equals("String")) {
-                valuesArray[0] = (String) values;
-            }
+            return count;
+        }
 
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
+        /**
+         * 求当列总和
+         *
+         * @param aClass
+         * @param columnName
+         * @return
+         */
+        public Object sum(Class<?> aClass, String columnName) {
+            if (aClass == null || columnName == null) return null;
+            String tableName = aClass.getSimpleName();//表名
+            String sqlCode = "select sum(" + columnName + ") from " + tableName;//默认的代码
+            if (conditions != null && values != null) {
+                sqlCode += " where " + conditions;
+            }
+            //查一下数据库怎么查询该字段是属于什么类型的数据
+            Object sum = -1;
+            Cursor cursor = sqLiteDatabase2.rawQuery(sqlCode, values);
+            if (cursor != null && cursor.moveToFirst()) {
+                sum = cursor.getInt(0);
+            }
+            cursor.close();
+            return sum;
+        }
+
+        /**
+         * 求当列最大值
+         *
+         * @param aClass
+         * @param columnName
+         * @return
+         */
+        public Object max(Class<?> aClass, String columnName) {
+            if (aClass == null || columnName == null) return null;
+            String tableName = aClass.getSimpleName();//表名
+            String sqlCode = "select max(" + columnName + ") from " + tableName;//默认的代码
+            if (conditions != null && values != null) {
+                sqlCode += " where " + conditions;
+            }
+            //查一下数据库怎么查询该字段是属于什么类型的数据
+            Object sum = -1;
+            Cursor cursor = sqLiteDatabase2.rawQuery(sqlCode, values);
+            if (cursor != null && cursor.moveToFirst()) {
+                sum = cursor.getInt(0);
+            }
+            cursor.close();
+            return sum;
+        }
+
+        /**
+         * 求当列小值
+         *
+         * @param aClass
+         * @param columnName
+         * @return
+         */
+        public Object min(Class<?> aClass, String columnName) {
+            if (aClass == null || columnName == null) return null;
+            String tableName = aClass.getSimpleName();//表名
+            String sqlCode = "select min(" + columnName + ") from " + tableName;//默认的代码
+            if (conditions != null && values != null) {
+                sqlCode += " where " + conditions;
+            }
+            //查一下数据库怎么查询该字段是属于什么类型的数据
+            Object sum = -1;
+            Cursor cursor = sqLiteDatabase2.rawQuery(sqlCode, values);
+            if (cursor != null && cursor.moveToFirst()) {
+                sum = cursor.getInt(0);
+            }
+            cursor.close();
+            return sum;
+        }
+
+        /**
+         * 求当平均数
+         *
+         * @param aClass
+         * @param columnName
+         * @return
+         */
+        public Object average(Class<?> aClass, String columnName) {
+            if (aClass == null || columnName == null) return null;
+            String tableName = aClass.getSimpleName();//表名
+            String sqlCode = "select avg(" + columnName + ") from " + tableName;//默认的代码
+            if (conditions != null && values != null) {
+                sqlCode += " where " + conditions;
+            }
+            //查一下数据库怎么查询该字段是属于什么类型的数据
+            Object sum = -1;
+            Cursor cursor = sqLiteDatabase2.rawQuery(sqlCode, values);
+            if (cursor != null && cursor.moveToFirst()) {
+                sum = cursor.getInt(0);
+            }
+            cursor.close();
+            return sum;
+        }
+
+        /**
+         * 开启事务
+         *
+         * @return
+         */
+        public Hibernate beginTransaction() {
+            sqLiteDatabase2.beginTransaction();//开启事务
+            return this;
+        }
+
+        /**
+         * 设置事务成功
+         *
+         * @return
+         */
+        public Hibernate setTransactionSuccessful() {
+            sqLiteDatabase2.setTransactionSuccessful();//设置该事务成功
+            return this;
+        }
+
+        /**
+         * 结束事务
+         *
+         * @return
+         */
+        public Hibernate endTransaction() {
+            sqLiteDatabase2.endTransaction();//结束本次事务
+            return this;
+        }
+
+        /**
+         * ======================================================== 表的 增删查改 代码 ========================================
+         */
+
+
+        //============================================= 无实体类操作 =================================
+
+        /**
+         * @param tableName     表名称
+         * @param contentValues 内容值
+         * @return
+         * @保存
+         */
+        public Hibernate save(String tableName, ContentValues contentValues) {
+            if (!isTable(tableName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "保存的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+            initSqlParameter();
+            long insert = sqLiteDatabase2.insert(tableName, null, contentValues);
+            statusNumber = (int) insert;
+            //设置状态码
+            if (insert == -1) {
+                status = false;
+            } else {
+                status = true;
+            }
+            return this;
+        }
+
+        /**
+         * @param tableName   表名
+         * @param condition   条件
+         * @param valuesArray 条件值
+         * @return
+         * @删除
+         */
+        public Hibernate delete(String tableName) {
+
+            if (tableName == null || conditions == null || values == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "删除的 " + tableName + " 数据为null，操作失败");
+                return this;
+            }
+            //进行删除
+            if (!isTable(tableName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+            //初始化
+            initSqlParameter();
+            int update = sqLiteDatabase2.delete(tableName, conditions, values);
+            if (update == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+            closeSqlParameter();
+            return this;
+        }
+
+        /**
+         * @param tableName   表名
+         * @param condition   条件
+         * @param valuesArray 条件值
+         * @return
+         * @查询
+         */
+        public Cursor query(String tableName) {
+
             //判断这个表是否存在
             if (!isTable(tableName)) {
                 err(getLineInfo(2), "查询的表不存在，操作失败");
                 status = false;
                 return null;
             }
+            initSqlParameter();
+            Cursor cursor = sqLiteDatabase2.query(tableName, returnValues, conditions, values, null, null, orderByStr, limitStr);
+            statusNumber = cursor.getCount();
+            orderByStr = "";
+            limitStr = "";
+            cursor.moveToFirst();
+            closeSqlParameter();
+            return cursor;
+        }
 
-            String[] returnValue = null;//获取当前类的所有字段
+        /**
+         * @param tableName    表名
+         * @param returnValues 返回内容值(若返回全部可写 null)
+         * @param condition    条件
+         * @param valuesArray  条件值
+         * @return
+         * @修改
+         */
+        public Hibernate update(String tableName, ContentValues contentValues) {
+            if (!isTable(tableName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "修改的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+            initSqlParameter();
+            statusNumber = sqLiteDatabase2.update(tableName, contentValues, conditions, values);
+            //进行更新
+            if (statusNumber == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+            closeSqlParameter();
+            return this;
+        }
+
+        /**
+         * @param tableClass
+         * @return
+         * @删除所有表
+         */
+        public Hibernate deleteAll(String tableName) {
+
+            //判断这个表是否存在
+            if (!isTable(tableName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+            initSqlParameter();
+            statusNumber = sqLiteDatabase2.delete(tableName, null, null);
+            //进行更新
+            if (statusNumber == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+
+            return this;
+        }
+
+        //============================================= 实体类操作 =================================
+
+        /**
+         * @param bean //要保存的对象
+         * @return
+         * @保存数据
+         */
+        public <T> Hibernate save(T bean) {
+
+            if (bean == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "保存的对象为null，操作失败！");
+                status = false;
+                return this;
+            }
+
+            String simpleName = bean.getClass().getSimpleName();//获取表名
+            //检查数据库中是否存在该表
+            if (!isTable(simpleName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
+                status = false;
+                return this;
+            }
+
+            //创建游标
+            ContentValues contentValues = new ContentValues();
+            //保存和修改的操作
+            saveAddUpdateOperation(bean, contentValues);
+            //数据库操作
+            long insert = sqLiteDatabase2.insert(bean.getClass().getSimpleName(), null, contentValues);
+            statusNumber = (int) insert;
+            //设置状态码
+            if (insert == -1) {
+                status = false;
+            } else {
+                status = true;
+            }
+            return this;
+        }
+
+
+        /**
+         * 如果一次性存储的数据很多，推荐用所有存储
+         * 存储所有数据,当前测试效率：存储10万条数据，09:07:53.199——09:07:59.646 耗时6秒多
+         * 注意，影响存储的效率有如下：
+         * 1.该实体类复杂层度会直接影响存储效率
+         * 2.当前装载的安卓系统配置也会影响到存储效率
+         *
+         * @param beanList
+         * @param <T>
+         * @return
+         */
+        public <T> Hibernate saveAll(List<T> beanList) {
+
+            if (beanList == null && beanList.size() != 0) {
+                err(getLineInfo(LOG.lineInfoIndex), "保存全部的对象为null，操作失败！");
+                status = false;
+                return this;
+            }
+
+            long insert = 0;
+
+            String tableName = beanList.get(0).getClass().getSimpleName();
+            //检查数据库中是否存在该表
+            if (!isTable(tableName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + tableName + " 表不存在，操作失败！.");
+                status = false;
+                return this;
+            }
+
+
+            try {
+                beginTransaction();//开启事务
+                for (T bean : beanList) {
+                    //创建游标
+                    ContentValues contentValues = new ContentValues();
+                    //保存和修改的操作
+                    saveAddUpdateOperation(bean, contentValues);
+                    //数据库操作
+                    insert = sqLiteDatabase2.insert(tableName, null, contentValues);
+                }
+                setTransactionSuccessful();//设置本次事务成功
+            } catch (Exception e) {
+                err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + tableName + " 存储全部，操作失败！.");
+                status = false;
+                return this;
+            } finally {
+                endTransaction();//结束事务
+
+            }
+
+            statusNumber = (int) insert;
+            //设置状态码
+            if (insert == -1) {
+                status = false;
+            } else {
+                status = true;
+            }
+            return this;
+        }
+
+        /**
+         * 删除表(如果没有设置 删除条件 与 条件值 将无法删除)
+         *
+         * @param beanClass  删除表的名称
+         * @param conditions 删除条件
+         * @param values     删除条件对应值
+         * @return
+         */
+        public <T> Hibernate delete(T classOrBean) {
+
+            Class<?> aClass = classOrBean.getClass();
+
+            if (classOrBean == null || (classOrBean.getClass() == Class.class && (conditions == null || values == null))) {
+                err(getLineInfo(LOG.lineInfoIndex), "删除的 " + classOrBean + " 数据为null，操作失败");
+                return this;
+            }
+
+
+            if (classOrBean.getClass() == Class.class) {
+                aClass = (Class) classOrBean;
+            } else {
+                aClass = classOrBean.getClass();
+            }
+
+            String simpleName = aClass.getSimpleName();//获取表名
+
+            //如果没有自己设置条件，那就直接使用该对象的ID值进行默认操作
+            if (conditions == null || values == null) {
+                setConditionsKeyValue(classOrBean, aClass);
+            }
+
+            //检查数据库中是否存在该表
+            if (!isTable(simpleName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！...");
+                status = false;
+                return this;
+            }
+
+            initSqlParameter();
+
+            //进行更新
+            int update = sqLiteDatabase2.delete(simpleName, conditions, values);
+
+            if (update == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+
+            closeSqlParameter();
+
+            return this;
+        }
+
+        /**
+         * @param beanClass 删除的表
+         * @param keyValue  删除的ID
+         * @return
+         * @更具ID删除
+         */
+        public Hibernate delete(Class<?> beanClass, Object keyValue) {
+
+            if (beanClass == null || keyValue == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "删除的 beanClass 数据为null，操作失败");
+                return this;
+            }
+
+            String simpleName = beanClass.getSimpleName();//获取表名
+
+            //检查数据库中是否存在该表
+            List<String> tableAllValue = null;
+            if (isTable(simpleName)) {
+                tableAllValue = getTableAllValue(simpleName);
+                if (tableAllValue == null || tableAllValue.size() == 0) {
+                    err(getLineInfo(LOG.lineInfoIndex), "删除的表数据为空，操作失败");
+                    status = false;
+                    return this;
+                }
+            } else {
+                err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+
+            //进行更新
+            int update = sqLiteDatabase2.delete(simpleName, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});
+
+            if (update == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+
+            return this;
+        }
+
+        /**
+         * @param tableClass
+         * @return
+         * @删除所有表
+         */
+        public Hibernate deleteAll(Class<?> tableClass) {
+
+            //初始化与获取必要属性
+            String simpleName = tableClass.getSimpleName();//获取表名
+
+            //判断这个表是否存在
+            if (!isTable(simpleName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+            initSqlParameter();
+
+            statusNumber = sqLiteDatabase2.delete(simpleName, conditions, values);
+            //进行更新
+            if (statusNumber == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+            closeSqlParameter();
+            return this;
+        }
+
+        /**
+         * @param tableNameClass 查询的表
+         * @param values         查询ID
+         * @param <T>
+         * @return
+         * @根据表ID查询数据
+         */
+        public <T> T query(Class<T> tableNameClass) {
+
+            if (tableNameClass == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "查询的数据为 null，操作失败");
+                status = false;
+                return null;
+            }
+
+
+            //反射生成对象并注入
+            List<T> list = queryCoreAlgorithm(tableNameClass, false);
+            if (list == null || list.size() == 0) {
+                return null;
+            } else {
+                return list.get(0);
+            }
+        }
+
+        /**
+         * @param tableNameClass 查询的表
+         * @param values         查询ID
+         * @param <T>
+         * @return
+         * @根据表ID查询数据
+         */
+        public <T> T query(Class<T> tableNameClass, Object values) {
+
+            if (tableNameClass == null || values == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "查询的数据为 null，操作失败");
+                status = false;
+                return null;
+            }
+
+            String tableName = tableNameClass.getSimpleName();
+
+            //判断这个表是否存在
+            if (!isTable(tableName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "查询的表不存在，操作失败");
+                status = false;
+                return null;
+            }
+
+            //获取表名
             List<String> tableAllValue = getTableAllValue(tableName);
-            if (tableAllValue != null && tableAllValue.size() > 0) {
-                returnValue = new String[tableAllValue.size()];
-                for (int i = 0; i < tableAllValue.size(); i++) {
-                    returnValue[i] = tableAllValue.get(i);
-                }
-            }
+
+            //条件参数
+            setCondition(tableAllValue.get(0) + " = ?", new String[]{values.toString()});
 
             //反射生成对象并注入
-            Cursor cursor = sqLiteDatabase2.query(tableName, returnValue, condition, valuesArray, null, null, orderByStr, limitStr);
-            List<T> beanList = new ArrayList<T>();//创建容器
-            if (cursor != null && cursor.getCount() > 0) {
-                cursor.moveToFirst();//移动到首位
-                for (int i = 0; i < cursor.getCount(); i++) {
-
-                    T bean = null;//定义泛型
-                    try {
-                        bean = tableNameClass.newInstance();//实体化
-                    } catch (IllegalAccessException e) {
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    } catch (InstantiationException e) {
-                        e.printStackTrace();
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    }
-
-
-                    Field[] fields = bean.getClass().getDeclaredFields();
-
-                    for (Field field : fields) {
-                        String valueName = field.getName();
-                        Class<?> type = field.getType();
-                        field.setAccessible(true);
-
-                        /**
-                         * 思路：
-                         * 将反射循环注入赋值放在这里进行操作
-                         */
-                        for (String str : (String[]) returnValue) {
-                            Object obj = null;
-                            if (str.equals(valueName)) {
-                                if (String.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (int.class == type || Integer.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (boolean.class == type || Boolean.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                    if (value == 1) {
-                                        obj = true;
-                                    } else if (value == 0) {
-                                        obj = false;
-                                    }
-                                } else if (double.class == type || Double.class == type) {
-                                    double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (float.class == type || Float.class == type) {
-                                    float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (Time.class == type) {
-                                    String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (time == null || time.length() == 0) {
-                                        time = new Time(System.currentTimeMillis()).toString();
-                                    }
-                                    SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                    Date d2 = null;
-                                    try {
-                                        d2 = format2.parse(time);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                    Time startTimeFmt = new Time(d2.getTime());
-                                    obj = startTimeFmt;
-                                } else if (Date.class == type || java.sql.Date.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    try {
-                                        Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                        obj = date;
-                                    } catch (ParseException e) {
-                                        e.printStackTrace();
-                                    }
-                                } else if (long.class == type || Long.class == type) {
-                                    long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (short.class == type || Short.class == type) {
-                                    short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (byte[].class.equals(type)) {
-                                    byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (List.class == type || Map.class == type) {
-
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null || "null".equals(value)) {
-                                        obj = null;
-                                    } else {
-                                        //第二次转换 List OR Map
-                                        obj = returnListOrMap(type, value);
-                                    }
-                                } else {
-//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    String name = field.getName();//获取属性名
-                                    Object val = null;
-                                    try {
-                                        val = field.get(bean);// 得到此属性的值
-                                    } catch (IllegalAccessException e) {
-                                        e.printStackTrace();
-                                    }
-                                    try {
-                                        obj = JSON.fromJson(value, type);
-                                    } catch (JSONException e) {
-                                        e.printStackTrace();
-                                    }
-
-                                }
-                            }
-
-                            if (obj != null) {
-                                try {
-                                    field.set(bean, obj);
-                                    continue;
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        }
-
-                    }
-
-                    beanList.add(bean);//存入查询到的数据
-                    cursor.moveToNext();//移动到下一位
-                }
+            List<T> list = queryCoreAlgorithm(tableNameClass, false);
+            if (list == null || list.size() == 0) {
+                return null;
+            } else {
+                return list.get(0);
             }
-            cursor.close();//释放资源
-
-            orderByStr = "";
-            limitStr = "";
-
-            return beanList;
         }
 
         /**
-         * @param tableNameClass 查询的表
-         * @param returnValue    返回的字段
-         * @param conditions     查询条件
-         * @param values         查询条件值
+         * 根据表查询表中所有数据
+         *
+         * @param tableNameClass
          * @param <T>
          * @return
-         * @查询多条数据
          */
-        public <T> List<T> queryAll(Class<T> tableNameClass, Object returnValue, Object conditions, Object values) {
-
-            if (tableNameClass == null || returnValue == null || conditions == null || values == null) {
-                err(getLineInfo(2), "查询的数据为 null，操作失败");
+        public <T> List<T> queryAll(Class<T> tableNameClass) {
+            if (tableNameClass == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "查询的数据为 null，操作失败");
                 status = false;
                 return null;
             }
 
-            //监测条件
-            String returnValueType = returnValue.getClass().getSimpleName();
-            String conditionsType = conditions.getClass().getSimpleName();
-            String valuesType = values.getClass().getSimpleName();
-
-            if (!conditionsType.equals("String") && !conditionsType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 conditionsType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!valuesType.equals("String") && !valuesType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 valuesType 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            if (!returnValueType.equals("String") && !returnValueType.equals("String[]")) {
-                err(getLineInfo(2), "删除的数据 returnValue 类型仅支持String 与 String[]，操作失败");
-                status = false;
-                return null;
-            }
-
-            //解析查询条件 conditions （String）
-            String condition = "";//解析筛选条件
-            if (conditionsType.equals("String[]")) {
-                for (String str : (String[]) conditions) {
-                    condition += (str + " = ? and ");
-                }
-
-                //去掉最后一个多余 and
-                condition = condition.substring(0, condition.lastIndexOf("and"));
-            } else if (conditionsType.equals("String")) {
-                condition = (String) conditions;
-            }
-
-            //解析查询条件值
-            String[] returnValues = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                returnValues = (String[]) returnValue;
-            } else if (valuesType.equals("String")) {
-                returnValues[0] = (String) returnValue;
-            }
-
-            //解析查询条件值
-            String[] valuesArray = new String[1];//解析筛选值
-            if (valuesType.equals("String[]")) {
-                valuesArray = (String[]) values;
-            } else if (valuesType.equals("String")) {
-                valuesArray[0] = (String) values;
-            }
-
-            //获取表名
-            String tableName = tableNameClass.getSimpleName();
-            //判断这个表是否存在
-            if (!isTable(tableName)) {
-                err(getLineInfo(2), "查询的表不存在，操作失败");
-                status = false;
-                return null;
-            }
-
-            //反射生成对象并注入
-            Cursor cursor = sqLiteDatabase2.query(tableName, returnValues, condition, valuesArray, null, null, orderByStr, limitStr);
-            List<T> beanList = new ArrayList<T>();//创建容器
-            if (cursor != null && cursor.getCount() > 0) {
-                cursor.moveToFirst();//移动到首位
-                for (int i = 0; i < cursor.getCount(); i++) {
-
-                    T bean = null;//定义泛型
-                    try {
-                        bean = tableNameClass.newInstance();//实体化
-                    } catch (IllegalAccessException e) {
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    } catch (InstantiationException e) {
-                        e.printStackTrace();
-                        err(getLineInfo(2), "查询的实体类缺少无参构造，操作失败e：" + e);
-                        status = false;
-                        return null;
-                    }
-
-
-                    Field[] fields = bean.getClass().getDeclaredFields();
-
-                    for (Field field : fields) {
-                        String valueName = field.getName();
-                        Class<?> type = field.getType();
-                        field.setAccessible(true);
-
-                        /**
-                         * 思路：
-                         * 将反射循环注入赋值放在这里进行操作
-                         */
-                        for (String str : (String[]) returnValues) {
-                            Object obj = null;
-                            if (str.equals(valueName)) {
-                                if (String.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (int.class == type || Integer.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (boolean.class == type || Boolean.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                    if (value == 1) {
-                                        obj = true;
-                                    } else if (value == 0) {
-                                        obj = false;
-                                    }
-                                } else if (double.class == type || Double.class == type) {
-                                    double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (float.class == type || Float.class == type) {
-                                    float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (Time.class == type) {
-                                    String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (time == null || time.length() == 0) {
-                                        time = new Time(System.currentTimeMillis()).toString();
-                                    }
-                                    SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                    Date d2 = null;
-                                    try {
-                                        d2 = format2.parse(time);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                    Time startTimeFmt = new Time(d2.getTime());
-                                    obj = startTimeFmt;
-                                } else if (Date.class == type || java.sql.Date.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    try {
-                                        Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                        obj = date;
-                                    } catch (ParseException e) {
-                                        e.printStackTrace();
-                                    }
-                                } else if (long.class == type || Long.class == type) {
-                                    long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (short.class == type || Short.class == type) {
-                                    short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (byte[].class.equals(type)) {
-                                    byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (List.class == type || Map.class == type) {
-
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null || "null".equals(value)) {
-                                        obj = null;
-                                    } else {
-                                        //第二次转换 List OR Map
-                                        obj = returnListOrMap(type, value);
-                                    }
-                                } else {
-//                                    err(getLineInfo(2), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    String name = field.getName();//获取属性名
-                                    Object val = null;
-                                    try {
-                                        val = field.get(bean);// 得到此属性的值
-                                    } catch (IllegalAccessException e) {
-                                        e.printStackTrace();
-                                    }
-                                    try {
-                                        obj = JSON.fromJson(value, type);
-                                    } catch (JSONException e) {
-                                        e.printStackTrace();
-                                    }
-
-                                }
-                            }
-
-                            if (obj != null) {
-                                try {
-                                    field.set(bean, obj);
-                                    continue;
-                                } catch (IllegalAccessException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        }
-
-                    }
-
-                    beanList.add(bean);//存入查询到的数据
-                    cursor.moveToNext();//移动到下一位
-                }
-            }
-            cursor.close();//释放资源
-
-            orderByStr = "";
-            limitStr = "";
-
-            return beanList;
+            //算法
+            List<T> list = queryCoreAlgorithm(tableNameClass, true);
+            return list;
         }
-
-        //原生查询
 
         /**
-         * @param sqlCode       执行SQL代码
-         * @param selectionArgs 对应占位符值
+         * @param bean       更新的表数据(实体类)
+         * @param conditions 修改条件
+         * @param values     修改条件对应值
          * @return
-         * @原生查询
+         * @更新表
          */
-        public Cursor query(String sqlCode, String[] selectionArgs) {
-            return sqLiteDatabase2.rawQuery(sqlCode, selectionArgs);
+        public <T> Hibernate update(T bean) {
+            if (bean == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
+                status = false;
+                return this;
+            }
+
+            Class<?> aClass = bean.getClass();
+
+            String simpleName = aClass.getSimpleName();//获取表名
+            //检查数据库中是否存在该表
+            if (!isTable(simpleName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
+                status = false;
+                return this;
+            }
+
+            //如果没有自己设置条件，那就直接使用该对象的ID值进行默认操作
+            if (conditions == null || values == null) {
+                setConditionsKeyValue(bean, aClass);//第一次调用
+            }
+
+            ContentValues contentValues = new ContentValues();
+            //保存和修改的操作
+            saveAddUpdateOperation(bean, contentValues);
+
+            statusNumber = sqLiteDatabase2.update(aClass.getSimpleName(), contentValues, conditions, values);
+            //进行更新
+            if (statusNumber == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+            closeSqlParameter();
+            return this;
         }
+
+        /**
+         * @param bean       更新的表数据(实体类)
+         * @param conditions 修改条件
+         * @param values     修改条件对应值
+         * @return
+         * @更新表
+         */
+        public Hibernate update(Class<?> tableClass, Object bean) {
+            if (bean == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
+                status = false;
+                return this;
+            }
+
+            String simpleName = bean.getClass().getSimpleName();//获取表名
+            //检查数据库中是否存在该表
+            if (!isTable(simpleName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
+                status = false;
+                return this;
+            }
+
+            //判断更新对象是 实体类 还是 ContentValues 对象
+            if (ContentValues.class != bean.getClass()) {
+                ContentValues contentValues = new ContentValues();
+                //保存和修改的操作
+                saveAddUpdateOperation(bean, contentValues);
+
+                if (conditions == null || values == null) {
+                    setConditionsKeyValue(bean, tableClass);
+                }
+
+                statusNumber = sqLiteDatabase2.update(bean.getClass().getSimpleName(), contentValues, conditions, values);
+            } else {
+                if (conditions == null || values == null) {
+                    err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
+                    status = false;
+                    return this;
+                }
+
+                statusNumber = sqLiteDatabase2.update(tableClass.getSimpleName(), (ContentValues) bean, conditions, values);
+            }
+            //进行更新
+            if (statusNumber == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+            closeSqlParameter();
+            return this;
+        }
+
+
+        /**
+         * @param bean     修改表的 实体类 或 ContentValues 值
+         * @param keyValue 修改表里的那个ID行数据
+         * @return
+         * @修改表
+         */
+        public Hibernate update(Object bean, Object keyValue) {
+
+            //判空
+            if (bean == null || keyValue == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "修改的参数为null，操作失败");
+                status = false;
+                return this;
+            }
+
+            //初始化与获取必要属性
+            ContentValues contentValues = new ContentValues();
+            statusNumber = 0;
+
+            String simpleName = bean.getClass().getSimpleName();//获取表名
+            //判断这个表是否存在
+            List<String> tableAllValue = null;
+            if (isTable(simpleName)) {
+                tableAllValue = getTableAllValue(simpleName);
+                if (tableAllValue == null || tableAllValue.size() == 0) {
+                    err(getLineInfo(LOG.lineInfoIndex), "修改的表数据为空，操作失败");
+                    status = false;
+                    return this;
+                }
+            } else {
+                err(getLineInfo(LOG.lineInfoIndex), "修改的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+
+            //保存和修改的操作
+            saveAddUpdateOperation(bean, contentValues);
+            statusNumber = sqLiteDatabase2.update(simpleName, contentValues, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});
+
+            //进行更新
+            if (statusNumber == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+
+            return this;
+        }
+
+        /**
+         * @param tableClass
+         * @param contentValues
+         * @return
+         * @更新这张表全部数据
+         */
+        public Hibernate updateAll(Class<?> tableClass, ContentValues contentValues) {
+
+            //判空
+            if (contentValues == null || tableClass == null) {
+                err(getLineInfo(LOG.lineInfoIndex), "修改的参数为null，操作失败");
+                status = false;
+                return this;
+            }
+
+            //初始化与获取必要属性
+            String simpleName = tableClass.getSimpleName();//获取表名
+            statusNumber = 0;
+
+            //判断这个表是否存在
+            if (!isTable(simpleName)) {
+                err(getLineInfo(LOG.lineInfoIndex), "修改的表不存在，操作失败");
+                status = false;
+                return this;
+            }
+            statusNumber = sqLiteDatabase2.update(simpleName, contentValues, conditions, values);
+            //进行更新
+            if (statusNumber == 0) {
+                status = false;
+            } else {
+                status = true;
+            }
+
+            return this;
+        }
+
+        /**
+         * ======================================================== Hibernate 创建数据库 代码 ========================================
+         */
+
 
         //====================================== 第一步：设置数据库名称 ======================================
 
@@ -6136,7 +5196,9 @@ public class GT {
             creationTableNameList.clear();
             updateTableValueList.clear();
             //判空
-            if (scanTable == null) return this;
+            if (scanTable == null) {
+                scanTable = ApplicationUtils.getPackageName(context);
+            }
 
             //实例化 数据库表集合
             if (tableList == null) {
@@ -6173,7 +5235,8 @@ public class GT {
             }
 
             //检测扫描路径
-            if (isReflect) {//如果需要反射就进行反射得到 class
+            if (isReflect) {
+                //如果需要反射就进行反射得到 class
                 if (!"".equals(EnityPackagePath)) {
                     loadHibernateAnnotation(EnityPackagePath, context);//加载数据库注解
                 } else {
@@ -6188,7 +5251,6 @@ public class GT {
                 analysisClassData();//解析 class
             }
 
-
             return this;
         }
         //====================================== 第三步：反射解析 class 信息自动生成 SQL代码 =================================
@@ -6201,147 +5263,159 @@ public class GT {
         private static final List<String> creationTableNameList = new ArrayList<>();//实例化表名集合
         private static final List<String> tableNameList = new ArrayList<>();//实例化表名集合
         private static final List<String> updateTableValueList = new ArrayList<>();//实例化存储更新字段的集合
-
         private String tableSqlCode;//创建表的SQL语句
         private String sqlChar = "";//添加要创建表字段
+        private String KeyType = "";//创建主键的类型
+        private String KeySqlCode = "";//创建主键的数据库代码
 
         //解析 主键 与 字段 自动生成 SQL 语句
         private Hibernate analysisClassData() {
 
-            boolean isKey = false;//是否存在多个主键
+            KeyType = "";//初始化该表的主键
+            KeySqlCode = "";//初始化该表的主键代码
 
             //遍历所有集成的 SQL 语句
             for (int i = 0; i < tableList.size(); i++) {
 
                 Class<?> aClass = tableList.get(i);//获取需要处理的 Class
 
+                String tableName = aClass.getSimpleName();//获取表名
+                if (tableNameList.contains(tableName)) continue;//如果当前数据库表中已经存在该表，那就不再添加
+
                 //存储需要更新的数据库字段
                 saveUpdateData(aClass);
 
                 //解析表名
-                String tableName = aClass.getSimpleName();//获取表名
                 tableNameList.add(tableName);//存储表名
                 tableSqlCode = "CREATE TABLE " + tableName + "(";//创建表的SQL语句
                 sqlChar = "";//初始化 SQL 字段
 
-                //遍历所有成员变量
-                for (Field field : aClass.getDeclaredFields()) {
-                    Class<?> type = field.getType();//获取当前字段类型
-
-                    //跳过标注不被持久化的字段
-                    if (field.getAnnotation(GT_OnNullValue.class) != null) {
-                        continue;
-                    }
-
-                    //解析主键
-                    GT_Key initView = field.getAnnotation(GT_Key.class);
-                    if (initView != null) {
-
-                        //监测当前类中是主键是否合法，
-                        if (!isKey) {
-                            isKey = true;
-                        } else {
-                            err(getLineInfo(), "数据库报错:当前 " + tableName + "类 中主键不唯一");
-                            isCreateTable = false;
-                            return this;
-                        }
-
-                        //若需要兼容其他字段可直接在这添加，不会对其他代码有影响
-                        String KeyType = "";
-                        if (String.class == type) {
-                            KeyType = "varchar(200)";
-                        } else if (int.class == type || Integer.class == type) {
-                            KeyType = "integer";
-                        } else if (boolean.class == type || Boolean.class == type) {
-                            KeyType = "BOOLEAN";
-                        } else if (double.class == type || Double.class == type) {
-                            KeyType = "DOUBLE";
-                        } else if (float.class == type || Float.class == type) {
-                            KeyType = "FLOAT";
-                        } else if (Time.class == type) {
-                            KeyType = "TIME";
-                        } else if (Date.class == type || java.sql.Date.class == type) {
-                            KeyType = "DATE";
-                        } else if (long.class == type || Long.class == type) {
-//                            KeyType = "varchar(20)";
-                            KeyType = "LONG";
-                        } else if (short.class == type || Short.class == type) {
-                            KeyType = "varchar(6)";
-                        } else if (byte[].class.equals(type)) {
-                            KeyType = "BLOB";
-                        } else if (List.class == type || Map.class == type) {
-                            KeyType = "TEXT";
-                        } else {
-                            err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                            isCreateTable = false;
-                            return this;
-                        }
-
-                        boolean autoincrement = initView.autoincrement();//获取 主键类型 注解值
-                        if (autoincrement) {//自动增长
-                            if ("integer".equals(KeyType) || "LONG".equals(KeyType)) {
-                                tableSqlCode += field.getName() + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL";
-                            } else {
-                                err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 不是int类型，暂不支持自增。");
-                                isCreateTable = false;
-                                return this;
-                            }
-                        } else {//手动增长
-                            if ("integer".equals(KeyType)) {//如果是整数型就需要转换一下
-                                KeyType = "INT";
-                            }
-                            tableSqlCode += field.getName() + " " + KeyType + " PRIMARY KEY NOT NULL";
-                        }
-                        continue;//跳过字段的解析
-                    }
-
-
-                    //表字段解析
-                    String tableStrName = field.getName();
-                    //若需要兼容其他字段可直接在这添加，不会对其他代码有影响
-                    if (String.class == type) {
-                        sqlChar += (", " + tableStrName + " VARCHAR(200)");
-                    } else if (int.class == type) {
-                        sqlChar += (", " + tableStrName + " INT");
-                    } else if (Integer.class == type) {
-                        sqlChar += (", " + tableStrName + " INTEGER");
-                    } else if (boolean.class == type || Boolean.class == type) {
-                        sqlChar += (", " + tableStrName + " BOOLEAN");
-                    } else if (double.class == type || Double.class == type) {
-                        sqlChar += (", " + tableStrName + " DOUBLE");
-                    } else if (float.class == type || Float.class == type) {
-                        sqlChar += (", " + tableStrName + " FLOAT");
-                    } else if (Time.class == type) {
-                        sqlChar += (", " + tableStrName + " TIME");
-                    } else if (Date.class == type || java.sql.Date.class == type) {
-                        sqlChar += (", " + tableStrName + " DATE");
-                    } else if (long.class == type || Long.class == type) {
-                        sqlChar += (", " + tableStrName + "  VARCHAR(20)");
-                    } else if (short.class == type || Short.class == type) {
-                        sqlChar += (", " + tableStrName + "  VARCHAR(6)");
-                    } else if (byte[].class.equals(type)) {
-                        sqlChar += (", " + tableStrName + " BLOB");
-                    } else if (List.class == type || Map.class == type) {
-                        sqlChar += (", " + tableStrName + " TEXT");
-                    } else {
-//                        err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-//                        isCreateTable = false;
-                        sqlChar += (", " + tableStrName + " TEXT");
-//                        return this;
-                    }
-
+                //解析类中所有字段
+                String returnData = analysisClassAllChar(aClass);
+                if ("this".equals(returnData)) {
+                    return this;
                 }
 
-                if (!isKey) {
-                    //自行为该表添加一个主键
-                    tableSqlCode += "GT_ID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL";
-                }
-
-                creationTableNameList.add(tableSqlCode + sqlChar + ")");//添加在创建表时需要执行的
-                isKey = false;//初始化注解标识
+                creationTableNameList.add(tableSqlCode + KeySqlCode + sqlChar + ")");//添加在创建表时需要执行的
             }
             return this;
         }
+
+
+        /**
+         * 解析类中所有字段
+         *
+         * @param aClass 需要递归父类
+         */
+        private String analysisClassAllChar(Class<?> aClass) {
+
+            Class<?> superclass = aClass.getSuperclass();
+
+            if (Object.class != superclass) {
+                analysisClassAllChar(superclass);
+            }
+
+            String tableName = aClass.getSimpleName();//获取表名
+
+            //遍历所有成员变量
+            for (Field field : aClass.getDeclaredFields()) {
+                Class<?> type = field.getType();//获取当前字段类型
+                String name = field.getName();
+                //跳过标注不被持久化的字段
+                if (field.getAnnotation(GT_NotInit.class) != null) {
+                    continue;
+                }
+
+                //解析主键
+                GT_Key initView = field.getAnnotation(GT_Key.class);
+                if (initView != null) {
+                    //若需要兼容其他字段可直接在这添加，不会对其他代码有影响
+                    if (String.class == type) {
+                        KeyType = "varchar(200)";
+                    } else if (int.class == type || Integer.class == type) {
+                        KeyType = "integer";
+                    } else if (boolean.class == type || Boolean.class == type) {
+                        KeyType = "BOOLEAN";
+                    } else if (double.class == type || Double.class == type) {
+                        KeyType = "DOUBLE";
+                    } else if (float.class == type || Float.class == type) {
+                        KeyType = "FLOAT";
+                    } else if (Time.class == type) {
+                        KeyType = "TIME";
+                    } else if (Date.class == type || java.sql.Date.class == type) {
+                        KeyType = "DATE";
+                    } else if (long.class == type || Long.class == type) {
+                        KeyType = "LONG";
+                    } else if (short.class == type || Short.class == type) {
+                        KeyType = "varchar(6)";
+                    } else if (byte[].class.equals(type)) {
+                        KeyType = "BLOB";
+                    } else if (List.class == type || Map.class == type) {
+                        KeyType = "TEXT";
+                    } else {
+                        err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+                        isCreateTable = false;
+                        return "this";
+                    }
+
+                    boolean autoincrement = initView.autoincrement();//获取 主键类型 注解值
+                    if (autoincrement) {//自动增长
+                        if ("integer".equals(KeyType) || "LONG".equals(KeyType)) {
+                            KeySqlCode = field.getName() + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL";
+                        } else {
+                            err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 不是int类型，暂不支持自增。");
+                            isCreateTable = false;
+                            return "this";
+                        }
+                    } else {//手动增长
+                        if ("integer".equals(KeyType)) {//如果是整数型就需要转换一下
+                            KeyType = "INT";
+                        }
+                        KeySqlCode = field.getName() + " " + KeyType + " PRIMARY KEY NOT NULL";
+                    }
+                    continue;//跳过字段的解析
+                }
+
+
+                //表字段解析
+                String tableStrName = field.getName();
+                //若需要兼容其他字段可直接在这添加，不会对其他代码有影响
+                if (String.class == type) {
+                    sqlChar += (", " + tableStrName + " VARCHAR(200)");
+                } else if (int.class == type) {
+                    sqlChar += (", " + tableStrName + " INT");
+                } else if (Integer.class == type) {
+                    sqlChar += (", " + tableStrName + " INTEGER");
+                } else if (boolean.class == type || Boolean.class == type) {
+                    sqlChar += (", " + tableStrName + " BOOLEAN");
+                } else if (double.class == type || Double.class == type) {
+                    sqlChar += (", " + tableStrName + " DOUBLE");
+                } else if (float.class == type || Float.class == type) {
+                    sqlChar += (", " + tableStrName + " FLOAT");
+                } else if (Time.class == type) {
+                    sqlChar += (", " + tableStrName + " TIME");
+                } else if (Date.class == type || java.sql.Date.class == type) {
+                    sqlChar += (", " + tableStrName + " DATE");
+                } else if (long.class == type || Long.class == type) {
+                    sqlChar += (", " + tableStrName + "  VARCHAR(20)");
+                } else if (short.class == type || Short.class == type) {
+                    sqlChar += (", " + tableStrName + "  VARCHAR(6)");
+                } else if (byte[].class.equals(type)) {
+                    sqlChar += (", " + tableStrName + " BLOB");
+                } else if (List.class == type || Map.class == type) {
+                    sqlChar += (", " + tableStrName + " TEXT");
+                } else {
+                    //自动创建
+//                        err(getLineInfo(), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
+//                        isCreateTable = false;
+                    sqlChar += (", " + tableStrName + " TEXT");
+//                        return this;
+                }
+
+            }
+            return "";
+        }
+
 
         /**
          * @param aClass
@@ -6354,7 +5428,7 @@ public class GT {
             String newStr = "";//存储新字段
             for (Field field : fields) {
                 String newTableName = field.getName();//获取新字段名
-                GT_DatabaseField initView = field.getAnnotation(GT_DatabaseField.class);
+                GT_Update initView = field.getAnnotation(GT_Update.class);
                 if (initView != null) {
                     String oldTableName = initView.oldTableValue();//获取注解值
                     if (oldTableName != null && !"".equals(oldTableName)) {
@@ -6382,6 +5456,7 @@ public class GT {
                 } catch (RuntimeException e) {
                     errs(getLineInfo() + "数据库报错:" + e);
                 }
+
             }
 
 
@@ -6398,7 +5473,7 @@ public class GT {
                 okTableNameList.add(classz.getSimpleName());
             }
 
-            for (String tableName : getSQLAllTableName()) {
+            for (String tableName : getSqlAllTableName()) {
                 if (!okTableNameList.contains(tableName)) {//判断当前创建的表是否为系统创建的表
                     if (isTable(tableName)) {
                         deleteTable(tableName).isStatus();//删除表
@@ -6421,7 +5496,8 @@ public class GT {
             Enumeration<String> enumeration = dexFile.entries();
             while (enumeration.hasMoreElements()) {
                 String className = enumeration.nextElement();
-                if (className.contains(EnityPackagePath)) {//在当前所有可执行的类里面查找包含有该包名的所有类
+                //在当前所有可执行的类里面查找包含有该包名的所有类
+                if (className.contains(EnityPackagePath)) {
                     Class<?> clazz1 = null;
                     try {
                         clazz1 = Class.forName(className);
@@ -6430,10 +5506,20 @@ public class GT {
                     }
 
                     //过滤掉未被注解过的类
-                    Annotation BeanSubAnnotation = clazz1.getAnnotation(GT_Bean.class);    //判断是否被 Bean 注解过
-                    Annotation EntitySubAnnotation = clazz1.getAnnotation(GT_Entity.class);    //判断是否被 Entity 注解过
+                    GT_Bean bean = clazz1.getAnnotation(GT_Bean.class);//获取该类 ContextView 的注解类
+                    Annotation beanSubAnnotation = clazz1.getAnnotation(GT_Bean.class);    //判断是否被 Bean 注解过
+                    Annotation entitySubAnnotation = clazz1.getAnnotation(GT_Entity.class);    //判断是否被 Entity 注解过
 
-                    if (BeanSubAnnotation != null || EntitySubAnnotation != null) {
+                    if (beanSubAnnotation != null || entitySubAnnotation != null) {
+
+                        //分库映射(如果实体类中指定了被映射的数据库，那就根据数据库名称来判断该表是否映射)
+                        String userSqlName = bean.sqlName();//获取用户指定的数据库名称
+                        if (userSqlName != null && !"".equals(userSqlName)) {
+                            String gt_sqlName = DATABASE_NAME.substring(0, DATABASE_NAME.indexOf("."));//获取当前系统执行的数据库名称
+                            if (!gt_sqlName.equals(userSqlName)) {
+                                continue;//跳过本次添加的表
+                            }
+                        }
                         tableList.add(clazz1);
                     }/*else{
                         log("过滤掉 " + clazz1 + " 没有被注解的类");
@@ -6691,6 +5777,50 @@ public class GT {
 
         public static String getCacheSize(File file) throws Exception {
             return getFormatSize(getFolderSize(file));
+        }
+
+    }
+
+    /**
+     * 随机类
+     */
+    public static class GT_Random {
+        private final static Random random = new Random();
+
+        /**
+         * 获取一个未知整数
+         *
+         * @return int
+         */
+        public static int getInt() {
+            int min = -2147483648;
+            int max = 2147483647;
+            return random.nextInt(max) % (max - min + 1) + min;
+        }
+
+        /**
+         * 获取随机范围的数
+         *
+         * @param min
+         * @param max
+         * @return
+         */
+        public static int getInt(int min, int max) {
+            return random.nextInt(max) % (max - min + 1) + min;
+        }
+
+
+    }
+
+    /**
+     * 进制数据
+     */
+    public static class HexadecimalNumberUtils {
+
+        public static Object hexadecimalNumber(Object obj, int value, int toValue) {
+
+
+            return null;
         }
 
     }
@@ -8251,7 +7381,7 @@ public class GT {
             if (webView == null) return null;
 
             //设置PC网
-            webView.getSettings().setUserAgentString("Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36");
+            webView.getSettings().setUserAgentString("Mozilla/5.0 (WindowUtilss NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36");
             //支持获取手势焦点
             webView.requestFocusFromTouch();
 
@@ -10242,57 +9372,6 @@ public class GT {
         }
 
         /**
-         * 获取文件夹中所有文件名
-         *
-         * @param path
-         * @return
-         */
-        public static List<String> getFilesAllName(String path) {
-            File file = new File(path);
-            File[] files = file.listFiles();
-            if (files == null) {
-                Log.e("error", "空目录");
-                return null;
-            }
-            List<String> s = new ArrayList<String>();
-            for (int i = 0; i < files.length; i++) {
-                s.add(files[i].getAbsolutePath());
-            }
-            return s;
-        }
-
-        /**
-         * 清空文件夹中所有文件
-         *
-         * @param file         清空的文件路径
-         * @param isSaveFolder 是否保存当前文件夹 true：b
-         */
-        public static void deleteAllFile(File file, boolean isSaveFolder) {
-
-            if (file.isDirectory()) {
-                File[] files = file.listFiles();
-                for (int i = 0; i < files.length; i++) {
-                    File f = files[i];
-                    deleteAllFile(f, isSaveFolder);
-                }
-                if (!isSaveFolder) {// 是否保留本文件夹
-                    file.delete();// 如要保留文件夹，只删除文件，请注释这行
-                }
-            } else if (file.exists()) {
-                file.delete();
-            }
-        }
-
-        /**
-         * 获取手机根目录
-         *
-         * @return
-         */
-        public static String getAppDirectory() {
-            return Environment.getExternalStorageDirectory().toString();
-        }
-
-        /**
          * 获取当前apk包名
          *
          * @param context
@@ -10375,6 +9454,108 @@ public class GT {
                 items.add(item);
             }
             return items;
+        }
+
+        /**
+         * 是否在前台
+         *
+         * @param context
+         * @return
+         */
+        public static boolean isFrontDesk(Context context) {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            List<ActivityManager.RunningAppProcessInfo> runnings = am.getRunningAppProcesses();
+            for (ActivityManager.RunningAppProcessInfo running : runnings) {
+                if (running.processName.equals(GT.ApplicationUtils.getPackageName(context))) {
+                    if (running.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                            || running.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            return false;
+        }
+
+
+        /**
+         * 提示错误消息
+         *
+         * @param editText
+         * @param errorMessage
+         */
+        public static void hintErrorMessage(EditText editText, String errorMessage) {
+            editText.setFocusable(true);
+            editText.setFocusableInTouchMode(true);
+            editText.requestFocus();
+            editText.setError(Html.fromHtml("<font color='white'>" + errorMessage + "</font>"));
+        }
+
+        /**
+         * 分享图片
+         *
+         * @param activity
+         * @param bitmap
+         */
+        public static void share(Activity activity, Bitmap bitmap) {
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("image/*");
+            Uri u = Uri.parse(MediaStore.Images.Media.insertImage(activity.getContentResolver(), bitmap, null, null));//将截图bitmap存系统相册
+            intent.putExtra(Intent.EXTRA_STREAM, u);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(Intent.createChooser(intent, "分享的图片测试"));
+        }
+
+
+        /**
+         * Activity截屏 转 Bitmap
+         */
+        public static Bitmap takeScreenShot(Activity pActivity) {
+            View view = pActivity.getWindow().getDecorView();
+            // 设置是否可以进行绘图缓存
+            view.setDrawingCacheEnabled(true);
+            // 如果绘图缓存无法，强制构建绘图缓存
+            view.buildDrawingCache();
+            // 返回这个缓存视图
+            Bitmap bitmap = view.getDrawingCache();
+
+            // 获取状态栏高度
+            Rect frame = new Rect();
+            // 测量屏幕宽和高
+            view.getWindowVisibleDisplayFrame(frame);
+            int stautsHeight = frame.top;
+            Point point = new Point();
+            pActivity.getWindowManager().getDefaultDisplay().getSize(point);
+            int width = point.x;
+            int height = point.y;
+            // 根据坐标点和需要的宽和高创建bitmap
+            bitmap = Bitmap.createBitmap(bitmap, 0, stautsHeight, width, height - stautsHeight);
+            return bitmap;
+        }
+
+        /**
+         * View 转 Bitmap
+         *
+         * @param view
+         * @return
+         */
+        public static Bitmap createBitmapFromView(View view) {
+            //是ImageView直接获取
+            if (view instanceof ImageView) {
+                Drawable drawable = ((ImageView) view).getDrawable();
+                if (drawable instanceof BitmapDrawable) {
+                    return ((BitmapDrawable) drawable).getBitmap();
+                }
+            }
+            view.clearFocus();
+            Bitmap bitmap = Bitmap.createBitmap(view.getWidth(), view.getHeight(), Bitmap.Config.ARGB_8888);
+            if (bitmap != null) {
+                Canvas canvas = new Canvas(bitmap);
+                view.draw(canvas);
+                canvas.setBitmap(null);
+            }
+            return bitmap;
         }
 
     }
@@ -10621,10 +9802,10 @@ public class GT {
                     RepairAPP.loadFixedDex(context, Environment.getExternalStorageDirectory());// 加载补丁包
 
                     // 解决 oat 文件的 bug
-                    for (String path : ApplicationUtils.getFilesAllName(repairBugFilePath)) {
+                    for (String path : FileUtils.getFilesAllName(repairBugFilePath)) {
                         if (path.indexOf("oat") != -1) {
                             repairBugFilePath += "/oat";
-                            ApplicationUtils.deleteAllFile(new File(repairBugFilePath), false);
+                            FileUtils.deleteAllFile(new File(repairBugFilePath), false);
                         }
 
                     }
@@ -10897,14 +10078,10 @@ public class GT {
                 return view;
             }
 
-            ;
-
             protected View initView(View view, T bean, View convertView, ViewGroup parent) {
                 function(view, bean);
                 return view;
             }
-
-            ;
 
         }
 
@@ -10913,7 +10090,119 @@ public class GT {
         }
 
 
-//        public static abstract class Base
+        /**
+         * 用于继承新版的适配器
+         */
+        public static abstract class BaseAdapter<T> extends RecyclerView.Adapter<BaseAdapter.BaseHolder> {
+
+            private Context context;
+            private List<T> detectionDataBeanList;
+            private LinearLayoutManager linearLayoutManager;
+
+            public BaseAdapter(Context context) {
+                this.context = context;
+            }
+
+            public BaseAdapter(Context context, List<T> detectionDataBeanList) {
+                this.context = context;
+                this.detectionDataBeanList = detectionDataBeanList;
+                notifyDataSetChanged();
+            }
+
+            public BaseAdapter(Context context, RecyclerView rv, List<T> detectionDataBeanList, int layout) {
+                this.context = context;
+                linearLayoutManager = new LinearLayoutManager(context, layout, false);
+                rv.setAdapter(this);
+                rv.setLayoutManager(linearLayoutManager);
+                this.detectionDataBeanList = detectionDataBeanList;
+                notifyDataSetChanged();
+            }
+
+            public Context getContext() {
+                return context;
+            }
+
+            public void setContext(Context context) {
+                this.context = context;
+            }
+
+            public LinearLayoutManager getLinearLayoutManager() {
+                return linearLayoutManager;
+            }
+
+            public void setLinearLayoutManager(LinearLayoutManager linearLayoutManager) {
+                this.linearLayoutManager = linearLayoutManager;
+            }
+
+            public List<?> getDetectionDataBeanList() {
+                return detectionDataBeanList;
+            }
+
+            public void setDetectionDataBeanList(List<T> detectionDataBeanList) {
+                this.detectionDataBeanList = detectionDataBeanList;
+                notifyDataSetChanged();
+            }
+
+            /**
+             * 设置布局
+             *
+             * @param rv
+             * @param adapter
+             * @return
+             */
+            public LinearLayoutManager setLinearLayoutManager_V(RecyclerView rv, RecyclerView.Adapter adapter) {
+                LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
+                rv.setAdapter(adapter);
+                rv.setLayoutManager(llm);
+                return llm;
+            }
+
+            /**
+             * 设置布局
+             *
+             * @param rv
+             * @param adapter
+             * @return
+             */
+            public LinearLayoutManager setLinearLayoutManager_H(RecyclerView rv, RecyclerView.Adapter adapter) {
+                LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false);
+                rv.setAdapter(adapter);
+                rv.setLayoutManager(llm);
+                return llm;
+            }
+
+            @NonNull
+            @Override
+            public BaseAdapter.BaseHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+                BaseHolder baseHolder = new BaseHolder(LayoutInflater.from(context).inflate(loadLayout(), parent, false));
+                return baseHolder;
+            }
+
+            protected int loadLayout() {
+                return 0;
+            }
+
+            protected abstract void initView(BaseAdapter.BaseHolder holder, int position, T t);
+
+            @Override
+            public void onBindViewHolder(BaseAdapter.BaseHolder holder, int position) {
+                T t = detectionDataBeanList.get(position);
+                initView(holder, position, t);
+            }
+
+            @Override
+            public int getItemCount() {
+                return detectionDataBeanList == null ? 0 : detectionDataBeanList.size();
+            }
+
+            protected static class BaseHolder extends RecyclerView.ViewHolder {
+                public BaseHolder(View itemView) {
+                    super(itemView);
+                }
+            }
+
+        }
+
 
     }
 
@@ -11096,6 +10385,234 @@ public class GT {
 
 
 //============================================= UI类 ===========================================
+
+    /**
+     * 加载进度条
+     */
+    public static class ProgressDialogUtils {
+
+        /**
+         * 简易的进度条加载框
+         *
+         * @param context
+         * @param isCancelable 是否点击可取消
+         * @param message      消息内容
+         * @return
+         */
+        public static ProgressDialog initProgressBarDialog(Context context, boolean isCancelable, String message) {
+            ProgressDialog progressDialog = initCircleProgressDialog(context, isCancelable, message);
+            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);// 进度条 setProgress
+            return progressDialog;
+        }
+
+
+        /**
+         * 简易的圆圈加载框
+         *
+         * @param context
+         * @param isCancelable 是否点击可取消
+         * @param message      消息内容
+         * @return
+         */
+        public static ProgressDialog initCircleProgressDialog(Context context, boolean isCancelable, String message) {
+            ProgressDialog progressDialog = new ProgressDialog(context);
+            progressDialog.setCancelable(isCancelable);
+            if (message != null) {
+                progressDialog.setMessage(message);
+            }
+            return progressDialog;
+        }
+
+
+        /**
+         * 初始化进度条加载条
+         *
+         * @param context
+         * @param isCancelable    是否点击可取消
+         * @param icon            图标
+         * @param title           标题
+         * @param message         消息内容
+         * @param maxProgress     进度最大值
+         * @param dialogInterface 取消监听
+         * @return
+         */
+        public static ProgressDialog initProgressBarDialog(Context context, boolean isCancelable, int icon, String title, String message, int maxProgress, DialogInterface.OnCancelListener dialogInterface) {
+            ProgressDialog progressDialog = initCircleProgressDialog(context, isCancelable, icon, title, message, dialogInterface);
+            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);// 进度条 setProgress
+            progressDialog.setMax(maxProgress);
+            return progressDialog;
+        }
+
+
+        /**
+         * 初始化圆圈加载条
+         *
+         * @param context
+         * @param isCancelable    是否点击可取消
+         * @param icon            图标
+         * @param title           标题
+         * @param message         消息内容
+         * @param dialogInterface 取消监听
+         * @return
+         */
+        public static ProgressDialog initCircleProgressDialog(Context context, boolean isCancelable, int icon, String title, String message, DialogInterface.OnCancelListener dialogInterface) {
+            ProgressDialog progressDialog = new ProgressDialog(context);
+            progressDialog.setCancelable(isCancelable);
+
+            if (icon != -1) {
+                progressDialog.setIcon(icon);
+            }
+
+            if (title != null) {
+                progressDialog.setTitle(title);
+            }
+
+            if (message != null) {
+                progressDialog.setMessage(message);
+            }
+
+            if (isCancelable) {
+                if (dialogInterface != null) {
+                    progressDialog.setOnCancelListener(dialogInterface);//设置监听取消加载框事件
+                }
+            }
+
+            return progressDialog;
+        }
+
+    }
+
+    /**
+     * Notification 通知类
+     */
+    public static class GT_Notification {
+
+        private static int NOTIFYID = 0x1997; //通知id
+        private static String CHANEL_ID = "com.gsls.king";
+        private static String CHANEL_DESCRIPTION = "GT 描述";
+        private static String CHANEL_NAME = "GT_Android复习";
+
+        /**
+         * 设置 通知类的 code
+         *
+         * @param NotifyId
+         */
+        public GT_Notification setNotifyId(int NotifyId) {
+            NOTIFYID = NotifyId;
+            return this;
+        }
+
+        /**
+         * 设置 通知类的 id
+         *
+         * @param ChanelId
+         */
+        public GT_Notification setChanelId(String ChanelId) {
+            CHANEL_ID = ChanelId;
+            return this;
+        }
+
+        /**
+         * 设置 通知
+         *
+         * @param ChanelDescription
+         */
+        public GT_Notification setChanelDescription(String ChanelDescription) {
+            CHANEL_DESCRIPTION = ChanelDescription;
+            return this;
+        }
+
+        /**
+         * 设置通知 名字
+         *
+         * @param ChanelName
+         */
+        public GT_Notification setChanelName(String ChanelName) {
+            CHANEL_NAME = ChanelName;
+            return this;
+        }
+
+        private Activity activity;
+
+        /**
+         * 实例化 通知类
+         *
+         * @param activity
+         */
+        public GT_Notification(Activity activity) {
+            this.activity = activity;
+        }
+
+        /**
+         * 初始化 通知类
+         *
+         * @param icon       图标
+         * @param title      标题
+         * @param text       内容
+         * @param time       时间
+         * @param voiceTF    是否设置声音振动
+         * @param autoCancel 设置通知打开后自动消失
+         * @param cla        设置跳转的 页面
+         * @return 返回 通知类
+         */
+        public NotificationManagerCompat sendingNotice(int icon, String title, String text, int time, boolean voiceTF, boolean autoCancel, Class<?> cla) {
+
+            /**
+             * 由于 Notification.Builder 仅支持 Android 4.1及之后的版本，为了解决兼容性问题， Notification.Builder 仅支持 API 26 与 26 之前的版本
+             * Google 在 Android Support v4 中加入了 NotificationCompat.Builder 类
+             */
+            String channelId = createNotificationChannel(activity.getApplicationContext());//创建Notification Channel
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(activity, channelId);//创建Notification并与Channel关联
+
+            builder.setSmallIcon(icon);//设置通知图标
+            builder.setAutoCancel(autoCancel);//设置通知打开后自动消失
+            builder.setContentTitle(title);//设置标题
+            builder.setContentText(text);//设置内容
+            if (time == 0) builder.setWhen(System.currentTimeMillis());//设置系统当前时间为发送时间
+            else builder.setWhen(time);//设置用户设置的发送时间
+            if (voiceTF)
+                builder.setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);//设置默认的声音与默认的振动
+
+            if (cla != null) {    //如果 cla 不为空就设置跳转的页面
+                Intent intent = new Intent(activity, cla);
+                PendingIntent pi = PendingIntent.getActivity(activity, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+                builder.setContentIntent(pi);//设置通知栏 点击跳转
+            }
+
+            //发布通知
+            NotificationManagerCompat notificationManagerCompat = NotificationManagerCompat.from(activity.getApplicationContext());
+            notificationManagerCompat.notify(NOTIFYID, builder.build());
+            return notificationManagerCompat;
+        }
+
+        /**
+         * 创建通知
+         *
+         * @param context
+         * @return
+         */
+        private String createNotificationChannel(Context context) {
+            // O (API 26)及以上版本的通知需要NotificationChannels。
+            if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
+                // 初始化NotificationChannel。
+                NotificationChannel notificationChannel = new NotificationChannel(CHANEL_ID, CHANEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
+                notificationChannel.setDescription(CHANEL_DESCRIPTION);
+
+                // 向系统添加 NotificationChannel。试图创建现有通知
+                // 通道的初始值不执行任何操作，因此可以安全地执行
+                // 启动顺序
+                NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                assert notificationManager != null;
+                notificationManager.createNotificationChannel(notificationChannel);
+
+                return CHANEL_ID;
+            } else {
+                return null; // 为pre-O(26)设备返回 null
+            }
+        }
+
+    }
 
     /**
      * Android GT 动画
@@ -11943,9 +11460,9 @@ public class GT {
     }
 
     /**
-     * Window 窗体类
+     * WindowUtils 窗体类
      */
-    public static abstract class Window {
+    public static abstract class WindowUtils {
 
         /**
          * 屏幕常亮
@@ -11985,9 +11502,9 @@ public class GT {
         /**
          * 关闭虚拟按钮2
          *
-         * @param window
+         * @param WindowUtils
          */
-        public static void setHideVirtualKey(android.view.Window window) {
+        public static void setHideVirtualKey(android.view.Window WindowUtils) {
             //保持布局状态
             int uiOptions = View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
                     //布局位于状态栏下方
@@ -12002,7 +11519,7 @@ public class GT {
             } else {
                 uiOptions |= View.SYSTEM_UI_FLAG_LOW_PROFILE;
             }
-            window.getDecorView().setSystemUiVisibility(uiOptions);
+            WindowUtils.getDecorView().setSystemUiVisibility(uiOptions);
         }
 
         /**
@@ -12011,7 +11528,7 @@ public class GT {
          * @param appCompatActivity
          * @return
          */
-        public static int getWindowWidth(AppCompatActivity appCompatActivity) {
+        public static int getWindowUtilsWidth(AppCompatActivity appCompatActivity) {
             int width = appCompatActivity.getWindowManager().getDefaultDisplay().getWidth();
             return width;
         }
@@ -12022,7 +11539,7 @@ public class GT {
          * @param appCompatActivity
          * @return
          */
-        public static int getWindowHeight(AppCompatActivity appCompatActivity) {
+        public static int getWindowUtilsHeight(AppCompatActivity appCompatActivity) {
             int height = appCompatActivity.getWindowManager().getDefaultDisplay().getHeight();
             return height;
         }
@@ -12206,6 +11723,439 @@ public class GT {
     }
 
     /**
+     * 封装 Activity 管理器
+     */
+    public static class GT_Activity implements SaveObject.SaveBean {
+
+        /**
+         * 封装普通的 Activity 管理器
+         */
+        public abstract static class BaseActivity extends AppCompatActivity {
+
+            //切换Activity 动画
+            private static int cutIndex = 0;//GT内置提供的切换特效
+            private static int startAnim = 0;//用户自定义
+            private static int closeAnim = 0;//用户自定义
+
+            /**
+             * 设置 Activity 切换特效
+             * 1  淡入淡出
+             * 2  左右滑出
+             * 暂时仅支持该两种
+             *
+             * @param cutIndex
+             */
+            public void setActivityCutIndex(int cutIndex) {
+                this.cutIndex = cutIndex;
+            }
+
+            /**
+             * 自定义 Activity 切换特效
+             *
+             * @param startAnim
+             * @param closeAnim
+             */
+            public void setActivityCut(int startAnim, int closeAnim) {
+                this.startAnim = startAnim;
+                this.closeAnim = closeAnim;
+                cutIndex = -1;
+            }
+
+
+            protected GT_Fragment gt_fragment;
+
+            /**
+             * 初始化 加载布局
+             */
+            protected int loadLayout() {
+                return 0;
+            }
+
+            /**
+             * 在绘制完 View 之前设置数据
+             */
+            protected void initDrawView() {
+//                build(this);//绑定 Activity
+            }
+
+            /**
+             * 初始化 UI
+             */
+            protected abstract void initView(Bundle savedInstanceState);
+
+            /**
+             * 功能方法
+             */
+            protected void loadData() {
+            }
+
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                gt_fragment = GT_Fragment.gt_fragment;
+                int loadLayout = loadLayout();
+                if (loadLayout != 0) {
+                    initDrawView();// 设置绘制前的数据
+                    setContentView(loadLayout);// 加载布局
+                    initView(savedInstanceState);// 初始化 UI
+                    loadData();// 功能方法
+                }
+
+                //注册广播
+                if (isRegisterBroadcastAction()) {
+                    uiReceiver = new UiReceiver();
+                    //实例化过滤器并设置要过滤的广播
+                    IntentFilter intentFilter = new IntentFilter();
+                    intentFilter.addAction(getClass().getName());
+                    registerReceiver(uiReceiver, intentFilter); //注册广播
+                }
+
+            }
+
+            /**
+             * 构建 GT 工具包
+             *
+             * @param context
+             */
+            protected void build(Context context) {
+                getGT().build(context);
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(DialogFragment dialogFragment) {
+                dialogFragment.show(getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+
+                DialogFragment fragment = null;
+
+                try {
+                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (java.lang.InstantiationException e) {
+                    e.printStackTrace();
+                }
+
+                fragment.show(getSupportFragmentManager(), fragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * 跳转 Activity
+             *
+             * @param activityClass
+             */
+            protected void startActivity(Class activityClass) {
+                GT.startAct(activityClass);
+                //切换动画
+                switch (cutIndex) {
+                    case 1:
+                        //淡入淡出
+                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                        break;
+                    case 2:
+                        //左右滑动
+                        overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right);
+                        break;
+                    default:
+                        //用户自定义
+                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
+                            overridePendingTransition(startAnim, closeAnim);
+                        }
+                        break;
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragment(Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragment(Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
+            protected void startFragment(int fragmentId, Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
+            protected void startFragment(int fragmentId, Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(Fragment toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(Class<?> toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId 跳转的容器
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(int fragmentId, Fragment toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 跳转Fragment
+             *
+             * @param fragmentId 跳转的容器
+             * @param toFragment 跳转的Fragment
+             * @param startMode  启动模式
+             */
+            protected void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragmentHome(Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+                }
+            }
+
+            /**
+             * @param toFragment
+             * @跳转 Fragment
+             */
+            protected void startFragmentHome(Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+                }
+            }
+
+            /**
+             * 使用首页模式启动Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
+            protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 使用首页模式启动Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
+            protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+                if (GT_Fragment.gt_fragment != null) {
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
+                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 启动悬浮窗
+             *
+             * @param context
+             * @param toFragment
+             */
+            protected void startFloatingWindow(Context context, Class<?> toFragment) {
+                startService(new Intent(context, toFragment));
+            }
+
+            /**
+             * 启动悬浮窗
+             *
+             * @param toFragment
+             */
+            protected void startFloatingWindow(Class<?> toFragment) {
+                startService(new Intent(this, toFragment));
+            }
+
+            protected GT_Fragment getGT_Fragment() {
+                return GT.GT_Fragment.gt_fragment;
+            }
+
+
+            //反馈数据
+            @Override
+            public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+                super.onActivityResult(requestCode, resultCode, data);
+                onResultData(requestCode, resultCode, data);
+            }
+
+            /**
+             * 反馈数据
+             *
+             * @param requestCode
+             * @param resultCode
+             * @param data
+             */
+            protected void onResultData(int requestCode, int resultCode, @Nullable Intent data) {
+
+            }
+
+
+            @Override
+            public void finish() {
+                super.finish();
+
+                //切换动画
+                switch (cutIndex) {
+                    case 1:
+                        //淡入淡出
+                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                        break;
+                    case 2:
+                        //左右滑动
+                        overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right);
+                        break;
+                    default:
+                        //用户自定义
+                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
+                            overridePendingTransition(startAnim, closeAnim);
+                        }
+                        break;
+                }
+
+
+            }
+
+
+            //更新UI广播
+            private UiReceiver uiReceiver;//定义一个刷新UI的广播
+
+            //是否注册广播
+            protected boolean isRegisterBroadcastAction() {
+                return false;//默认是注册的
+            }
+
+            /**
+             * 发送更新UI广播
+             *
+             * @param intent
+             * @param classKey 将数据发收到那个类进行更新
+             */
+            protected void sendUpdateUiBroadcast(Class classKey, Intent intent) {
+                if (intent == null && classKey != null) {
+                    return;
+                }
+                intent.setAction(classKey.getName());
+                sendBroadcast(intent);
+            }
+
+            /**
+             * 通过广播更新UI
+             *
+             * @param context
+             * @param intent
+             */
+            protected void updateUi(Context context, Intent intent) {
+            }
+
+            /**
+             * 定义一个接收到消息后刷新UI的内部类广播
+             */
+            private class UiReceiver extends BroadcastReceiver {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    updateUi(context, intent);//刷新UI
+                }
+            }
+
+            @Override
+            public void onDestroy() {
+                if (uiReceiver != null)
+                    unregisterReceiver(uiReceiver); //注销广播
+                super.onDestroy();
+            }
+
+        }
+
+        /**
+         * 封装注解的 Activity 管理器
+         */
+        public abstract static class AnnotationActivity extends BaseActivity {
+
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                initDrawView();// 设置绘制前的数据
+                initView(savedInstanceState);// 初始化 UI
+                loadData();// 功能方法
+
+            }
+
+            @Override
+            protected void initView(Bundle savedInstanceState) {
+                build(this);
+            }
+        }
+
+    }
+
+    /**
      * 封装 Fragment 管理器
      */
     public static class GT_Fragment implements SaveObject.SaveBean {
@@ -12217,22 +12167,13 @@ public class GT {
         @Target(ElementType.FIELD)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface Build {
-            //不带参数的
-        }
-
-        @Target(ElementType.FIELD)
-        @Retention(RetentionPolicy.RUNTIME)
-        public @interface Builds {
-            //GT.GT_Fragment.Build(R.id.frameLayout, Fragment_A.class);
-            //带参数的
             int setLayoutHome() default 0;//设置HomeFragment容器
 
-            int setLayoutMain();//设置MainFragment容器
+            int setLayoutMain() default 0;//设置MainFragment容器
 
-            Class<?> setClass() default Builds.class;//设置预先加载的Fragment
+            Class<?> setClass() default Build.class;//设置预先加载的Fragment
 
-            int setStartMode() default GT_Fragment.STANDARD;//启动模式默认为默认模式
-
+            int setStartMode() default GT_Fragment.MODE_STANDARD;//启动模式默认为默认模式
         }
 
         private GT_Fragment() {
@@ -12392,46 +12333,55 @@ public class GT {
         @SuppressLint("WrongConstant")
         private void fragmentSwitchingModeManagement(int fragmentId, FragmentTransaction transaction, Fragment fragment, Class<?> fragmentClass) {
 
+            String fragmentName = fragmentClass.getName();
             //切换页面特效
             cutEffects(transaction);
 
             switch (SWITCHING_MODE) {
                 case ACTIVITY:// Activity 切换方式
                 {
-
-
-                    transaction.add(fragmentId, fragment, fragmentClass.getName());
-                    transaction.commit();
+//                    GT.log("Activity 切换方式");
+                    transaction.add(fragmentId, fragment, fragmentName);
                     break;
                 }
 
                 case FRAGMENT:// Fragment 切换方式
                 {
-                    transaction.replace(fragmentId, fragment, fragmentClass.getName());
-                    transaction.commit();
+//                    GT.log("Fragment 切换方式");
+                    transaction.replace(fragmentId, fragment, fragmentName);
                     break;
                 }
 
                 case DIALOG:// Dialog 切换方式
                 {
-
+//                    GT.log("Dialog 切换方式");
                     //判断当前 Fragment 栈中是否存在当前要显示的Fragment
                     List<String> stackFragmentNames = getStackFragmentNames();
-                    if (stackFragmentNames != null && stackFragmentNames.contains(fragmentClass.getName())) {
+//                    GT.log("获取栈中:" + stackFragmentNames);
+                    if (stackFragmentNames != null && stackFragmentNames.contains(fragmentName)) {
                         //存在
 
-                        for (Fragment fragment1 : getStackFragments()) {
-                            if (fragmentClass.getName().equals(fragment1.getClass().getName())) {
-                                transaction.show(fragment1).commit();
+//                        GT.log("存在");
+
+                        List<String> backStackFragmentNames = getBackStackFragmentNames();
+//                        GT.log("backStackFragmentNames:" + backStackFragmentNames);
+
+                        for (String backStackfragmentName : backStackFragmentNames) {
+                            if (backStackfragmentName.equals(fragmentName)) {
+                                Fragment stackFragment = getStackFragment(fragmentName);
+                                transaction.show(stackFragment);
+//                                GT.log("显示:" + stackFragment.getClass().getSimpleName());
                             } else {
-                                transaction.hide(fragment1).commit();
+                                Fragment stackFragment = getStackFragment(backStackfragmentName);
+                                transaction.hide(stackFragment);
+//                                GT.log("隐藏:" + stackFragment.getClass().getSimpleName());
                             }
                         }
-
                     } else {
                         //不存在
+//                        GT.log("不存在");
+                        transaction.addToBackStack(fragmentName);//加入到回退栈
                         transaction.add(fragmentId, fragment, fragmentClass.getName());
-                        transaction.commit();
                     }
 
 
@@ -12442,11 +12392,21 @@ public class GT {
                 {
 
                     transaction.add(fragmentId, fragment, fragmentClass.getName());
-                    transaction.commit();
                 }
 
             }
 
+            //提交事物
+            try {
+                activity = getActivity();
+                if (activity != null && ApplicationUtils.isFrontDesk(activity)) {//判断是否在前台，如果是就正常提交事务
+                    transaction.commit();
+                } else {//负责使用不推荐的方式提交
+                    transaction.commitAllowingStateLoss();
+                }
+            } catch (IllegalStateException e) {
+                transaction.commitAllowingStateLoss();
+            }
 
         }
 
@@ -12585,27 +12545,27 @@ public class GT {
         /**
          * 默认模式
          */
-        public final static int STANDARD = 0;
+        public final static int MODE_STANDARD = 0;
         /**
          * 主界面模式
          */
-        public final static int HOME = 1;
+        public final static int MODE_HOME = 1;
         /**
          * 栈顶模式
          */
-        public final static int SINGLE_TOP = 2;
+        public final static int MODE_SINGLE_TOP = 2;
         /**
          * 栈内复用模式
          */
-        public final static int SINGLE_TASK = 3;
+        public final static int MODE_SINGLE_TASK = 3;
         /**
          * 入口模式
          */
-        public final static int ENTRANCE = 4;
+        public final static int MODE_ENTRANCE = 4;
         /**
          * 启动模式
          */
-        public static int START_MODE = STANDARD; //默认模式
+        public static int START_MODE = MODE_STANDARD; //默认模式
 
         /**
          * 设置 Fragment 启动模式
@@ -12627,35 +12587,36 @@ public class GT {
          * @return
          */
         private boolean modeManagement(FragmentTransaction transaction, Class<?> fragmentClass) {
+//            GT.log("START_MODE2:" + START_MODE);
             String name = fragmentClass.getName();
             switch (START_MODE) {
-                case STANDARD: //默认模式     该启动模式为Android默认启动模式，每当启动一个 fragment 就会在任务栈中创建一个
+                case MODE_STANDARD: //默认模式     该启动模式为Android默认启动模式，每当启动一个 fragment 就会在任务栈中创建一个
                 {
-                    START_MODE = STANDARD;//恢复默认模式
+                    START_MODE = MODE_STANDARD;//恢复默认模式
                     transaction.addToBackStack(name);//加入到回退栈
-                    topFragmentName = "";//清空指向顶端的 Fragment
+                    topFragmentName = name;//清空指向顶端的 Fragment
                     return true;
                 }
 
-                case HOME:  //主界面模式   该启动模式不将 Fragment 加入退回栈,一般用于APP首页
+                case MODE_HOME:  //主界面模式   该启动模式不将 Fragment 加入退回栈,一般用于APP首页
                 {
-                    START_MODE = STANDARD;//恢复默认模式
+                    START_MODE = MODE_STANDARD;//恢复默认模式
 
                     if (!isStackTop(fragmentClass)) {
                         return false;
                     }
 
                     if (SWITCHING_MODE == ACTIVITY) {//如果当前切换的方法是 Activity 那就需要加入回退栈，不给与Activity切换模式 Home 启动模式
-//                        transaction.addToBackStack(name);//加入到回退栈 是否需要加入回退栈，待定
+//                        transaction.addToBackStack(name);//TODO Home 始终指向首页,故不加入回退栈  加入到回退栈 是否需要加入回退栈，待定
                     }
 
                     topFragmentName = name;//指向最顶端 Fragment
                     return true;
                 }
 
-                case SINGLE_TOP: //栈顶模式     该启动模式是在查看任务栈顶和你将要启动的 fragment 是否是同一个 fragment，是一个就直接复用，否则就新创一个实例
+                case MODE_SINGLE_TOP: //栈顶模式     该启动模式是在查看任务栈顶和你将要启动的 fragment 是否是同一个 fragment，是一个就直接复用，否则就新创一个实例
                 {
-                    START_MODE = STANDARD;//恢复默认模式
+                    START_MODE = MODE_STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
                     if (!isStackTop(fragmentClass)) {
@@ -12663,13 +12624,13 @@ public class GT {
                     }
 
                     transaction.addToBackStack(name);//加入到回退栈
-                    topFragmentName = "";//清空指向顶端的 Fragment
+                    topFragmentName = name;//清空指向顶端的 Fragment
                     return true;
                 }
 
-                case SINGLE_TASK: //栈内复用模式 该启动模式是在任务栈中看是否有和你一样的 fragment，有则直接把该 fragment 之上的 fragment 全部弹出使之置于栈顶,如果当前即最顶端那就复用。
+                case MODE_SINGLE_TASK: //栈内复用模式 该启动模式是在任务栈中看是否有和你一样的 fragment，有则直接把该 fragment 之上的 fragment 全部弹出使之置于栈顶,如果当前即最顶端那就复用。
                 {
-                    START_MODE = STANDARD;//恢复默认模式
+                    START_MODE = MODE_STANDARD;//恢复默认模式
 
                     //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
                     if (!isStackTop(fragmentClass)) {
@@ -12681,7 +12642,7 @@ public class GT {
                     if (lastIndex == -1) {
                         //如果回退栈中没找到新打开的 Fragment 就直接打开新的 Fragment
                         transaction.addToBackStack(name);//加入到回退栈
-                        topFragmentName = "";//清空指向顶端的 Fragment
+                        topFragmentName = name;//清空指向顶端的 Fragment
                         return true;
                     } else {
                         finish(name, false);//关闭到想要打开的 Fragment
@@ -12690,25 +12651,24 @@ public class GT {
 
                 }
 
-                case ENTRANCE: {//  入口模式     弹出除栈底外所有 Fragment 再创建一个新的实例。常用于一个程序的入口处
+                case MODE_ENTRANCE: {//  入口模式     弹出除栈底外所有 Fragment 再创建一个新的实例。常用于一个程序的入口处
 
-                    START_MODE = STANDARD;//恢复默认模式
+                    START_MODE = MODE_STANDARD;//恢复默认模式
 
                     //弹出所有栈
                     for (int i = 0; i < getBackStackFragmentNames().size(); i++) {
                         finish();
                     }
-                    topFragmentName = "";//清空指向顶端的 Fragment
+                    topFragmentName = name;//清空指向顶端的 Fragment
                     return true;
 
 
                 }
 
                 default://非正常的值
-
-                    START_MODE = STANDARD;//恢复默认模式
-
+                    START_MODE = MODE_STANDARD;//恢复默认模式
                     err(getLineInfo(3) + "：在启动 Fragment 模式中，你输入了非正常的值,不给与启动操作。");
+                    topFragmentName = name;//清空指向顶端的 Fragment
                     break;
 
             }
@@ -12728,12 +12688,26 @@ public class GT {
          */
         public <T> boolean isStackTop(Class<T> fragmentClass) {
 
+//            GT.log("当前是否在栈顶:" + fragmentClass.getSimpleName());
+
             //当前栈中存在 Fragment 且 当前栈顶 Fragment 是当前要打开的 Fragment 就用直接复用
             String name = fragmentClass.getName();
             List<String> stringList = getFragmentFragments();
+//            GT.log("当前栈的顺序:" + stringList);
+//            GT.log("name:" + name);
+//            GT.log("topFragmentName:" + topFragmentName);
 
-            if (stringList.size() > 0) {
+            if (name.equals(topFragmentName)) {//判断不加入回退栈的逻辑
+                return false;
+            } else {
+                return true;
+            }
+
+            /*if (stringList.size() > 0) {
                 String stackTop = stringList.get(stringList.size() - 1);//获取栈顶 Fragment
+                GT.log("获取栈顶:" + stackTop);
+                GT.log("name:" + name);
+                GT.log("topFragmentName:" + topFragmentName);
 
                 if (stackTop.equals(name)) {//如果回退栈栈顶是新打开的 Fragment
                     return false;
@@ -12742,9 +12716,9 @@ public class GT {
                 }
             } else if (name.equals(topFragmentName)) {//判断不加入回退栈的逻辑
                 return false;
-            }
+            }*/
 
-            return true;
+//            return true;
         }
 
         /**
@@ -12898,6 +12872,31 @@ public class GT {
             return null;
         }
 
+        /**
+         * 获取Fragment栈中所有的 Fragment
+         *
+         * @return
+         */
+        public Fragment getStackFragment(String fragmentName) {
+            if (fragmentManager != null) {
+                List<Fragment> fragments = fragmentManager.getFragments();
+                if (fragments != null) {
+                    for (Fragment fragment : fragments) {
+                        if (fragment.getClass().getName().equals(fragmentName)) {
+                            return fragment;
+                        }
+                    }
+                }
+                return null;
+            }
+            return null;
+        }
+
+        /**
+         * 获取栈中所有的Fragment全称
+         *
+         * @return
+         */
         public List<String> getStackFragmentNames() {
             if (fragmentManager != null) {
                 List<String> fragmentNames = new ArrayList<>();
@@ -12916,6 +12915,11 @@ public class GT {
             return null;
         }
 
+        /**
+         * 获取栈中所有的Fragment简称
+         *
+         * @return
+         */
         public List<String> getStackFragmentSimpleNames() {
             if (fragmentManager != null) {
                 List<Fragment> fragments = fragmentManager.getFragments();
@@ -13037,7 +13041,8 @@ public class GT {
 
                 //启动一个指定为首页的 Fragment
                 gt_fragment.switchingMode(FRAGMENT);
-                gt_fragment.startMode(startModel).startFragment(homeFragmentId, fragmentClass);
+                gt_fragment.startMode(startModel)
+                        .startFragment(homeFragmentId, fragmentClass);
                 gt_fragment.switchingMode(SWITCHING_MODE);//回复当前切换方式
             }
             return gt_fragment;
@@ -13089,11 +13094,12 @@ public class GT {
             }
 
             //将 Fragment 容器设置屏幕大小
-            DisplayMetrics outMetrics = new DisplayMetrics();
+            /*DisplayMetrics outMetrics = new DisplayMetrics();
             activity.getWindowManager().getDefaultDisplay().getMetrics(outMetrics);
-
             //将Fragment 容器添加到 视图中
             activity.addContentView(frameLayout, new ViewGroup.LayoutParams(outMetrics.widthPixels, outMetrics.heightPixels));
+*/
+
 
             //监听回退栈 增加 fragment 与 减少 Fragment 都会进行触发 就算外部使用了监听覆盖了这里的监听，也不会对启动模式有影响
             listener = new FragmentManager.OnBackStackChangedListener() {
@@ -13151,7 +13157,6 @@ public class GT {
          * @return
          */
         public <T> GT_Fragment startFragment(int resLayout, Class<T> fragmentClass) {
-
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragmentClass == null) return this;
 
@@ -13224,7 +13229,7 @@ public class GT {
         public <T> GT_Fragment startFragmentHome(Class<T> fragmentClass) {
 
             //设置本次 Fragment 的启动模式
-            startMode(HOME);
+            startMode(MODE_HOME);
 
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragmentClass == null) return this;
@@ -13241,6 +13246,7 @@ public class GT {
 
             //启动 Fragment
             FragmentTransaction transaction = getTransaction();
+
             if (modeManagement(transaction, fragmentClass)) {
                 fragmentSwitchingModeManagement(homeFragmentId, transaction, (Fragment) fragment, fragmentClass);
             }
@@ -13257,7 +13263,7 @@ public class GT {
         public GT_Fragment startFragmentHome(Fragment fragment) {
 
             //设置本次 Fragment 的启动模式
-            startMode(HOME);
+            startMode(MODE_HOME);
 
             //判null 与 判断当前显示的Fragment是否为需要打开的Fragment
             if (fragment == null) return this;
@@ -13540,9 +13546,11 @@ public class GT {
          * @param <T>
          * @return
          */
-        public <T> Fragment findFragmentByClass(Class<T> fragmentClass) {
+        public <T> Fragment queryFragmentByClass(Class<T> fragmentClass) {
             return fragmentManager.findFragmentByTag(fragmentClass.getName());
         }
+
+        //=========================================== GT_Fragment 提供的公共方法 ====================================
 
 
         //=========================================== GT_Fragment 基类 ====================================
@@ -13805,33 +13813,91 @@ public class GT {
                 }
             }
 
+            /**
+             * 使用首页模式启动Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
+            /**
+             * 使用首页模式启动Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 启动悬浮窗
+             *
+             * @param context
+             * @param toFragment
+             */
+            protected void startFloatingWindow(Context context, Class<?> toFragment) {
+                if (activity == null) {
+                    activity = (Activity) context;
+                    if (activity == null) {
+                        activity = GT_Fragment.gt_fragment.getActivity();
+                    }
+                }
+
+                if (activity != null) {
+                    activity.startService(new Intent(context, toFragment));
+                }
+
+            }
+
+            /**
+             * 启动悬浮窗
+             *
+             * @param toFragment
+             */
+            protected void startFloatingWindow(Class<?> toFragment) {
+                if (activity == null) {
+                    activity = GT_Fragment.gt_fragment.getActivity();
+                }
+
+                if (activity != null) {
+                    activity.startService(new Intent(activity, toFragment));
                 }
             }
 
             protected GT_Fragment gt_fragment;
 
-            @Nullable
-            @Override
             public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                // 是否恢复数据
-                if (isRecoverBundle()) {
-                    if (view == null) {// 如果数据为 null 就创建
-                        view = inflater.inflate(loadLayout(), container, false);
-                    }
-                } else {
-                    view = inflater.inflate(loadLayout(), container, false);
+                View view = inflater.inflate(loadLayout(), container, false);
+                createView(view);
+                return view;
+            }
+
+            /**
+             * 主要实现的功能 当页面可见的时候，才加载当前页面数据。 没有打开的页面，就不会预加载
+             */
+            protected void loadData() {
+            }
+
+            @Override
+            public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+                super.onViewCreated(view, savedInstanceState);
+
+                if (this.gt_fragment == null) {
+                    this.gt_fragment = GT_Fragment.gt_fragment;
                 }
+
+                initView(view, savedInstanceState);// 主要方法
+                loadData();
                 // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
                 GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
                     @Override
@@ -13842,9 +13908,6 @@ public class GT {
                         return false;
                     }
                 });
-                this.gt_fragment = GT_Fragment.gt_fragment;
-                initBaseFragment(view);// 解决 在 add 的情况下 透明背景与点击穿透的问题
-                createView(view);
 
                 //注册广播
                 if (isRegisterBroadcastAction() && activity != null) {
@@ -13855,49 +13918,54 @@ public class GT {
                     activity.registerReceiver(uiReceiver, intentFilter); //注册广播
                 }
 
-                return view;
+                //给EditText 组件设置返回事件
+                setViewBackListener(view);
+
             }
 
-            // ===================================== 懒加载 开始 =====================================
-
-            /* 该页面，是否已经准备完毕 */
-            private boolean isPrepared;
-            /* 该Fragment,是否已经执行过懒加载 */
-            private boolean isLazyLoaded;
 
             /**
-             * 主要实现的功能 当页面可见的时候，才加载当前页面数据。 没有打开的页面，就不会预加载
+             * 给EditText 组件设置返回事件
+             *
+             * @param viewGroup
              */
-            protected void loadData() {
-            }
+            protected void setViewBackListener(View viewLayout) {
 
-            @Override
-            public void onActivityCreated(@Nullable Bundle savedInstanceState) {
-                super.onActivityCreated(savedInstanceState);
-                isPrepared = true;
-                lazyLoad();
-            }
+                ViewGroup viewGroup = null;
 
-            @Override
-            public void setUserVisibleHint(boolean isVisibleToUser) {
-                super.setUserVisibleHint(isVisibleToUser);
-                lazyLoad();
-            }
+                //如果是Edit类型的那就监听返回事件
+                if (viewLayout instanceof EditText) {
 
-            private void lazyLoad() {
-                if (getUserVisibleHint() && isPrepared && !isLazyLoaded) {
-                    loadData();
-                    isLazyLoaded = true;
+                    GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
+                        @Override
+                        public boolean onKey(View v, int keyCode, KeyEvent event) {
+                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                                return onBackPressed();// 回调按下返回键
+                            }
+                            return false;
+                        }
+                    });
+                    return;
+                } else if (viewLayout instanceof ViewGroup) {
+
+                    try {
+                        viewGroup = (ViewGroup) viewLayout;
+                    } catch (Exception e) {
+//                        logs("异常返回 viewGroup:" + viewGroup.getClass());
+                        return;
+                    }
+
+                    int childCount = viewGroup.getChildCount();
+                    if (childCount == 0) return;
+
+                    for (int i = 0; i < childCount; i++) {
+                        View childAt = viewGroup.getChildAt(i);
+                        setViewBackListener(childAt);
+                    }
                 }
+
             }
 
-            // ===================================== 懒加载 结束 =====================================
-
-            @Override
-            public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-                super.onViewCreated(view, savedInstanceState);
-                initView(view, savedInstanceState);
-            }
 
             /**
              * 构建 GT 工具包
@@ -13918,177 +13986,31 @@ public class GT {
                 return false;
             }
 
-            // ================================================================= GT 内部方法
-
-            /**
-             * 普通日志
-             *
-             * @param object
-             */
-            protected void log(Object object) {
-                GT.log(object);
-            }
-
-            /**
-             * 带 TAG 的普通日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void log(Object tag, Object object) {
-                GT.log(tag, object);
-            }
-
-            /**
-             * 详细日志
-             *
-             * @param object
-             */
-            protected void logs(Object object) {
-                GT.logs(object);
-            }
-
-            /**
-             * 普通日志
-             *
-             * @param object
-             */
-            protected void logAll(Object object) {
-                GT.logAll(object);
-            }
-
-            /**
-             * 带 TAG 的普通日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void logAll(Object tag, Object object) {
-                GT.logAll(tag, object);
-            }
-
-            /**
-             * 错误日志
-             *
-             * @param object
-             */
-            protected void errAll(Object object) {
-                GT.errAll(object);
-            }
-
-            /**
-             * 带 TAG 的错误日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void errAll(Object tag, Object object) {
-                GT.errAll(tag, object);
-            }
-
-            /**
-             * 错误日志
-             *
-             * @param object
-             */
-            protected void err(Object object) {
-                GT.err(object);
-            }
-
-            /**
-             * 带 TAG 的错误日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void err(Object tag, Object object) {
-                GT.err(tag, object);
-            }
-
-            /**
-             * 详细日志
-             *
-             * @param object
-             */
-            protected void errs(Object object) {
-                GT.errs(object);
-            }
-
-            /**
-             * 抛异常
-             *
-             * @param tag
-             */
-            protected void exception(Object tag) {
-                GT.exception(tag);
-            }
-
-            /**
-             * 普通的 Toast
-             *
-             * @param object
-             */
-            protected void toast(Object object) {
-                GT.toast_s(object);
-            }
-
-            /**
-             * 带 Context 的 Toast
-             *
-             * @param context
-             * @param object
-             */
-            protected void toast(Context context, Object object) {
-                GT.toast_s(context, object);
-            }
-
-            /**
-             * 带 延时的 的 Toast
-             *
-             * @param time
-             * @param object
-             */
-            protected void toast(long time, Object object) {
-                GT.toast_time(object, time);
-            }
-
-
             @Override
             public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-                onResultDataFront(requestCode, resultCode, data);
                 super.onActivityResult(requestCode, resultCode, data);
-                onResultDataBehind(requestCode, resultCode, data);
+                onResultData(requestCode, resultCode, data);
             }
 
 
             /**
-             * 反馈前面
+             * 反馈数据
              *
              * @param requestCode
              * @param resultCode
              * @param data
              */
-            protected void onResultDataFront(int requestCode, int resultCode, @Nullable Intent data) {
+            protected void onResultData(int requestCode, int resultCode, Intent data) {
 
             }
 
-            /**
-             * 反馈后面
-             *
-             * @param requestCode
-             * @param resultCode
-             * @param data
-             */
-            protected void onResultDataBehind(int requestCode, int resultCode, @Nullable Intent data) {
-
-            }
 
             //更新UI广播
             private UiReceiver uiReceiver;//定义一个刷新UI的广播
 
             //是否注册广播
             protected boolean isRegisterBroadcastAction() {
-                return true;//默认是注册的
+                return false;//默认是不注册的
             }
 
             /**
@@ -14103,11 +14025,12 @@ public class GT {
             /**
              * 发送更新UI广播
              *
+             * @param classKey 将数据发收到那个类进行更新
              * @param intent
              */
-            protected void sendUpdateUiBroadcast(Intent intent) {
+            protected void sendUpdateUiBroadcast(Class classKey, Intent intent) {
 
-                if (intent == null) {
+                if (classKey == null || intent == null) {
                     return;
                 }
 
@@ -14116,18 +14039,22 @@ public class GT {
                 }
 
                 if (activity != null) {
+                    intent.setAction(classKey.getName());
                     activity.sendBroadcast(intent);
                 }
             }
+
 
             /**
              * 发送更新UI广播
              *
              * @param context
+             * @param classKey 将数据发收到那个类进行更新
              * @param intent
              */
-            protected void sendUpdateUiBroadcast(Context context, Intent intent) {
-                if (context != null && intent != null) {
+            protected void sendUpdateUiBroadcast(Context context, Class classKey, Intent intent) {
+                if (context != null && intent != null && classKey != null) {
+                    intent.setAction(classKey.getName());
                     context.sendBroadcast(intent);
                 }
             }
@@ -14166,30 +14093,8 @@ public class GT {
 
             @Override
             public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                build(this);//注解赋值布局ID值
-
-                // 是否恢复数据
-                if (isRecoverBundle()) {
-                    if (view == null) {// 如果数据为 null 就创建
-                        view = inflater.inflate(resLayout, container, false);
-                    }
-                } else {
-                    view = inflater.inflate(resLayout, container, false);
-                }
-
-                // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
-                GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
-                    @Override
-                    public boolean onKey(View v, int keyCode, KeyEvent event) {
-                        if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
-                            return onBackPressed();// 回调按下返回键
-                        }
-                        return false;
-                    }
-                });
-
-                this.gt_fragment = GT_Fragment.gt_fragment;
-                initBaseFragment(view);// 解决 在 add 的情况下 透明背景与点击穿透的问题
+                build(this);// 注解赋值布局ID值
+                View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
             }
@@ -14202,6 +14107,310 @@ public class GT {
              */
             private void build(Object object) {
                 GT.getGT().build(object, null);
+            }
+
+            @Override
+            protected void initView(View view, Bundle savedInstanceState) {
+                build(this, view);
+
+            }
+        }
+
+
+        //=========================================== GT_Fragment 释放资源方法 ====================================
+
+        /**
+         * 释放资源
+         */
+        public void close() {
+
+            //移除 Fragment 栈中监听器
+            if (fragmentManager != null && listener != null) {
+                fragmentManager.removeOnBackStackChangedListener(listener);
+            }
+
+            if (activity != null) {
+                activity = null;
+            }
+
+            if (fragmentNames != null) {
+                fragmentNames.clear();
+            }
+
+            if (fragmentBeanList != null) {
+                fragmentBeanList.clear();
+            }
+
+            if (gt_fragment != null) {
+                gt_fragment = null;
+            }
+
+        }
+
+
+    }
+
+    /**
+     * 对话框封装类
+     */
+    public static class GT_Dialog implements SaveObject.SaveBean {
+
+        /**
+         * AlertDialog.Builder 对话框类
+         */
+        public static class GT_AlertDialog extends AlertDialog.Builder {
+
+            /**
+             * 初始化 上下文
+             *
+             * @param context
+             */
+            public GT_AlertDialog(Context context) {
+                super(context);
+            }
+
+            /**
+             * 设置按钮的对话框
+             *
+             * @param img             图标
+             * @param title           标题
+             * @param message         信息
+             * @param btnName         第一个按钮名称
+             * @param onClickListener 单击事件
+             * @return 返回对话框操作对象
+             */
+            public AlertDialog.Builder dialogButton(int img, String title, String message, String btnName, DialogInterface.OnClickListener onClickListener) {
+                setTitle(title).setIcon(img).setMessage(message);   //设置 标题、图标、消息
+                if (btnName != null && onClickListener != null) {
+                    setNegativeButton(btnName, onClickListener);//设置单击事件
+                }
+                return this;
+            }
+
+            /**
+             * 设置列表选项对话框
+             * @param img       图标
+             * @param title     标题
+             * @param texts     类表项
+             * @return 返回对话框对象
+             */
+            /**
+             * @param img             图标
+             * @param title           标题
+             * @param items           类表项
+             * @param onClickListener 单击事件
+             * @return
+             */
+            public AlertDialog.Builder dialogList(int img, String title, final String[] items, DialogInterface.OnClickListener onClickListener) {
+                setIcon(img).setTitle(title);
+                if (items != null && onClickListener != null)
+                    setItems(items, onClickListener); //添加列表项
+                return this;
+            }
+
+            /**
+             * 设置单选列表选项对话框
+             *
+             * @param img             图标
+             * @param title           标题
+             * @param item            列表项
+             * @param onClickListener 单击事件
+             * @return 返回对话框对象
+             */
+            public AlertDialog.Builder dialogSingleChoiceList(int img, String title, String[] item, DialogInterface.OnClickListener onClickListener) {
+                setIcon(img).setTitle(title);
+                if (item != null && onClickListener != null)
+                    setSingleChoiceItems(item, 0, onClickListener);//设置按钮
+                return this;
+            }
+
+            /**
+             * 设置多选列表对话框
+             *
+             * @param img             图标
+             * @param title           标题
+             * @param items           列表
+             * @param onClickListener 单击事件
+             * @return 返回对话框对象
+             */
+            public AlertDialog.Builder dialogMultiChoice(int img, String title, final String[] items, DialogInterface.OnMultiChoiceClickListener onClickListener) {
+
+                final boolean[] checkedItems = new boolean[items.length];   //初始化选中状态
+
+                for (int i = 0; i < checkedItems.length; i++) {
+                    checkedItems[i] = false;   //初始化默认选项
+                }
+                setIcon(img).setTitle(title);//设置 图标、标题
+                if (checkedItems != null && items != null && onClickListener != null)
+                    setMultiChoiceItems(items, checkedItems, onClickListener);
+                return this;
+            }
+
+            /**
+             * 自定义的 Dialog
+             */
+            public static class ViewDialog {
+
+                private Dialog dialog;
+                private View view;
+
+                public Dialog getDialog() {
+                    return dialog;
+                }
+
+                public View getView() {
+                    return view;
+                }
+
+                /**
+                 * 设置 ViewDialog 全屏 该方法需要在 show() 方法之后调用
+                 *
+                 * @param activity
+                 * @return 用法如下：
+                 * GT.GT_AlertDialog.ViewDialog viewDialog = new GT.GT_AlertDialog.ViewDialog()
+                 * .initLayout(activity, R.layout.item_load, R.style.dialogNoBg, true, -1, 0, 0);
+                 * viewDialog.getDialog().show();
+                 * viewDialog.allWindow(activity);//放到此处
+                 */
+                public ViewDialog allWindow(Activity activity) {
+                    WindowManager WindowManager = activity.getWindowManager();
+                    Display display = WindowManager.getDefaultDisplay();
+                    WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
+                    lp.width = display.getWidth(); //设置宽度
+                    lp.height = display.getHeight(); //设置宽度
+                    dialog.getWindow().setAttributes(lp);
+                    return this;
+                }
+
+                /**
+                 * @param context 上下文
+                 * @param layout  布局
+                 * @return
+                 */
+                public ViewDialog initLayout(Context context, int layout) {
+                    dialog = new Dialog(context);
+                    view = LayoutInflater.from(context).inflate(layout, null);
+                    dialog.setContentView(view);
+                    return this;
+                }
+
+                /**
+                 * @param context 上下文
+                 * @param layout  布局
+                 * @param Style   设置样式
+                 * @return
+                 */
+                public ViewDialog initLayout(Context context, int layout, int Style) {
+                    dialog = new Dialog(context);
+                    dialog = new Dialog(context, Style);
+                    view = LayoutInflater.from(context).inflate(layout, null);
+                    dialog.setContentView(view);
+                    return this;
+                }
+
+                /**
+                 * @param context       上下文
+                 * @param Style         样式
+                 * @param clickExternal 外部是否可点击
+                 * @param layout        布局
+                 * @param transparency  透明度
+                 * @param X             显示的 X 轴位置
+                 * @param Y             显示的 Y 轴位置
+                 * @return 当前类的对象
+                 * <p>
+                 * style 样式 参考：
+                 * <style name="dialogNoBg">
+                 * <item name="android:background">#00000000</item>
+                 * <item name="android:WindowUtilsBackground">@android:color/transparent</item>
+                 * <item name="android:WindowUtilsNoTitle">true</item>
+                 * <item name="android:WindowUtilsFullscreen">true</item>
+                 * <item name="android:WindowUtilsIsFloating">true</item>
+                 * </style>
+                 */
+                public ViewDialog initLayout(Context context, int layout, int Style, boolean clickExternal, int transparency, int X, int Y) {
+
+                    if (Style != 0)
+                        dialog = new Dialog(context, Style);
+                    else
+                        dialog = new Dialog(context);
+
+                    dialog.setCancelable(clickExternal);       //设置点击外面不会消失 true为点击外面可以被取消，false 为点击外面不可被取消
+
+                    view = LayoutInflater.from(context).inflate(layout, null);
+                    dialog.setContentView(view);
+
+                    if (transparency != -1)
+                        dialog.getWindow().setDimAmount(transparency);//设置昏暗度为0 则表示为透明， 如果是 -1 则是默认
+
+                    //修改 自定义对话框的显示位置
+                    android.view.Window dialogWindowUtils = dialog.getWindow();//随意定义个Dialog
+                    WindowManager.LayoutParams lp = dialogWindowUtils.getAttributes();//实例化WindowUtils
+                    //实例化WindowUtils操作者
+                    lp.x = X; // 新位置X坐标
+                    lp.y = Y; // 新位置Y坐标
+                    dialogWindowUtils.setAttributes(lp);
+
+                    return this;
+                }
+
+            }
+
+            /**
+             * 加载自定义的 对话框 自带去掉边框
+             */
+            public static abstract class Loading_view extends ProgressDialog {
+
+                public Loading_view(Context context) {
+                    super(context);
+                }
+
+                public Loading_view(Context context, int theme) {
+                    super(context, theme);
+                }
+
+                @Override
+                protected void onCreate(Bundle savedInstanceState) {
+                    super.onCreate(savedInstanceState);
+                    init(getContext());
+                }
+
+                /**
+                 * 加载布局
+                 *
+                 * @param context
+                 */
+                protected abstract void loadLayout(Context context);
+
+                /**
+                 * 初始化布局
+                 *
+                 * @return
+                 */
+                public abstract int initLayout();
+
+                private void init(Context context) {
+                    setCancelable(true);
+                    setCanceledOnTouchOutside(false);
+                    setContentView(initLayout());//loading的xml文件
+
+                    loadLayout(context);//加载布局
+
+                    WindowManager.LayoutParams params = getWindow().getAttributes();
+                    params.width = WindowManager.LayoutParams.WRAP_CONTENT;
+                    params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+                    getWindow().setAttributes(params);
+                }
+
+                @Override
+                public void show() {//开启
+                    super.show();
+                }
+
+                @Override
+                public void dismiss() {//关闭
+                    super.dismiss();
+                }
+
             }
 
         }
@@ -14514,17 +14723,64 @@ public class GT {
                 }
             }
 
+            /**
+             * 使用首页模式启动Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
+            /**
+             * 使用首页模式启动Fragment
+             *
+             * @param fragmentId
+             * @param toFragment
+             */
             protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
+                    GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+                }
+            }
+
+            /**
+             * 启动悬浮窗
+             *
+             * @param context
+             * @param toFragment
+             */
+            protected void startFloatingWindow(Context context, Class<?> toFragment) {
+                if (activity == null) {
+                    activity = (Activity) context;
+                    if (activity == null) {
+                        activity = GT_Fragment.gt_fragment.getActivity();
+                    }
+                }
+
+                if (activity != null) {
+                    activity.startService(new Intent(context, toFragment));
+                }
+
+            }
+
+            /**
+             * 启动悬浮窗
+             *
+             * @param toFragment
+             */
+            protected void startFloatingWindow(Class<?> toFragment) {
+                if (activity == null) {
+                    activity = GT_Fragment.gt_fragment.getActivity();
+                }
+
+                if (activity != null) {
+                    activity.startService(new Intent(activity, toFragment));
                 }
             }
 
@@ -14546,6 +14802,7 @@ public class GT {
                 });
                 this.gt_fragment = GT_Fragment.gt_fragment;
 
+
                 //注册广播
                 if (isRegisterBroadcastAction() && activity != null) {
                     uiReceiver = new UiReceiver();
@@ -14553,6 +14810,51 @@ public class GT {
                     IntentFilter intentFilter = new IntentFilter();
                     intentFilter.addAction(getClass().getName());
                     activity.registerReceiver(uiReceiver, intentFilter); //注册广播
+                }
+
+                //给EditText 组件设置返回事件
+                setViewBackListener(view);
+
+            }
+
+            /**
+             * 给EditText 组件设置返回事件
+             *
+             * @param viewGroup
+             */
+            protected void setViewBackListener(View viewLayout) {
+
+                ViewGroup viewGroup = null;
+
+                //如果是Edit类型的那就监听返回事件
+                if (viewLayout instanceof EditText) {
+
+                    GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
+                        @Override
+                        public boolean onKey(View v, int keyCode, KeyEvent event) {
+                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                                return onBackPressed();// 回调按下返回键
+                            }
+                            return false;
+                        }
+                    });
+                    return;
+                } else if (viewLayout instanceof ViewGroup) {
+
+                    try {
+                        viewGroup = (ViewGroup) viewLayout;
+                    } catch (Exception e) {
+//                        logs("异常返回 viewGroup:" + viewGroup.getClass());
+                        return;
+                    }
+
+                    int childCount = viewGroup.getChildCount();
+                    if (childCount == 0) return;
+
+                    for (int i = 0; i < childCount; i++) {
+                        View childAt = viewGroup.getChildAt(i);
+                        setViewBackListener(childAt);
+                    }
                 }
 
             }
@@ -14585,107 +14887,12 @@ public class GT {
                 GT.startAct(activityClass);
             }
 
-            /**
-             * 普通日志
-             *
-             * @param object
-             */
-            protected void log(Object object) {
-                GT.log(object);
-            }
-
-            /**
-             * 带 TAG 的普通日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void log(Object tag, Object object) {
-                GT.log(tag, object);
-            }
-
-            /**
-             * 详细日志
-             *
-             * @param object
-             */
-            protected void logs(Object object) {
-                GT.logs(object);
-            }
-
-            /**
-             * 错误日志
-             *
-             * @param object
-             */
-            protected void err(Object object) {
-                GT.err(object);
-            }
-
-            /**
-             * 带 TAG 的错误日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void err(Object tag, Object object) {
-                GT.err(tag, object);
-            }
-
-            /**
-             * 详细日志
-             *
-             * @param object
-             */
-            protected void errs(Object object) {
-                GT.errs(object);
-            }
-
-            /**
-             * 抛异常
-             *
-             * @param tag
-             */
-            protected void exception(Object tag) {
-                GT.exception(tag);
-            }
-
-            /**
-             * 普通的 Toast
-             *
-             * @param object
-             */
-            protected void toast(Object object) {
-                GT.toast_s(object);
-            }
-
-            /**
-             * 带 Context 的 Toast
-             *
-             * @param context
-             * @param object
-             */
-            protected void toast(Context context, Object object) {
-                GT.toast_s(context, object);
-            }
-
-            /**
-             * 带 延时的 的 Toast
-             *
-             * @param time
-             * @param object
-             */
-            protected void toast(long time, Object object) {
-                GT.toast_time(object, time);
-            }
-
-
             //更新UI广播
             private UiReceiver uiReceiver;//定义一个刷新UI的广播
 
             //是否注册广播
             protected boolean isRegisterBroadcastAction() {
-                return true;//默认是注册的
+                return false;//默认是不注册的
             }
 
             /**
@@ -14701,10 +14908,11 @@ public class GT {
              * 发送更新UI广播
              *
              * @param intent
+             * @param classKey 将数据发收到那个类进行更新
              */
-            protected void sendUpdateUiBroadcast(Intent intent) {
+            protected void sendUpdateUiBroadcast(Class classKey, Intent intent) {
 
-                if (intent == null) {
+                if (intent == null && classKey != null) {
                     return;
                 }
 
@@ -14713,6 +14921,7 @@ public class GT {
                 }
 
                 if (activity != null) {
+                    intent.setAction(classKey.getName());
                     activity.sendBroadcast(intent);
                 }
             }
@@ -14721,10 +14930,11 @@ public class GT {
              * 发送更新UI广播
              *
              * @param context
+             * @param classKey 将数据发收到那个类进行更新
              * @param intent
              */
-            protected void sendUpdateUiBroadcast(Context context, Intent intent) {
-                if (context != null && intent != null) {
+            protected void sendUpdateUiBroadcast(Context context, Class classKey, Intent intent) {
+                if (context != null && intent != null && classKey != null) {
                     context.sendBroadcast(intent);
                 }
             }
@@ -14777,83 +14987,68 @@ public class GT {
             private void build(Object object) {
                 GT.getGT().build(object, null);
             }
+
+            @Override
+            protected void initView(@NonNull View view, @Nullable Bundle savedInstanceState) {
+                build(this, view);
+            }
         }
-
-
-        //=========================================== GT_Fragment 释放资源方法 ====================================
-
-        /**
-         * 释放资源
-         */
-        public void close() {
-
-            //移除 Fragment 栈中监听器
-            if (fragmentManager != null && listener != null) {
-                fragmentManager.removeOnBackStackChangedListener(listener);
-            }
-
-            if (activity != null) {
-                activity = null;
-            }
-
-            if (fragmentNames != null) {
-                fragmentNames.clear();
-            }
-
-            if (fragmentBeanList != null) {
-                fragmentBeanList.clear();
-            }
-
-            if (gt_fragment != null) {
-                gt_fragment = null;
-            }
-
-        }
-
 
     }
 
     /**
-     * 封装 Activity 管理器
+     * 封装了集合类
      */
-    public static class GT_Activity {
+    public static class GT_FloatingWindow implements SaveObject.SaveBean {
 
         /**
-         * 封装普通的 Activity 管理器
+         * TODO 必看事项
+         * 悬浮窗需要注意以下问题：
+         * 1.申请悬浮窗权限：
+         * <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+         *
+         * 2.需要动态处理权限
+         *   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {//8.0以上
+         *             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+         *             startActivityForResult(intent, 0);
+         *         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {//6.0-8.0
+         *             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+         *             intent.setData(Uri.parse("package:" + getPackageName()));
+         *             startActivityForResult(intent, 0);
+         *         } else {//4.4-6.0一下
+         *             //无需处理了
+         *         }
+         *
+         * 3.静态注册 <service android:name=".service.test.FloatingDemo"/>
+         *
+         *
          */
-        public abstract static class BaseActivity extends AppCompatActivity {
 
-            //切换Activity 动画
-            private static int cutIndex = 0;//GT内置提供的切换特效
-            private static int startAnim = 0;//用户自定义
-            private static int closeAnim = 0;//用户自定义
+        /**
+         * 悬浮窗基类
+         */
+        public abstract static class FloatingWindowBase extends Service {
 
-            /**
-             * 设置 Activity 切换特效
-             * 1  淡入淡出
-             * 2  左右滑出
-             * 暂时仅支持该两种
-             *
-             * @param cutIndex
-             */
-            public void setActivityCutIndex(int cutIndex) {
-                this.cutIndex = cutIndex;
+            protected WindowManager windowManager;
+            protected WindowManager.LayoutParams layoutParams;
+            protected int width;//屏幕宽度
+            protected int height;//屏幕高度
+            protected View view;//当前加载的布局
+            protected Context context;//上下活动
+
+            public void setView(View view) {
+                this.view = view;
             }
 
             /**
-             * 自定义 Activity 切换特效
-             *
-             * @param startAnim
-             * @param closeAnim
+             * 初始化 UI,可用于设置悬浮窗的 宽高显示的位置
+             * 如：
+             * layoutParams.width = width;
+             * layoutParams.height = height / 3;
+             * layoutParams.x = 300;
+             * layoutParams.y = 300;
              */
-            public void setActivityCut(int startAnim, int closeAnim) {
-                this.startAnim = startAnim;
-                this.closeAnim = closeAnim;
-                cutIndex = -1;
-            }
-
-
-            protected GT_Fragment gt_fragment;
+            protected abstract void initView(View view);
 
             /**
              * 初始化 加载布局
@@ -14863,622 +15058,221 @@ public class GT {
             }
 
             /**
-             * 在绘制完 View 之前设置数据
-             */
-            protected void initDrawView() {
-            }
-
-            /**
-             * 初始化 UI
-             */
-            protected abstract void initView(Bundle savedInstanceState);
-
-            /**
              * 功能方法
+             *
+             * @param context
+             * @param view    当前加载的View
              */
-            protected void loadData() {
+            protected void loadData(Context context, Intent intent, View view) {
             }
 
             @Override
-            protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
-                gt_fragment = GT_Fragment.gt_fragment;
-                int loadLayout = loadLayout();
-                if (loadLayout != 0) {
-                    initDrawView();// 设置绘制前的数据
-                    setContentView(loadLayout);// 加载布局
-                    initView(savedInstanceState);// 初始化 UI
-                    loadData();// 功能方法
+            public void onCreate() {
+                super.onCreate();
+                context = this;
+                windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+                layoutParams = new WindowManager.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    layoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+                } else {
+                    layoutParams.type = WindowManager.LayoutParams.TYPE_PHONE;
+                }
+                layoutParams.format = PixelFormat.RGBA_8888;
+                layoutParams.gravity = Gravity.TOP | Gravity.LEFT;
+                layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+                width = windowManager.getDefaultDisplay().getWidth();//获取当前屏幕宽度
+                height = windowManager.getDefaultDisplay().getHeight();//获取当前屏幕高度
+
+                //如果是继承自注解悬浮窗，那么View会不为null
+                if (view == null) {
+                    view = LayoutInflater.from(this).inflate(loadLayout(), null);
                 }
 
-                //注册广播
-                if (isRegisterBroadcastAction()) {
-                    uiReceiver = new UiReceiver();
-                    //实例化过滤器并设置要过滤的广播
-                    IntentFilter intentFilter = new IntentFilter();
-                    intentFilter.addAction(getClass().getName());
-                    registerReceiver(uiReceiver, intentFilter); //注册广播
+                //默认是占屏幕一半的大小
+                layoutParams.width = width;
+                layoutParams.height = height / 2;
+                view.measure(0, 0);//设置标准宽高
+
+                int measuredWidth = view.getMeasuredWidth();
+                int measuredHeight = view.getMeasuredHeight();
+
+                int w = measuredWidth - (view.getPaddingLeft() + view.getPaddingRight());
+                int h = measuredHeight - (view.getPaddingTop() + view.getPaddingBottom());
+
+                //设置界面宽度
+                if (w == 121 || w == 122 || w == 155 || w == 154) {
+                    layoutParams.width = width;
+                } else {
+                    layoutParams.width = view.getMeasuredWidth();
                 }
-
-            }
-
-            /**
-             * 构建 GT 工具包
-             *
-             * @param context
-             */
-            protected void build(Activity activity) {
-                getGT().build(activity);
-            }
-
-            /**
-             * @param dialogFragment
-             * @跳转其他的 DialogFragment
-             */
-            protected void startDialogFragment(DialogFragment dialogFragment) {
-                dialogFragment.show(getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
-            }
-
-            /**
-             * @param dialogFragment
-             * @跳转其他的 DialogFragment
-             */
-            protected void startDialogFragment(Class<?> dialogFragmentClass) {
-
-                DialogFragment fragment = null;
-
-                try {
-                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                } catch (java.lang.InstantiationException e) {
-                    e.printStackTrace();
+                //设置界面高度
+                if (h == 66 || h == 67 || h == 85 || h == 84) {
+                    layoutParams.height = height;
+                } else {
+                    layoutParams.height = view.getMeasuredHeight();
                 }
-
-                fragment.show(getSupportFragmentManager(), fragment.getClass().toString());// 弹出退出提示
-            }
-
-            /**
-             * 跳转 Activity
-             *
-             * @param activityClass
-             */
-            protected void startActivity(Class activityClass) {
-                GT.log("Start cutIndex:" + cutIndex);
-
-                GT.startAct(activityClass);
-                //切换动画
-                switch (cutIndex) {
-                    case 1:
-                        //淡入淡出
-                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                        break;
-                    case 2:
-                        //左右滑动
-                        overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right);
-                        break;
-                    default:
-                        //用户自定义
-                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
-                            overridePendingTransition(startAnim, closeAnim);
-                        }
-                        break;
-                }
-
-
-            }
-
-            /**
-             * @param toFragment
-             * @跳转 Fragment
-             */
-            protected void startFragment(Fragment toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startFragment(toFragment);
-                }
-            }
-
-            /**
-             * @param toFragment
-             * @跳转 Fragment
-             */
-            protected void startFragment(Class<?> toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startFragment(toFragment);
-                }
-            }
-
-            /**
-             * 跳转Fragment
-             *
-             * @param fragmentId
-             * @param toFragment
-             */
-            protected void startFragment(int fragmentId, Fragment toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
-                }
-            }
-
-            /**
-             * 跳转Fragment
-             *
-             * @param fragmentId
-             * @param toFragment
-             */
-            protected void startFragment(int fragmentId, Class<?> toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
-                }
-            }
-
-
-            /**
-             * 跳转Fragment
-             *
-             * @param toFragment 跳转的Fragment
-             * @param startMode  启动模式
-             */
-            protected void startFragment(Fragment toFragment, int startMode) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
-                }
-            }
-
-            /**
-             * 跳转Fragment
-             *
-             * @param toFragment 跳转的Fragment
-             * @param startMode  启动模式
-             */
-            protected void startFragment(Class<?> toFragment, int startMode) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
-                }
-            }
-
-            /**
-             * 跳转Fragment
-             *
-             * @param fragmentId 跳转的容器
-             * @param toFragment 跳转的Fragment
-             * @param startMode  启动模式
-             */
-            protected void startFragment(int fragmentId, Fragment toFragment, int startMode) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
-                }
-            }
-
-            /**
-             * 跳转Fragment
-             *
-             * @param fragmentId 跳转的容器
-             * @param toFragment 跳转的Fragment
-             * @param startMode  启动模式
-             */
-            protected void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
-                }
-            }
-
-
-            /**
-             * @param toFragment
-             * @跳转 Fragment
-             */
-            protected void startFragmentHome(Fragment toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
-                }
-            }
-
-            /**
-             * @param toFragment
-             * @跳转 Fragment
-             */
-            protected void startFragmentHome(Class<?> toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startFragmentHome(toFragment);
-                }
-            }
-
-            protected void startFragmentHome(int fragmentId, Fragment toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
-                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
-                }
-            }
-
-            protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
-                if (GT_Fragment.gt_fragment != null) {
-                    GT_Fragment.gt_fragment.startMode(GT_Fragment.HOME);
-                    GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
-                }
-            }
-
-            protected GT_Fragment getGT_Fragment() {
-                return GT.GT_Fragment.gt_fragment;
-            }
-
-            /**
-             * @param SQLName     数据库名称
-             * @param tableList   表名类
-             * @param sqlVersions 数据库版本
-             * @初始化 SQL
-             */
-            protected Hibernate initSQL(String SQLName, Class<?> tableClass, int sqlVersions) {
-                return new Hibernate()
-                        .init_1_SqlName(SQLName)            //设置SQL名称
-                        .init_2_SqlVersion(sqlVersions)     //设置数据库版本
-                        .init_3_SqlTable(tableClass)        //设置创建或更新升级的数据库表
-                        .init_4_Sql();                      //数据库操作执行
-            }
-
-            /**
-             * @param SQLName
-             * @param sqlVersions
-             * @return
-             * @用户自定义SQLCode
-             */
-            protected Hibernate initSQL(String SQLName, int sqlVersions) {
-                return new Hibernate()
-                        .init_1_SqlName(SQLName)            //设置SQL名称
-                        .init_2_SqlVersion(sqlVersions)     //设置数据库版本
-                        .init_3_SqlTable(ApplicationUtils.getPackageName(this))        //设置创建或更新升级的数据库表
-                        .init_4_Sql();                      //数据库操作执行
-            }
-
-            /**
-             * @param SQLName     数据库名称
-             * @param tableList   创建表的路径
-             * @param sqlVersions 数据库版本
-             * @初始化 SQL
-             */
-            protected Hibernate initSQL(String SQLName, String tablePath, int sqlVersions) {
-                return new Hibernate()
-                        .init_1_SqlName(SQLName)
-                        .init_2_SqlVersion(sqlVersions)
-                        .init_3_SqlTable(tablePath)
-                        .init_4_Sql();
-            }
-
-            /**
-             * @param SQLName     数据库名称
-             * @param tableList   表名List集合
-             * @param sqlVersions 数据库版本
-             * @初始化 SQL
-             */
-            protected Hibernate initSQL(String SQLName, List<Class<?>> tableList, int sqlVersions) {
-                return new Hibernate()
-                        .init_1_SqlName(SQLName)
-                        .init_2_SqlVersion(sqlVersions)
-                        .init_3_SqlTable(tableList)
-                        .init_4_Sql();
-            }
-
-            /**
-             * @param SQLName     数据库名称
-             * @param tableList   表名Set集合
-             * @param sqlVersions 数据库版本
-             * @初始化 SQL
-             */
-            protected Hibernate initSQL(String SQLName, Set<Class<?>> tableSet, int sqlVersions) {
-                return new Hibernate()
-                        .init_1_SqlName(SQLName)
-                        .init_2_SqlVersion(sqlVersions)
-                        .init_3_SqlTable(tableSet)
-                        .init_4_Sql();
-            }
-
-            /**
-             * @param SQLName     数据库名称
-             * @param tableList   表名Array
-             * @param sqlVersions 数据库版本
-             * @初始化 SQL
-             */
-            protected Hibernate initSQL(String SQLName, Class<?>[] tableArray, int sqlVersions) {
-                return new Hibernate()
-                        .init_1_SqlName(SQLName)
-                        .init_2_SqlVersion(sqlVersions)
-                        .init_3_SqlTable(tableArray)
-                        .init_4_Sql();
-            }
-
-            /**
-             * 普通日志
-             *
-             * @param object
-             */
-            protected void log(Object object) {
-                GT.log(object);
-            }
-
-            /**
-             * 带 TAG 的普通日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void log(Object tag, Object object) {
-                GT.log(tag, object);
-            }
-
-            /**
-             * 详细日志
-             *
-             * @param object
-             */
-            protected void logs(Object object) {
-                GT.logs(object);
-            }
-
-            /**
-             * 普通日志
-             *
-             * @param object
-             */
-            protected void logAll(Object object) {
-                GT.logAll(object);
-            }
-
-            /**
-             * 带 TAG 的普通日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void logAll(Object tag, Object object) {
-                GT.logAll(tag, object);
-            }
-
-            /**
-             * 错误日志
-             *
-             * @param object
-             */
-            protected void err(Object object) {
-                GT.err(object);
-            }
-
-            /**
-             * 带 TAG 的错误日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void err(Object tag, Object object) {
-                GT.err(tag, object);
-            }
-
-            /**
-             * 详细日志
-             *
-             * @param object
-             */
-            protected void errs(Object object) {
-                GT.errs(object);
-            }
-
-            /**
-             * 错误日志
-             *
-             * @param object
-             */
-            protected void errAll(Object object) {
-                GT.errAll(object);
-            }
-
-            /**
-             * 带 TAG 的错误日志
-             *
-             * @param tag
-             * @param object
-             */
-            protected void errAll(Object tag, Object object) {
-                GT.errAll(tag, object);
-            }
-
-            /**
-             * 抛异常
-             *
-             * @param tag
-             */
-            protected void exception(Object tag) {
-                GT.exception(tag);
-            }
-
-            /**
-             * 普通的 Toast
-             *
-             * @param object
-             */
-            protected void toast(Object object) {
-                GT.toast_s(object);
-            }
-
-            /**
-             * 带 Context 的 Toast
-             *
-             * @param context
-             * @param object
-             */
-            protected void toast(Context context, Object object) {
-                GT.toast_s(context, object);
-            }
-
-            /**
-             * 带 延时的 的 Toast
-             *
-             * @param time
-             * @param object
-             */
-            protected void toast(long time, Object object) {
-                GT.toast_time(object, time);
-            }
-
-            //反馈数据
-            @Override
-            public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-                onResultDataFront(requestCode, resultCode, data);
-                super.onActivityResult(requestCode, resultCode, data);
-                onResultDataBehind(requestCode, resultCode, data);
-            }
-
-            /**
-             * 反馈前面
-             *
-             * @param requestCode
-             * @param resultCode
-             * @param data
-             */
-            protected void onResultDataFront(int requestCode, int resultCode, @Nullable Intent data) {
-
-            }
-
-            /**
-             * 反馈后面
-             *
-             * @param requestCode
-             * @param resultCode
-             * @param data
-             */
-            protected void onResultDataBehind(int requestCode, int resultCode, @Nullable Intent data) {
+                //初始化View
+                initView(view);
+                windowManager.addView(view, layoutParams);
 
             }
 
             @Override
-            public void finish() {
-                GT.log("Close cutIndex:" + cutIndex);
-
-                super.finish();
-
-                //切换动画
-                switch (cutIndex) {
-                    case 1:
-                        //淡入淡出
-                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                        break;
-                    case 2:
-                        //左右滑动
-                        overridePendingTransition(android.R.anim.slide_in_left, android.R.anim.slide_out_right);
-                        break;
-                    default:
-                        //用户自定义
-                        if (cutIndex == -1 && startAnim != 0 && closeAnim != 0) {
-                            overridePendingTransition(startAnim, closeAnim);
-                        }
-                        break;
-                }
-
-
-            }
-
-
-            //更新UI广播
-            private UiReceiver uiReceiver;//定义一个刷新UI的广播
-
-            //是否注册广播
-            protected boolean isRegisterBroadcastAction() {
-                return true;//默认是注册的
+            public IBinder onBind(Intent intent) {
+                return null;
             }
 
             /**
-             * 通过广播更新UI
+             * 设置可拖动
+             */
+            protected void setDrag() {
+                if (view != null) {
+                    view.setOnTouchListener(new FloatingWindowBase.FloatingOnTouchListener());
+                }
+            }
+
+            @Override
+            public int onStartCommand(Intent intent, int flags, int startId) {
+                loadData(this, intent, view);
+                return super.onStartCommand(intent, flags, startId);
+            }
+
+            /**
+             * 退出当前 Fragment 并传递数据
+             */
+            protected void finish() {
+                windowManager.removeView(view);
+                stopSelf();
+            }
+
+            /**
+             * 退出当前 Fragment 并传递数据
              *
-             * @param context
              * @param intent
              */
-            protected void updateUi(Context context, Intent intent) {
+            protected void finish(Intent intent) {
+                if (intent != null) {
+                    onDestroy();
+                }
+            }
+
+            protected boolean onBackPressed() {
+                return false;
             }
 
             /**
-             * 定义一个接收到消息后刷新UI的内部类广播
+             * 反馈数据
+             *
+             * @param requestCode
+             * @param resultCode
+             * @param data
              */
-            private class UiReceiver extends BroadcastReceiver {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    updateUi(context, intent);//刷新UI
-                }
+            protected void onResultData(int requestCode, int resultCode, @Nullable Intent data) {
 
             }
 
             @Override
             public void onDestroy() {
-                if (uiReceiver != null)
-                    unregisterReceiver(uiReceiver); //注销广播
                 super.onDestroy();
             }
 
-        }
+            /**
+             * 拖动事件
+             */
+            public class FloatingOnTouchListener implements View.OnTouchListener {
+                private int x;
+                private int y;
 
-        /**
-         * 封装注解的 Activity 管理器
-         */
-        public abstract static class AnnotationActivity extends BaseActivity {
-
-            @Override
-            protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
-                initDrawView();// 设置绘制前的数据
-                initView(savedInstanceState);// 初始化 UI
-                loadData();// 功能方法
-
+                @Override
+                public boolean onTouch(View view, MotionEvent event) {
+                    switch (event.getAction()) {
+                        case MotionEvent.ACTION_DOWN:
+                            x = (int) event.getRawX();
+                            y = (int) event.getRawY();
+                            break;
+                        case MotionEvent.ACTION_MOVE:
+                            int nowX = (int) event.getRawX();
+                            int nowY = (int) event.getRawY();
+                            int movedX = nowX - x;
+                            int movedY = nowY - y;
+                            x = nowX;
+                            y = nowY;
+                            layoutParams.x = layoutParams.x + movedX;
+                            layoutParams.y = layoutParams.y + movedY;
+                            windowManager.updateViewLayout(view, layoutParams);
+                            break;
+                        default:
+                            break;
+                    }
+                    return true;
+                }
             }
 
 
         }
+
+        /**
+         * 悬浮窗注解类
+         */
+        public abstract static class AnnotationFloatingWindowBase extends FloatingWindowBase {
+
+            //布局ID
+            protected int resLayout;
+
+            public void setLayout(int resLayout) {
+                this.resLayout = resLayout;
+            }
+
+            @Override
+            public void onCreate() {
+                GT.getGT().build(this, null);
+                View view = LayoutInflater.from(this).inflate(resLayout, null);
+                setView(view);
+                super.onCreate();
+            }
+
+            @Override
+            protected void initView(View view) {
+                GT.getGT().build(this, view);
+            }
+
+        }
+
 
     }
 
+    //自定义组工具集合
+    public static class ViewUtils {
 
-//============================================= 游戏类 ======================================
+        //跑马灯
+        public static class MarqueeTextView extends TextView {
 
-    /**
-     * Game 游戏类
-     */
-    public static class Game {
-
-        /**
-         * 开启游戏窗体模式
-         *
-         * @param activity
-         */
-        public static void startGameWindow(Activity activity) {
-            try {
-                Window.light(activity);//屏幕常亮
-                Window.immersionMode(activity);//沉浸式模式
-                Window.Close_virtualButton(activity);//关闭虚拟按钮
-                Window.hideActionBar((AppCompatActivity) activity);//隐藏 ActionBar
-            } catch (Exception e) {
-                if (LOG.isGtLogTf())
-                    GT.err(getLineInfo(1), "请去掉调用该方法前面所有关于 沉浸式 关闭虚拟按钮 隐藏 ActionBar 等类似的代码");
+            public MarqueeTextView(Context context) {
+                this(context, null);
             }
-        }
 
-        /**
-         * 开启永久的游戏窗口模式
-         * 开启线程去一直开启全屏模式
-         * 除非必要，否则勿用该方法
-         *
-         * @param activity
-         */
-        public static void startGameWindows(final Activity activity) {
-            Thread.runJava(new Runnable() {
-                @Override
-                public void run() {
-                    while (true) {
-                        Thread.sleep(1000);
-                        Thread.runAndroid(new Runnable() {
-                            @Override
-                            public void run() {
-                                Game.startGameWindow(activity);//开启游戏窗口
-                            }
-                        });
-                    }
-                }
-            });
+            public MarqueeTextView(Context context, AttributeSet attrs) {
+                super(context, attrs);
+                //设置单行
+                setSingleLine();
+                //设置Ellipsize
+                setEllipsize(TextUtils.TruncateAt.MARQUEE);
+                //获取焦点
+                setFocusable(true);
+                //走马灯的重复次数，-1代表无限重复
+                setMarqueeRepeatLimit(-1);
+                //强制获得焦点
+                setFocusableInTouchMode(true);
+            }
+
+            /*
+             *这个属性这个View得到焦点,在这里我们设置为true,这个View就永远是有焦点的
+             */
+            @Override
+            public boolean isFocused() {
+                return true;
+            }
+
         }
 
         /**
@@ -15962,6 +15756,313 @@ public class GT {
                 private CallBackMode() {
                 }
             }
+        }
+
+        /**
+         * 流动布局
+         */
+        public static class FlowLayout extends ViewGroup {
+
+
+            /**
+             * 当前行已用的宽度，由子View宽度加上横向间隔
+             */
+            private int mUsedWidth = 0;
+            /**
+             * 代表一行
+             */
+            private FlowLayout.Line mLine = null;
+            /**
+             * 默认间隔
+             */
+            public static final int DEFAULT_SPACING = 20;
+            /**
+             * 横向间隔
+             */
+            private int mHorizontalSpacing = DEFAULT_SPACING;
+            /**
+             * 纵向间隔
+             */
+            private int mVerticalSpacing = DEFAULT_SPACING;
+            /**
+             * 代表行的集合
+             */
+            private final List<FlowLayout.Line> mLines = new ArrayList<FlowLayout.Line>();
+            /**
+             * 默认的最大的行数
+             */
+            private int mMaxLinesCount = Integer.MAX_VALUE;
+            /**
+             * 是否让子view充满该行
+             */
+            private boolean fillLine = false;
+
+            public FlowLayout(Context context) {
+                super(context);
+            }
+
+            public FlowLayout(Context context, AttributeSet attrs) {
+                super(context, attrs);
+            }
+
+            /**
+             * 是否填充满改行，如果是false，右边有空间
+             */
+            public void setFillLine(boolean fill) {
+                fillLine = fill;
+            }
+
+            // 设置两个view水平间距
+            public void setHorizontalSpacing(int spacing) {
+                if (mHorizontalSpacing != spacing) {
+                    mHorizontalSpacing = spacing;
+                    requestLayout();
+                }
+            }
+
+            /**
+             * 设置纵向间距
+             */
+            public void setVerticalSpacing(int spacing) {
+                if (mVerticalSpacing != spacing) {
+                    mVerticalSpacing = spacing;
+                    requestLayout();
+                }
+            }
+
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                // 1获取with height 以及mode
+                int widthMode = View.MeasureSpec.getMode(widthMeasureSpec);
+                int heightMode = View.MeasureSpec.getMode(heightMeasureSpec);
+
+                int heightSize = View.MeasureSpec.getSize(heightMeasureSpec)
+                        - getPaddingBottom() - getPaddingTop();
+                int widthSize = View.MeasureSpec.getSize(widthMeasureSpec)
+                        - getPaddingLeft() - getPaddingRight();
+                restoreLine();
+                int count = getChildCount();
+                // 2 测量子View
+                for (int i = 0; i < count; i++) {
+                    View child = getChildAt(i);
+
+                    int widthSpec = View.MeasureSpec.makeMeasureSpec(widthSize,
+                            widthMode == View.MeasureSpec.EXACTLY ? View.MeasureSpec.AT_MOST
+                                    : widthMode);
+                    int heightSpec = View.MeasureSpec.makeMeasureSpec(heightSize,
+                            heightMode == View.MeasureSpec.EXACTLY ? View.MeasureSpec.AT_MOST
+                                    : heightMode);
+
+                    child.measure(widthSpec, heightSpec);
+                    if (mLine == null) {
+                        mLine = new FlowLayout.Line();
+                    }
+                    // 将childview 添加到每一行中
+                    int childWidth = child.getMeasuredWidth();
+                    // 当前行已经占用的宽度
+                    mUsedWidth += childWidth;
+                    if (mUsedWidth < widthSize) {
+                        // 当前行还没有达到上限，那么该child就添加进这一行
+                        mLine.addView(child);
+                        mUsedWidth += mHorizontalSpacing; // 添加上两个子View之间水平方向的间隔
+                    } else {
+                        // 说明长度超出了当前的最大宽度
+                        if (mLine.getViewCount() == 0) {
+                            // 表示当前行中还没有元素，添加的第一个元素 长度就超过了最大宽度，那么也要把该child 添加进去保证有数据
+                            mLine.addView(child);
+                            // 同时换行
+                        } else {
+                            // 表示当前行中已经有元素，那么换一行，添加进去
+                            newLine();
+                            mLine.addView(child);
+                            // 改变已使用的宽度
+                            mUsedWidth += mHorizontalSpacing + childWidth;
+                        }
+
+                    }
+                }
+
+                // 前面只有换行的时候才将Line 添加到lines 集合中，这里要判断一下最后一行，将最后一行也添加进去
+                if (mLine != null && mLine.getViewCount() > 0
+                        && !mLines.contains(mLine)) {
+                    // 表示有数据
+                    mLines.add(mLine);
+                }
+
+                // 设置测量的宽高setMeasuredDimension
+                int totoalHeight = 0;
+                for (int i = 0; i < mLines.size(); i++) {
+                    totoalHeight += mLines.get(i).mHeight;// N行的高度
+                }
+                // 加上 行间距
+                totoalHeight += (mLines.size() - 1) * mVerticalSpacing;
+                // 加上padding
+                totoalHeight += getPaddingBottom() + getPaddingTop();
+                // 设置FlowLayout的宽度值 高度值 宽度就是默认的宽度，高度是总的高度
+                int measuredHeight = resolveSize(totoalHeight, heightMeasureSpec);
+                setMeasuredDimension(View.MeasureSpec.getSize(widthMeasureSpec),
+                        measuredHeight);
+            }
+
+            @Override
+            protected void onLayout(boolean changed, int l, int t, int r, int b) {
+                // 主要是调用child.layout
+                int count = mLines.size();
+                int left = getPaddingLeft();
+                int top = getPaddingTop();
+
+                for (int i = 0; i < count; i++) {
+                    FlowLayout.Line line = mLines.get(i);
+                    line.layout(left, top);
+                    top += mVerticalSpacing + line.mHeight;
+                }
+            }
+
+
+            /**
+             * 还原所有数据
+             */
+            private void restoreLine() {
+                mLines.clear();
+                mLine = new FlowLayout.Line();
+                mUsedWidth = 0;
+            }
+
+            /**
+             * 新增加一行
+             */
+            private boolean newLine() {
+                mLines.add(mLine);
+                if (mLines.size() < mMaxLinesCount) {
+                    mLine = new FlowLayout.Line();
+                    mUsedWidth = 0;
+                    return true;
+                }
+                return false;
+            }
+
+            /***
+             * 代表着一行，封装了一行所占高度，该行子View的集合，以及所有View的宽度总和
+             *
+             * @author Administrator
+             *
+             */
+            public class Line {
+
+                int mWidth = 0;// 该行中所有的子View累加的宽度
+                int mHeight = 0;// 该行中所有的子View中高度最高的那个子View的高度
+
+                List<View> views = new ArrayList<View>();// 存放一行中的View
+
+                public void addView(View child) {
+                    views.add(child);
+                    mWidth += child.getMeasuredWidth();
+                    int childHeight = child.getMeasuredHeight();
+                    mHeight = mHeight < childHeight ? childHeight : mHeight;// 高度等于一行中最高的View
+                }
+
+                /***
+                 * layout 子view
+                 * @param l
+                 * @param t
+                 */
+                public void layout(int l, int t) {
+                    int left = l;
+                    int top = t;
+                    // 父布局的宽度
+                    int totoalWidth = getMeasuredWidth() - getPaddingLeft()
+                            - getPaddingRight();
+                    // 当前line 中view的个数
+                    int count = getViewCount();
+                    // 剩余空间平分给每个View
+                    int spaceLast = totoalWidth - mWidth - (count - 1)
+                            * mHorizontalSpacing;
+                    int averageWidth = spaceLast / count;
+                    // 平分的宽度
+                    // int splitSpacing = (int) (spaceLast / count + 0.5);
+                    for (int i = 0; i < count; i++) {
+                        View child = views.get(i);
+                        int childHeight = child.getMeasuredHeight();
+                        int childWidth = child.getMeasuredWidth();
+
+                        if (fillLine) {// 要充满该行
+                            childWidth += averageWidth;
+                            child.getLayoutParams().width = childWidth;
+                            // 改变了原来的宽高，重新测量一次
+                            int widthMeasureSpec = View.MeasureSpec.makeMeasureSpec(
+                                    childWidth, View.MeasureSpec.EXACTLY);
+                            int heightMeasureSpec = View.MeasureSpec.makeMeasureSpec(
+                                    childHeight, View.MeasureSpec.EXACTLY);
+                            // 再次测量
+                            child.measure(widthMeasureSpec, heightMeasureSpec);
+
+                        }
+                        // 布局View
+                        child.layout(left, top, left + childWidth, top + childHeight);
+                        left += childWidth + mHorizontalSpacing; // 为下一个View的left赋值
+                    }
+                }
+
+                /**
+                 * 该行中view的个数
+                 *
+                 * @return
+                 */
+                public int getViewCount() {
+                    return views.size();
+                }
+
+            }
+        }
+
+    }
+
+//============================================= 游戏类 ======================================
+
+    /**
+     * Game 游戏类
+     */
+    public static class Game {
+
+        /**
+         * 开启游戏窗体模式
+         *
+         * @param activity
+         */
+        public static void startGameWindow(Activity activity) {
+            try {
+                WindowUtils.light(activity);//屏幕常亮
+                WindowUtils.immersionMode(activity);//沉浸式模式
+                WindowUtils.Close_virtualButton(activity);//关闭虚拟按钮
+                WindowUtils.hideActionBar((AppCompatActivity) activity);//隐藏 ActionBar
+            } catch (Exception e) {
+                if (LOG.isGtLogTf())
+                    GT.err(getLineInfo(1), "请去掉调用该方法前面所有关于 沉浸式 关闭虚拟按钮 隐藏 ActionBar 等类似的代码");
+            }
+        }
+
+        /**
+         * 开启永久的游戏窗口模式
+         * 开启线程去一直开启全屏模式
+         * 除非必要，否则勿用该方法
+         *
+         * @param activity
+         */
+        public static void startGameWindowUtilss(final Activity activity) {
+            Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    while (true) {
+                        Thread.sleep(1000);
+                        Thread.runAndroid(new Runnable() {
+                            @Override
+                            public void run() {
+                                Game.startGameWindow(activity);//开启游戏窗口
+                            }
+                        });
+                    }
+                }
+            });
         }
 
     }
@@ -17026,9 +17127,7 @@ public class GT {
         }
 
         /**
-         * 为给 Activity 类 标的注解 用法如下：
-         *
-         * @Activity(R.layout.activity_main) public class DemoFragment extends GT_AnnotationFragment {....}
+         * 为给 Fragment 类 标的注解 用法如下：
          */
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
@@ -17037,13 +17136,17 @@ public class GT {
         }
 
         /**
-         * 为给 Activity 类 标的注解 用法如下：
-         *
-         * @Activity(R.layout.activity_main) public class DemoFragment extends GT_AnnotationFragment {....}
+         * 为给 DialogFragment 类 标的注解 用法如下：
          */
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface GT_AnnotationDialogFragment {
+            int value();
+        }
+
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_AnnotationFloatingWindow {
             int value();
         }
 
@@ -17373,16 +17476,6 @@ public class GT {
 
         }
 
-
-        /**
-         * 注解初始化 GT 库
-         */
-        @Target(ElementType.METHOD)
-        @Retention(RetentionPolicy.RUNTIME)
-        public @interface Build {
-        }
-
-
     }
 
     /**
@@ -17399,39 +17492,40 @@ public class GT {
                 return;
             }
 
-            Class<? extends Object> mClass = object.getClass();
-
             // SQL 注解
-            initSQL(object, mClass);                      //为加载 List SQL 成员变量初始化
+            initSQL(object, object.getClass());                      //为加载 List SQL 成员变量初始化
+
+            //注解悬浮窗
+            initAnnotationWindow(object, object.getClass());
 
             // Fragment 、注解
-            initAnnotationFragment(object, mClass);// 为加载 Fragment 布局初始化
-            initGT_AnnotationDialogFragment(object, mClass);// 为加载 Fragment 布局初始化
-            initGT_Fragment(object, mClass);              //为加载 GTFragment 成员变量初始化
+            initAnnotationFragment(object, object.getClass());             // 为加载 AnnotationFragment 布局初始化
+            initGT_AnnotationDialogFragment(object, object.getClass());    // 为加载 DialogFragment 布局初始化
+            initGT_Fragment(object, object.getClass());                    //为加载 Fragment 成员变量初始化
 
             // Java 注解部分
-            initObject(object, mClass);                    //为加载 Object 成员变量初始化
-            initList(object, mClass);                      //为加载 List 成员变量初始化
-            initMap(object, mClass);                       //为加载 Map 成员变量初始化
-            initSet(object, mClass);                       //为加载 Set 成员变量初始化
+            initObject(object, object.getClass());                    //为加载 Object 成员变量初始化
+            initList(object, object.getClass());                      //为加载 List 成员变量初始化
+            initMap(object, object.getClass());                       //为加载 Map 成员变量初始化
+            initSet(object, object.getClass());                       //为加载 Set 成员变量初始化
 
             if (view == null) {
                 return;
             }
 
             // 组件、事件 注解
-            initView(object, mClass, view);                 //为加载 组件 初始化
-            initClick(object, mClass, view);                //为加载 组件单击 初始化
+            initView(object, object.getClass(), view);                 //为加载 组件 初始化
+            initClick(object, object.getClass(), view);                //为加载 组件单击 初始化
 
             //资源 注解
-            initAnimation(object, mClass, view);            //为加载 Animation 资源初始化
-            initDimen(object, mClass, view);                //为加载 Dimen 资源初始化
-            initDrawable(object, mClass, view);             //为加载 Style 资源初始化
-            initColor(object, mClass, view);                //为加载 Color 资源初始化
-            initString(object, mClass, view);               //为加载 String 资源初始化
-            initIntArray(object, mClass, view);             //为加载 IntArray 资源初始化
-            initStringArray(object, mClass, view);          //为加载 StringArray 资源初始化
-            initLayout(object, mClass, view);               //为加载 Layout 资源初始化
+            initAnimation(object, object.getClass(), view);            //为加载 Animation 资源初始化
+            initDimen(object, object.getClass(), view);                //为加载 Dimen 资源初始化
+            initDrawable(object, object.getClass(), view);             //为加载 Style 资源初始化
+            initColor(object, object.getClass(), view);                //为加载 Color 资源初始化
+            initString(object, object.getClass(), view);               //为加载 String 资源初始化
+            initIntArray(object, object.getClass(), view);             //为加载 IntArray 资源初始化
+            initStringArray(object, object.getClass(), view);          //为加载 StringArray 资源初始化
+            initLayout(object, object.getClass(), view);               //为加载 Layout 资源初始化
 
         }
 
@@ -17444,7 +17538,11 @@ public class GT {
 
             // SQL 注解
             initSQL(activity, mClass);                      //为加载 List SQL 成员变量初始化
-            initGT_Fragment(activity, mClass);              //为加载 GT_Framgnt 成员变量初始化
+
+            // Fragment 、注解
+            initAnnotationFragment(activity, mClass);             // 为加载 AnnotationFragment 布局初始化
+            initGT_AnnotationDialogFragment(activity, mClass);    // 为加载 DialogFragment 布局初始化
+            initGT_Fragment(activity, mClass);                    //为加载 Fragment 成员变量初始化
 
             // Java 注解
             initObject(activity, mClass);               //为加载 Object 成员变量初始化
@@ -17453,7 +17551,7 @@ public class GT {
             initSet(activity, mClass);                  //为加载 Set 成员变量初始化
 
             // Activity、组件、事件 注解
-            initActivity(activity, mClass);             //为加载 Activity 布局初始化
+            initAnnotationActivity(activity, mClass);             //为加载 Activity 布局初始化
             initView(activity, mClass);                 //为加载 组件 初始化
             initClick(activity, mClass);                //为加载 组件单击 初始化
 
@@ -17485,95 +17583,34 @@ public class GT {
 
                 //获取识别注解
                 Hibernate.Build initView_Hibernate = field.getAnnotation(Hibernate.Build.class);
-                Hibernate.GT_Entitys initView_Entitys = field.getAnnotation(Hibernate.GT_Entitys.class);
-                Hibernate.GT_Beans initView_Beans = field.getAnnotation(Hibernate.GT_Beans.class);
 
                 //初始化GT数据库
                 if (initView_Hibernate != null) {
                     String sqlName = initView_Hibernate.sqlName();//数据库名称
                     int sqlVersion = initView_Hibernate.sqlVersion();//数据库版本号
+                    Class<?>[] classes = initView_Hibernate.sqlTables();//数据库映射的表
                     if (getGT().getActivity() == null) {
-                        err(getLineInfo(2), "注入数据库失败！请在 Activity 中绑定GT注解");
+                        err(getLineInfo(LOG.lineInfoIndex), "注入数据库失败！请在 Activity 中绑定GT注解");
                         return;
                     }
-                    classObject = new Hibernate()
-                            .init_1_SqlName(sqlName)            //设置SQL名称
-                            .init_2_SqlVersion(sqlVersion)     //设置数据库版本
-                            .init_3_SqlTable(ApplicationUtils.getPackageName(getGT().getActivity()))        //设置创建或更新升级的数据库表
-                            .init_4_Sql();
+
+                    //如果用户没有自己设置映射的表那就扫描标注Bean,Entity的类做表
+                    if (classes.length == 0) {
+                        classObject = new Hibernate()
+                                .init_1_SqlName(sqlName)            //设置SQL名称
+                                .init_2_SqlVersion(sqlVersion)     //设置数据库版本
+                                .init_3_SqlTable(ApplicationUtils.getPackageName(getGT().getActivity()))//扫描创建表
+                                .init_4_Sql();
+                    } else {
+                        classObject = new Hibernate()
+                                .init_1_SqlName(sqlName)            //设置SQL名称
+                                .init_2_SqlVersion(sqlVersion)     //设置数据库版本
+                                .init_3_SqlTable(classes)          //映射用户设置的表
+                                .init_4_Sql();
+                    }
+
 
                     //实例注入
-                    try {
-                        field.setAccessible(true);
-                        field.set(object, classObject);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-
-                }
-
-
-                //过滤掉非 SQL（GT_Entitys、GT_Beans）的注解
-                if (initView_Entitys != null || initView_Beans != null) {
-
-                    Class<?> type = field.getType();//获取当前注解的成员变量类型
-
-                    //获取注解值
-                    Class<?>[] classes = null;
-                    if (initView_Entitys != null) {
-                        classes = initView_Entitys.valueArray();
-                    } else if (initView_Beans != null) {
-                        classes = initView_Beans.valueArray();
-                    }
-
-                    /**
-                     * @过滤掉没有被 SQL （Entity、Bean） 注解的注解值
-                     * @暂不过滤被 Entitys/Beans 所标识的类
-                     */
-
-                    /*List<Class<?>> classList = new ArrayList<>();//存储筛选过后的注解值
-                    for(Class cla : classes){
-                        Annotation subAnnotation_GT_Bean = cla.getAnnotation(Hibernate.GT_Bean.class);	//获取被 GT_Bean 注解过的类
-                        Annotation subAnnotation_GT_Entity = cla.getAnnotation(Hibernate.GT_Entity.class);	//获取被 GT_Entity 注解过的类
-
-                        //当前注解值的类是否被 SQL 注解标识过，如果被标识过就存储到集合中
-                        if(subAnnotation_GT_Bean != null || subAnnotation_GT_Entity != null){
-                            classList.add(cla);//存储被标识过的 SQL 注解值
-                        }
-                    }*/
-
-
-                    /**
-                     * @暂时默认可标识被 Entitys/Beans 注入的值
-                     */
-                    List<Class<?>> classList = new ArrayList<>();//存储筛选过后的注解值
-                    for (Class cla : classes) {
-                        classList.add(cla);//存储被标识过的 SQL 注解值
-                    }
-
-                    //实例化对应注解的对象并赋值
-                    if (type.equals(List.class)) {
-                        List<Object> objectList = new ArrayList<>();
-                        for (Class cla : classList) {
-                            objectList.add(cla);
-                        }
-                        classObject = objectList;
-
-                    } else if (type.equals(Set.class)) {
-                        Set<Object> objectSet = new ArraySet<>();
-                        for (Class cla : classList) {
-                            objectSet.add(cla);
-                        }
-                        classObject = objectSet;
-                    } else if (type.toString().equals("class [Ljava.lang.Class;")) {
-                        Class<?>[] arrayClass = new Class[classList.size()];
-                        for (int i = 0; i < classList.size(); i++) {
-                            arrayClass[i] = classList.get(i);
-                        }
-                        classObject = arrayClass;
-                    }
-
-                    //实例注入 List
                     try {
                         field.setAccessible(true);
                         field.set(object, classObject);
@@ -17967,7 +18004,7 @@ public class GT {
         }
 
 
-        //================================   下面是 Fragment 的注解内容   ==========================
+        //================================   下面是 通用 的注解内容   ==========================
 
 
         /**
@@ -18201,8 +18238,37 @@ public class GT {
 
         }
 
-
         //================================   下面是 Fragment 的注解内容   ==========================
+
+
+        /**
+         * 注入 ContextView
+         *
+         * @param activity
+         */
+        private static void initAnnotationActivity(Activity activity, Class<? extends Activity> mClass) {
+            Annotations.GT_AnnotationActivity contentView = mClass.getAnnotation(Annotations.GT_AnnotationActivity.class);//获取该类 ContextView 的注解类
+            //如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();//获取注解类参数
+                Method method = null;//获取该方法的信息
+                try {
+                    method = mClass.getMethod("setContentView", int.class);
+                } catch (NoSuchMethodException e) {
+                    e.printStackTrace();
+                }
+                method.setAccessible(true);//获取该方法的访问权限
+                try {
+                    method.invoke(activity, viewId);//TODO 该的方法会产生无用日志 调用该方法的，并设置该方法参数
+                } catch (IllegalAccessException e) {
+//                    e.printStackTrace();
+                    GT.err("e1:" + e);
+                } catch (InvocationTargetException e) {
+//                    e.printStackTrace();
+                    GT.err("e2:" + e);
+                }
+            }
+        }
 
         /**
          * 注解 Fragment
@@ -18260,68 +18326,54 @@ public class GT {
             }
         }
 
-
+        /**
+         * 注解Fragment构建
+         *
+         * @param object
+         * @param mClass
+         */
         private static void initGT_Fragment(Object object, Class<? extends Object> mClass) {
             Field[] fields = mClass.getDeclaredFields();//获致当前 Activity 所有成员变更
             for (Field field : fields) {
-
                 Object classObject = null;//最终注入的值
 
-                //获取识别注解
-                GT_Fragment.Build initView_GT_Fragment = field.getAnnotation(GT_Fragment.Build.class);//不带参数的
-
-                //GT_Fragment 注解不为null
-                if (initView_GT_Fragment != null) {
-                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = getGT().getActivity();
-                    if (activity != null) {
-                        GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
-                    }
-
-                    classObject = GT_Fragment.gt_fragment;
-                    //实例注入
-                    try {
-                        field.setAccessible(true);
-                        field.set(object, classObject);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-
-                }
-
-
                 //带参数的
-                GT_Fragment.Builds initView_GT_Fragments = field.getAnnotation(GT_Fragment.Builds.class);
+                GT_Fragment.Build initView_GT_Fragments = field.getAnnotation(GT_Fragment.Build.class);
 
                 //GT_Fragment 注解不为null
                 if (initView_GT_Fragments != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = getGT().getActivity();
+                    Activity activity = (Activity) getGT().getActivity();
                     if (activity != null) {
                         //获取注解的值
                         int layoutHome = initView_GT_Fragments.setLayoutHome();
                         int layoutMain = initView_GT_Fragments.setLayoutMain();
+                        Class<?> aClass = initView_GT_Fragments.setClass();
                         int startMode = initView_GT_Fragments.setStartMode();
 
-                        //如果主界面为 null
-                        if (layoutHome == 0) {
-                            layoutHome = layoutMain;
-                        }
-
-                        Class<?> aClass = initView_GT_Fragments.setClass();
-                        if (layoutHome != 0 && aClass != GT_Fragment.Builds.class) {
-                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, aClass, activity.getIntent().getExtras(), startMode);
-                        } else if (layoutHome != 0) {
-                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, activity.getIntent().getExtras());
-                        } else if (aClass != GT_Fragment.Builds.class) {
-                            GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, aClass, activity.getIntent().getExtras(), startMode);
-                        } else {
+                        //如果没有参数那就直接只构建
+                        if (layoutHome == 0 && layoutMain == 0 && aClass == Build.class && startMode == GT_Fragment.MODE_STANDARD) {
                             GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
+                        } else {
+
+                            //如果有参数 主界面为 null
+                            if (layoutHome == 0) {
+                                layoutHome = layoutMain;
+                            }
+
+                            if (layoutHome != 0 && aClass != GT_Fragment.Build.class) {
+                                GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, aClass, activity.getIntent().getExtras(), startMode);
+                            } else if (layoutHome != 0) {
+                                GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, layoutHome, activity.getIntent().getExtras());
+                            } else if (aClass != GT_Fragment.Build.class) {
+                                GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, aClass, activity.getIntent().getExtras(), startMode);
+                            } else {
+                                GT_Fragment.gt_fragment = GT.GT_Fragment.Build((FragmentActivity) activity, activity.getIntent().getExtras());
+                            }
+
+                            //设置
+                            GT_Fragment.gt_fragment.setMainFragmentId(layoutMain);
                         }
-
-                        //设置
-                        GT_Fragment.gt_fragment.setMainFragmentId(layoutMain);
-
                     }
 
                     classObject = GT_Fragment.gt_fragment;
@@ -18335,9 +18387,37 @@ public class GT {
 
                 }
 
-
             }
         }
+
+        /**
+         * 注入 悬浮窗
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initAnnotationWindow(Object object, Class<? extends Object> mClass) {
+            Annotations.GT_AnnotationFloatingWindow contentView = mClass.getAnnotation(Annotations.GT_AnnotationFloatingWindow.class);// 获取该类 ContextView 的注解类
+            // 如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();// 获取注解类参数
+                try {
+                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    method.setAccessible(true);// 获取该方法的访问权限
+                    method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
+                } catch (NoSuchMethodException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (IllegalAccessException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (InvocationTargetException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                }
+            }
+        }
+
 
         /**
          * 解析 Layout 资源文件成 View
@@ -18735,30 +18815,6 @@ public class GT {
         }
 
         /**
-         * 注入 ContextView
-         *
-         * @param activity
-         */
-        private static void initActivity(Activity activity, Class<? extends Activity> mClass) {
-            Annotations.GT_AnnotationActivity contentView = mClass.getAnnotation(Annotations.GT_AnnotationActivity.class);//获取该类 ContextView 的注解类
-            //如果有注解
-            if (contentView != null) {
-                int viewId = contentView.value();//获取注解类参数
-                try {
-                    Method method = mClass.getMethod("setContentView", int.class);//获取该方法的信息
-                    method.setAccessible(true);//获取该方法的访问权限
-                    method.invoke(activity, viewId);//调用该方法的，并设置该方法参数
-                } catch (NoSuchMethodException e) {
-                    e.printStackTrace();
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                } catch (InvocationTargetException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        /**
          * 注入控件
          *
          * @param activity
@@ -18820,6 +18876,7 @@ public class GT {
                 }
             }
         }
+
 
         /**
          * 初始化注解帮助类
@@ -19200,716 +19257,42 @@ public class GT {
 
     }
 
-
-//============================================ 随机类 ===============================================
-
-    /**
-     * 随机类
-     */
-    public static class GT_Random {
-        private Random random;
-
-        /**
-         * 实例化 随机类 类
-         */
-        public GT_Random() {
-            random = new Random();
-        }
-
-        /**
-         * 获取一个未知整数
-         *
-         * @return int
-         */
-        public int getInt() {
-            int min = -2147483648;
-            int max = 2147483647;
-            return random.nextInt(max) % (max - min + 1) + min;
-        }
-
-        /**
-         * 获取随机范围的数
-         *
-         * @param min
-         * @param max
-         * @return
-         */
-        public int getInt(int min, int max) {
-            return random.nextInt(max) % (max - min + 1) + min;
-        }
-
-    }
-
-//GT 包官网：https://github.com/1079374315/GT
-
-    // 定义 GT 包 简易使用教程
-    public interface CMD {
-
-        /*
-         * 关于 GT 包中的功能使用教程请参考官网详细教程
-         * 官网教程：https://blog.csdn.net/qq_39799899/article/details/98891256
-         */
-
-
-                    /*
-                     * 关于 AndroidUtilCode 工具包的使用教程如下：
-                     *
-                     * 教程网址：https://www.jianshu.com/p/72494773aace
-                     *
-                     * ActivityUtils.java -> Demo 使用参考值
-                     * isActivityExists               : 判断 Activity 是否存在
-                     * startActivity                  : 启动 Activity
-                     * startActivities                : 启动多个 Activity
-                     * startHomeActivity              : 回到桌面
-                     * getActivityList                : 获取 Activity 栈链表
-                     * getLauncherActivity            : 获取启动项 Activity
-                     * getTopActivity                 : 获取栈顶 Activity
-                     * isActivityExistsInStack        : 判断 Activity 是否存在栈中
-                     * finishActivity                 : 结束 Activity
-                     * finishToActivity               : 结束到指定 Activity
-                     * finishOtherActivities          : 结束所有其他类型的 Activity
-                     * finishAllActivities            : 结束所有 Activity
-                     * finishAllActivitiesExceptNewest: 结束除最新之外的所有 Activity
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *AppUtils.java -> Demo 使用参考值
-                     * isInstallApp         : 判断 App 是否安装
-                     * installApp           : 安装 App（支持 8.0）
-                     * installAppSilent     : 静默安装 App
-                     * uninstallApp         : 卸载 App
-                     * uninstallAppSilent   : 静默卸载 App
-                     * isAppRoot            : 判断 App 是否有 root 权限
-                     * launchApp            : 打开 App
-                     * exitApp              : 关闭应用
-                     * getAppPackageName    : 获取 App 包名
-                     * getAppDetailsSettings: 获取 App 具体设置
-                     * getAppName           : 获取 App 名称
-                     * getAppIcon           : 获取 App 图标
-                     * getAppPath           : 获取 App 路径
-                     * getAppVersionName    : 获取 App 版本号
-                     * getAppVersionCode    : 获取 App 版本码
-                     * isSystemApp          : 判断 App 是否是系统应用
-                     * isAppDebug           : 判断 App 是否是 Debug 版本
-                     * getAppSignature      : 获取 App 签名
-                     * getAppSignatureSHA1  : 获取应用签名的的 SHA1 值
-                     * isAppForeground      : 判断 App 是否处于前台
-                     * getForegroundApp     : 获取前台应用包名
-                     * getAppInfo           : 获取 App 信息
-                     * getAppsInfo          : 获取所有已安装 App 信息
-                     * cleanAppData         : 清除 App 所有数据
-                     *
-                     *
-                     *
-                     * BarUtils.java -> Demo 使用参考值
-                     * getStatusBarHeight                   : 获取状态栏高度（px）
-                     * setStatusBarVisibility               : 设置状态栏是否可见
-                     * isStatusBarVisible                   : 判断状态栏是否可见
-                     * addMarginTopEqualStatusBarHeight     : 为 view 增加 MarginTop 为状态栏高度
-                     * subtractMarginTopEqualStatusBarHeight: 为 view 减少 MarginTop 为状态栏高度
-                     * setStatusBarColor                    : 设置状态栏颜色
-                     * setStatusBarAlpha                    : 设置状态栏透明度
-                     * setStatusBarColor4Drawer             : 为 DrawerLayout 设置状态栏颜色
-                     * setStatusBarAlpha4Drawer             : 为 DrawerLayout 设置状态栏透明度
-                     * getActionBarHeight                   : 获取 ActionBar 高度
-                     * setNotificationBarVisibility         : 设置通知栏是否可见
-                     * getNavBarHeight                      : 获取导航栏高度
-                     * setNavBarVisibility                  : 设置导航栏是否可见
-                     * setNavBarImmersive                   : 设置导航栏沉浸式
-                     * isNavBarVisible                      : 判断导航栏是否可见
-                     *
-                     *
-                     *
-                     *
-                     *缓存相关 -> CacheUtils.java -> Test
-                        getInstance    : 获取缓存实例
-                        put            : 缓存中写入数据
-                        getBytes       : 缓存中读取字节数组
-                        getString      : 缓存中读取 String
-                        getJSONObject  : 缓存中读取 JSONObject
-                        getJSONArray   : 缓存中读取 JSONArray
-                        getBitmap      : 缓存中读取 Bitmap
-                        getDrawable    : 缓存中读取 Drawable
-                        getParcelable  : 缓存中读取 Parcelable
-                        getSerializable: 缓存中读取 Serializable
-                        getCacheSize   : 获取缓存大小
-                        getCacheCount  : 获取缓存个数
-                        remove         : 根据键值移除缓存
-                        clear          : 清除所有缓存
-                     *
-                     *
-                     *
-                     *
-                     *
-                     * 清除相关 -> CleanUtils.java -> Demo
-                        cleanInternalCache   : 清除内部缓存
-                        cleanInternalFiles   : 清除内部文件
-                        cleanInternalDbs     : 清除内部数据库
-                        cleanInternalDbByName: 根据名称清除数据库
-                        cleanInternalSP      : 清除内部 SP
-                        cleanExternalCache   : 清除外部缓存
-                        cleanCustomCache     : 清除自定义目录下的文件
-                        * 关闭相关 -> CloseUtils.java
-                        closeIO       : 关闭 IO
-                        closeIOQuietly: 安静关闭 IO
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *转换相关 -> ConvertUtils.java -> Test
-                        bytes2HexString, hexString2Bytes        : byteArr 与 hexString 互转
-                        chars2Bytes, bytes2Chars                : charArr 与 byteArr 互转
-                        memorySize2Byte, byte2MemorySize        : 以 unit 为单位的内存大小与字节数互转
-                        byte2FitMemorySize                      : 字节数转合适内存大小
-                        timeSpan2Millis, millis2TimeSpan        : 以 unit 为单位的时间长度与毫秒时间戳互转
-                        millis2FitTimeSpan                      : 毫秒时间戳转合适时间长度
-                        bytes2Bits, bits2Bytes                  : bytes 与 bits 互转
-                        input2OutputStream, output2InputStream  : inputStream 与 outputStream 互转
-                        inputStream2Bytes, bytes2InputStream    : inputStream 与 byteArr 互转
-                        outputStream2Bytes, bytes2OutputStream  : outputStream 与 byteArr 互转
-                        inputStream2String, string2InputStream  : inputStream 与 string 按编码互转
-                        outputStream2String, string2OutputStream: outputStream 与 string 按编码互转
-                        bitmap2Bytes, bytes2Bitmap              : bitmap 与 byteArr 互转
-                        drawable2Bitmap, bitmap2Drawable        : drawable 与 bitmap 互转
-                        drawable2Bytes, bytes2Drawable          : drawable 与 byteArr 互转
-                        view2Bitmap                             : view 转 Bitmap
-                        dp2px, px2dp                            : dp 与 px 互转
-                        sp2px, px2sp                            : sp 与 px 互转
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     * 设备相关 -> DeviceUtils.java -> Demo
-                        isDeviceRooted   : 判断设备是否 rooted
-                        getSDKVersion    : 获取设备系统版本号
-                        getAndroidID     : 获取设备 AndroidID
-                        getMacAddress    : 获取设备 MAC 地址
-                        getManufacturer  : 获取设备厂商
-                        getModel         : 获取设备型号
-                        shutdown         : 关机
-                        reboot           : 重启
-                        reboot2Recovery  : 重启到 recovery
-                        reboot2Bootloader: 重启到 bootloader
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *判空相关 -> EmptyUtils.java -> Test
-                        isEmpty   : 判断对象是否为空
-                        isNotEmpty: 判断对象是否非空
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *编码解码相关 -> EncodeUtils.java -> Test
-                        urlEncode          : URL 编码
-                        urlDecode          : URL 解码
-                        base64Encode       : Base64 编码
-                        base64Encode2String: Base64 编码
-                        base64Decode       : Base64 解码
-                        base64UrlSafeEncode: Base64URL 安全编码
-                        htmlEncode         : Html 编码
-                        htmlDecode         : Html 解码
-
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *加密解密相关 -> EncryptUtils.java -> Test
-                        encryptMD2, encryptMD2ToString                        : MD2 加密
-                        encryptMD5, encryptMD5ToString                        : MD5 加密
-                        encryptMD5File, encryptMD5File2String                 : MD5 加密文件
-                        encryptSHA1, encryptSHA1ToString                      : SHA1 加密
-                        encryptSHA224, encryptSHA224ToString                  : SHA224 加密
-                        encryptSHA256, encryptSHA256ToString                  : SHA256 加密
-                        encryptSHA384, encryptSHA384ToString                  : SHA384 加密
-                        encryptSHA512, encryptSHA512ToString                  : SHA512 加密
-                        encryptHmacMD5, encryptHmacMD5ToString                : HmacMD5 加密
-                        encryptHmacSHA1, encryptHmacSHA1ToString              : HmacSHA1 加密
-                        encryptHmacSHA224, encryptHmacSHA224ToString          : HmacSHA224 加密
-                        encryptHmacSHA256, encryptHmacSHA256ToString          : HmacSHA256 加密
-                        encryptHmacSHA384, encryptHmacSHA384ToString          : HmacSHA384 加密
-                        encryptHmacSHA512, encryptHmacSHA512ToString          : HmacSHA512 加密
-                        encryptDES, encryptDES2HexString, encryptDES2Base64   : DES 加密
-                        decryptDES, decryptHexStringDES, decryptBase64DES     : DES 解密
-                        encrypt3DES, encrypt3DES2HexString, encrypt3DES2Base64: 3DES 加密
-                        decrypt3DES, decryptHexString3DES, decryptBase64_3DES : 3DES 解密
-                        encryptAES, encryptAES2HexString, encryptAES2Base64   : AES 加密
-                        decryptAES, decryptHexStringAES, decryptBase64AES     : AES 解密
-
-
-
-                        文件相关 -> FileIOUtils.java -> Test
-                        writeFileFromIS            : 将输入流写入文件
-                        writeFileFromBytesByStream : 将字节数组写入文件
-                        writeFileFromBytesByChannel: 将字节数组写入文件
-                        writeFileFromBytesByMap    : 将字节数组写入文件
-                        writeFileFromString        : 将字符串写入文件
-                        readFile2List              : 读取文件到字符串链表中
-                        readFile2String            : 读取文件到字符串中
-                        readFile2BytesByStream     : 读取文件到字节数组中
-                        readFile2BytesByChannel    : 读取文件到字节数组中
-                        readFile2BytesByMap        : 读取文件到字节数组中
-                        setBufferSize              : 设置缓冲区尺寸
-
-
-
-                        文件相关 -> FileUtils.java -> Test
-                        getFileByPath             : 根据文件路径获取文件
-                        isFileExists              : 判断文件是否存在
-                        rename                    : 重命名文件
-                        isDir                     : 判断是否是目录
-                        isFile                    : 判断是否是文件
-                        createOrExistsDir         : 判断目录是否存在，不存在则判断是否创建成功
-                        createOrExistsFile        : 判断文件是否存在，不存在则判断是否创建成功
-                        createFileByDeleteOldFile : 判断文件是否存在，存在则在创建之前删除
-                        copyDir                   : 复制目录
-                        copyFile                  : 复制文件
-                        moveDir                   : 移动目录
-                        moveFile                  : 移动文件
-                        deleteDir                 : 删除目录
-                        deleteFile                : 删除文件
-                        deleteAllInDir            : 删除目录下所有东西
-                        deleteFilesInDir          : 删除目录下所有文件
-                        deleteFilesInDirWithFilter: 删除目录下所有过滤的文件
-                        listFilesInDir            : 获取目录下所有文件
-                        listFilesInDirWithFilter  : 获取目录下所有过滤的文件
-                        getFileLastModified       : 获取文件最后修改的毫秒时间戳
-                        getFileCharsetSimple      : 简单获取文件编码格式
-                        getFileLines              : 获取文件行数
-                        getDirSize                : 获取目录大小
-                        getFileSize               : 获取文件大小
-                        getDirLength              : 获取目录长度
-                        getFileLength             : 获取文件长度
-                        getFileMD5                : 获取文件的 MD5 校验码
-                        getFileMD5ToString        : 获取文件的 MD5 校验码
-                        getDirName                : 根据全路径获取最长目录
-                        getFileName               : 根据全路径获取文件名
-                        getFileNameNoExtension    : 根据全路径获取文件名不带拓展名
-                        getFileExtension          : 根据全路径获取文件拓展名
-
-
-
-                        Fragment 相关 -> FragmentUtils.java -> Demo
-                        add                   : 新增 fragment
-                        show                  : 显示 fragment
-                        hide                  : 隐藏 fragment
-                        showHide              : 先显示后隐藏 fragment
-                        replace               : 替换 fragment
-                        pop                   : 出栈 fragment
-                        popTo                 : 出栈到指定 fragment
-                        popAll                : 出栈所有 fragment
-                        remove                : 移除 fragment
-                        removeTo              : 移除到指定 fragment
-                        removeAll             : 移除所有 fragment
-                        getTop                : 获取顶部 fragment
-                        getTopInStack         : 获取栈中顶部 fragment
-                        getTopShow            : 获取顶部可见 fragment
-                        getTopShowInStack     : 获取栈中顶部可见 fragment
-                        getFragments          : 获取同级别的 fragment
-                        getFragmentsInStack   : 获取同级别栈中的 fragment
-                        getAllFragments       : 获取所有 fragment
-                        getAllFragmentsInStack: 获取栈中所有 fragment
-                        findFragment          : 查找 fragment
-                        dispatchBackPress     : 处理 fragment 回退键
-                        setBackgroundColor    : 设置背景色
-                        setBackgroundResource : 设置背景资源
-                        setBackground         : 设置背景
-
-
-
-                        图片相关 -> ImageUtils.java -> Demo
-                        bitmap2Bytes, bytes2Bitmap      : bitmap 与 byteArr 互转
-                        drawable2Bitmap, bitmap2Drawable: drawable 与 bitmap 互转
-                        drawable2Bytes, bytes2Drawable  : drawable 与 byteArr 互转
-                        view2Bitmap                     : view 转 bitmap
-                        getBitmap                       : 获取 bitmap
-                        scale                           : 缩放图片
-                        clip                            : 裁剪图片
-                        skew                            : 倾斜图片
-                        rotate                          : 旋转图片
-                        getRotateDegree                 : 获取图片旋转角度
-                        toRound                         : 转为圆形图片
-                        toRoundCorner                   : 转为圆角图片
-                        addCornerBorder                 : 添加圆角边框
-                        addCircleBorder                 : 添加圆形边框
-                        addReflection                   : 添加倒影
-                        addTextWatermark                : 添加文字水印
-                        addImageWatermark               : 添加图片水印
-                        toAlpha                         : 转为 alpha 位图
-                        toGray                          : 转为灰度图片
-                        fastBlur                        : 快速模糊
-                        renderScriptBlur                : renderScript 模糊图片
-                        stackBlur                       : stack 模糊图片
-                        save                            : 保存图片
-                        isImage                         : 根据文件名判断文件是否为图片
-                        getImageType                    : 获取图片类型
-                        compressByScale                 : 按缩放压缩
-                        compressByQuality               : 按质量压缩
-                        compressBySampleSize            : 按采样大小压缩
-
-
-
-                        意图相关 -> IntentUtils.java
-                        getInstallAppIntent        : 获取安装 App（支持 6.0）的意图
-                        getUninstallAppIntent      : 获取卸载 App 的意图
-                        getLaunchAppIntent         : 获取打开 App 的意图
-                        getAppDetailsSettingsIntent: 获取 App 具体设置的意图
-                        getShareTextIntent         : 获取分享文本的意图
-                        getShareImageIntent        : 获取分享图片的意图
-                        getComponentIntent         : 获取其他应用组件的意图
-                        getShutdownIntent          : 获取关机的意图
-                        getCaptureIntent           : 获取拍照的意图
-
-
-
-                        键盘相关 -> KeyboardUtils.java -> Demo
-                        showSoftInput                   : 动态显示软键盘
-                        hideSoftInput                   : 动态隐藏软键盘
-                        toggleSoftInput                 : 切换键盘显示与否状态
-                        isSoftInputVisible              : 判断软键盘是否可见
-                        registerSoftInputChangedListener: 注册软键盘改变监听器
-                        clickBlankArea2HideSoftInput    : 点击屏幕空白区域隐藏软键盘
-
-
-
-                        日志相关 -> LogUtils.java -> Demo
-                        getConfig               : 获取 log 配置
-                        Config.setLogSwitch     : 设置 log 总开关
-                        Config.setConsoleSwitch : 设置 log 控制台开关
-                        Config.setGlobalTag     : 设置 log 全局 tag
-                        Config.setLogHeadSwitch : 设置 log 头部信息开关
-                        Config.setLog2FileSwitch: 设置 log 文件开关
-                        Config.setDir           : 设置 log 文件存储目录
-                        Config.setFilePrefix    : 设置 log 文件前缀
-                        Config.setBorderSwitch  : 设置 log 边框开关
-                        Config.setConsoleFilter : 设置 log 控制台过滤器
-                        Config.setFileFilter    : 设置 log 文件过滤器
-                        Config.setStackDeep     : 设置 log 栈深度
-                        v                       : tag 为类名的 Verbose 日志
-                        vTag                    : 自定义 tag 的 Verbose 日志
-                        d                       : tag 为类名的 Debug 日志
-                        dTag                    : 自定义 tag 的 Debug 日志
-                        i                       : tag 为类名的 Info 日志
-                        iTag                    : 自定义 tag 的 Info 日志
-                        w                       : tag 为类名的 Warn 日志
-                        wTag                    : 自定义 tag 的 Warn 日志
-                        e                       : tag 为类名的 Error 日志
-                        eTag                    : 自定义 tag 的 Error 日志
-                        a                       : tag 为类名的 Assert 日志
-                        aTag                    : 自定义 tag 的 Assert 日志
-                        file                    : log 到文件
-                        json                    : log 字符串之 json
-                        xml                     : log 字符串之 xml
-
-
-
-                        网络相关 -> NetworkUtils.java -> Demo
-                        openWirelessSettings  : 打开网络设置界面
-                        isConnected           : 判断网络是否连接
-                        isAvailableByPing     : 判断网络是否可用
-                        getMobileDataEnabled  : 判断移动数据是否打开
-                        setMobileDataEnabled  : 打开或关闭移动数据
-                        isMobileData          : 判断网络是否是移动数据
-                        is4G                  : 判断网络是否是 4G
-                        getWifiEnabled        : 判断 wifi 是否打开
-                        setWifiEnabled        : 打开或关闭 wifi
-                        isWifiConnected       : 判断 wifi 是否连接状态
-                        isWifiAvailable       : 判断 wifi 数据是否可用
-                        getNetworkOperatorName: 获取移动网络运营商名称
-                        getNetworkType        : 获取当前网络类型
-                        getIPAddress          : 获取 IP 地址
-                        getDomainAddress      : 获取域名 ip 地址
-
-
-
-                        对象相关 -> ObjectUtils.java -> Test
-                        isEmpty   : 判断对象是否为空
-                        isNotEmpty: 判断对象是否非空
-                        equals    : 判断对象是否相等
-
-
-
-                        手机相关 -> PhoneUtils.java -> Demo
-                        isPhone            : 判断设备是否是手机
-                        getIMEI            : 获取 IMEI 码
-                        getIMSI            : 获取 IMSI 码
-                        getPhoneType       : 获取移动终端类型
-                        isSimCardReady     : 判断 sim 卡是否准备好
-                        getSimOperatorName : 获取 Sim 卡运营商名称
-                        getSimOperatorByMnc: 获取 Sim 卡运营商名称
-                        getPhoneStatus     : 获取手机状态信息
-                        dial               : 跳至拨号界面
-                        call               : 拨打 phoneNumber
-                        sendSms            : 跳至发送短信界面
-                        sendSmsSilent      : 发送短信
-                        getAllContactInfo  : 获取手机联系人
-                        getContactNum      : 打开手机联系人界面点击联系人后便获取该号码
-                        getAllSMS          : 获取手机短信并保存到 xml 中
-
-
-
-                        进程相关 -> ProcessUtils.java -> Demo
-                        getForegroundProcessName  : 获取前台线程包名
-                        killAllBackgroundProcesses: 杀死所有的后台服务进程
-                        killBackgroundProcesses   : 杀死后台服务进程
-
-
-
-                        正则相关 -> RegexUtils.java -> Test
-                        isMobileSimple : 验证手机号（简单）
-                        isMobileExact  : 验证手机号（精确）
-                        isTel          : 验证电话号码
-                        isIDCard15     : 验证身份证号码 15 位
-                        isIDCard18     : 验证身份证号码 18 位
-                        isEmail        : 验证邮箱
-                        isURL          : 验证 URL
-                        isZh           : 验证汉字
-                        isUsername     : 验证用户名
-                        isDate         : 验证 yyyy-MM-dd 格式的日期校验，已考虑平闰年
-                        isIP           : 验证 IP 地址
-                        isMatch        : 判断是否匹配正则
-                        getMatches     : 获取正则匹配的部分
-                        getSplits      : 获取正则匹配分组
-                        getReplaceFirst: 替换正则匹配的第一部分
-                        getReplaceAll  : 替换所有正则匹配的部分
-
-
-
-                        屏幕相关 -> ScreenUtils.java
-                        getScreenWidth     : 获取屏幕的宽度（单位：px）
-                        getScreenHeight    : 获取屏幕的高度（单位：px）
-                        getScreenDensity   : 获取屏幕密度
-                        getScreenDensityDpi: 获取屏幕密度 DPI
-                        setFullScreen      : 设置屏幕为全屏
-                        setLandscape       : 设置屏幕为横屏
-                        setPortrait        : 设置屏幕为竖屏
-                        isLandscape        : 判断是否横屏
-                        isPortrait         : 判断是否竖屏
-                        getScreenRotation  : 获取屏幕旋转角度
-                        screenShot         : 截屏
-                        isScreenLock       : 判断是否锁屏
-                        setSleepDuration   : 设置进入休眠时长
-                        getSleepDuration   : 获取进入休眠时长
-                        isTablet           : 判断是否是平板
-
-
-
-                        SD 卡相关 -> SDCardUtils.java -> Demo
-                        isSDCardEnable: 判断 SD 卡是否可用
-                        getSDCardPaths: 获取 SD 卡路径
-
-
-
-                        服务相关 -> ServiceUtils.java
-                        getAllRunningService: 获取所有运行的服务
-                        startService        : 启动服务
-                        stopService         : 停止服务
-                        bindService         : 绑定服务
-                        unbindService       : 解绑服务
-                        isServiceRunning    : 判断服务是否运行
-
-
-
-                        Shell 相关 -> ShellUtils.java
-                        execCmd: 是否是在 root 下执行命令
-
-
-
-                        尺寸相关 -> SizeUtils.java
-                        dp2px, px2dp     : dp 与 px 转换
-                        sp2px, px2sp     : sp 与 px 转换
-                        applyDimension   : 各种单位转换
-                        forceGetViewSize : 在 onCreate 中获取视图的尺寸
-                        measureView      : 测量视图尺寸
-                        getMeasuredWidth : 获取测量视图宽度
-                        getMeasuredHeight: 获取测量视图高度
-
-
-
-                        Snackbar 相关 -> SnackbarUtils.java -> Demo
-                        with           : 设置 snackbar 依赖 view
-                        setMessage     : 设置消息
-                        setMessageColor: 设置消息颜色
-                        setBgColor     : 设置背景色
-                        setBgResource  : 设置背景资源
-                        setDuration    : 设置显示时长
-                        setAction      : 设置行为
-                        setBottomMargin: 设置底边距
-                        show           : 显示 snackbar
-                        showSuccess    : 显示预设成功的 snackbar
-                        showWarning    : 显示预设警告的 snackbar
-                        showError      : 显示预设错误的 snackbar
-                        dismiss        : 消失 snackbar
-                        getView        : 获取 snackbar 视图
-                        addView        : 添加 snackbar 视图
-
-
-
-                        SpannableString 相关 -> SpanUtils.java -> Demo
-                        setFlag           : 设置标识
-                        setForegroundColor: 设置前景色
-                        setBackgroundColor: 设置背景色
-                        setLineHeight     : 设置行高
-                        setQuoteColor     : 设置引用线的颜色
-                        setLeadingMargin  : 设置缩进
-                        setBullet         : 设置列表标记
-                        setIconMargin     : 设置图标
-                        setFontSize       : 设置字体尺寸
-                        setFontProportion : 设置字体比例
-                        setFontXProportion: 设置字体横向比例
-                        setStrikethrough  : 设置删除线
-                        setUnderline      : 设置下划线
-                        setSuperscript    : 设置上标
-                        setSubscript      : 设置下标
-                        setBold           : 设置粗体
-                        setItalic         : 设置斜体
-                        setBoldItalic     : 设置粗斜体
-                        setFontFamily     : 设置字体系列
-                        setTypeface       : 设置字体
-                        setAlign          : 设置对齐
-                        setClickSpan      : 设置点击事件
-                        setUrl            : 设置超链接
-                        setBlur           : 设置模糊
-                        setShader         : 设置着色器
-                        setShadow         : 设置阴影
-                        setSpans          : 设置样式
-                        append            : 追加样式字符串
-                        appendLine        : 追加一行样式字符串
-                        appendImage       : 追加图片
-                        appendSpace       : 追加空白
-                        create            : 创建样式字符串
-
-
-
-                        SP 相关 -> SPUtils.java -> Test
-                        getInstance: 获取 SP 实例
-                        put        : SP 中写入数据
-                        getString  : SP 中读取 String
-                        getInt     : SP 中读取 int
-                        getLong    : SP 中读取 long
-                        getFloat   : SP 中读取 float
-                        getBoolean : SP 中读取 boolean
-                        getAll     : SP 中获取所有键值对
-                        contains   : SP 中是否存在该 key
-                        remove     : SP 中移除该 key
-                        clear      : SP 中清除所有数据
-
-
-
-                        字符串相关 -> StringUtils.java -> Test
-                        isEmpty         : 判断字符串是否为 null 或长度为 0
-                        isTrimEmpty     : 判断字符串是否为 null 或全为空格
-                        isSpace         : 判断字符串是否为 null 或全为空白字符
-                        equals          : 判断两字符串是否相等
-                        equalsIgnoreCase: 判断两字符串忽略大小写是否相等
-                        null2Length0    : null 转为长度为 0 的字符串
-                        length          : 返回字符串长度
-                        upperFirstLetter: 首字母大写
-                        lowerFirstLetter: 首字母小写
-                        reverse         : 反转字符串
-                        toDBC           : 转化为半角字符
-                        toSBC           : 转化为全角字符
-
-
-
-                        时间相关 -> TimeUtils.java -> Test
-                        millis2String           : 将时间戳转为时间字符串
-                        string2Millis           : 将时间字符串转为时间戳
-                        string2Date             : 将时间字符串转为 Date 类型
-                        date2String             : 将 Date 类型转为时间字符串
-                        date2Millis             : 将 Date 类型转为时间戳
-                        millis2Date             : 将时间戳转为 Date 类型
-                        getTimeSpan             : 获取两个时间差（单位：unit）
-                        getFitTimeSpan          : 获取合适型两个时间差
-                        getNowMills             : 获取当前毫秒时间戳
-                        getNowString            : 获取当前时间字符串
-                        getNowDate              : 获取当前 Date
-                        getTimeSpanByNow        : 获取与当前时间的差（单位：unit）
-                        getFitTimeSpanByNow     : 获取合适型与当前时间的差
-                        getFriendlyTimeSpanByNow: 获取友好型与当前时间的差
-                        getMillis               : 获取与给定时间等于时间差的时间戳
-                        getString               : 获取与给定时间等于时间差的时间字符串
-                        getDate                 : 获取与给定时间等于时间差的 Date
-                        getMillisByNow          : 获取与当前时间等于时间差的时间戳
-                        getStringByNow          : 获取与当前时间等于时间差的时间字符串
-                        getDateByNow            : 获取与当前时间等于时间差的 Date
-                        isToday                 : 判断是否今天
-                        isLeapYear              : 判断是否闰年
-                        getChineseWeek          : 获取中式星期
-                        getUSWeek               : 获取美式式星期
-                        getWeekIndex            : 获取星期索引
-                        getWeekOfMonth          : 获取月份中的第几周
-                        getWeekOfYear           : 获取年份中的第几周
-                        getChineseZodiac        : 获取生肖
-                        getZodiac               : 获取星座
-
-
-
-                        吐司相关 -> ToastUtils.java -> Demo
-                        setGravity     : 设置吐司位置
-                        setBgColor     : 设置背景颜色
-                        setBgResource  : 设置背景资源
-                        setMessageColor: 设置消息颜色
-                        showShort      : 显示短时吐司
-                        showLong       : 显示长时吐司
-                        showCustomShort: 显示短时自定义吐司
-                        showCustomLong : 显示长时自定义吐司
-                        cancel         : 取消吐司显示
-
-
-
-                        压缩相关 -> ZipUtils.java -> Test
-                        zipFile           : 压缩文件
-                        unzipFile         : 解压文件
-                        unzipFileByKeyword: 解压带有关键字的文件
-                        getFilesPath      : 获取压缩文件中的文件路径链表
-                        getComments       : 获取压缩文件中的注释链表
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     *
-                     */
-
-
-    }
-
-//=============================================== 黑魔法 ===================================================
+//=============================================== 黑科技 ===================================================
 
     /**
      * 黑魔法类
      */
     public static class DarknessMagic {
+        //空白...无障碍..
+
+    }
+
+    /**
+     * 第三方平台类
+     */
+    public static class TripartitePlatform {
+
+    }
+
+    // 定义 GT 包 简易使用教程
+    public interface CMD {
+
+        /**
+         * 关于 GT 包中的功能使用教程请参考官网详细教程
+         * 官网教程：https://blog.csdn.net/qq_39799899/article/details/98891256
+         *
+         * 竖屏
+         *     android:launchMode="singleTask"
+         *     android:screenOrientation="portrait"
+         *
+         * 切换横竖不进行生命周期的调换
+         * android:configChanges="orientation|keyboardHidden|screenSize"
+         *
+         */
 
 
     }
+
 
 }
 
