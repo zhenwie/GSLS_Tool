@@ -121,7 +121,6 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.gsls.gt.R;
 import com.lzy.okgo.callback.StringCallback;
 
 import org.json.JSONArray;
