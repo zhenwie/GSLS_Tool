@@ -1,4 +1,4 @@
-package com.gsls.gtlibrary.util;
+package com.gsls.gt;
 
 import android.Manifest;
 import android.animation.AnimatorSet;
@@ -121,6 +121,7 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.gsls.gt.R;
 import com.lzy.okgo.callback.StringCallback;
 
 import org.json.JSONArray;
