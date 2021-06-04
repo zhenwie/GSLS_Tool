@@ -222,7 +222,7 @@ import static android.content.Context.POWER_SERVICE;
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/category_9956339.html
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.0.2 版本）
+ * 更新内容：（1.3.0.3 版本）
  * 1.重大更新内容：
  * (1).Hibernate 类的更新
  * 1).Hibernate 数据库支持映射 “数组参数”、“多重继承关系”
