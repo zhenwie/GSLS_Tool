@@ -1,12 +1,7 @@
 package com.gsls.gtlibrary.activity;
 
 import android.annotation.SuppressLint;
-import android.content.Intent;
-import android.os.Build;
 import android.os.Bundle;
-
-import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 
 import com.gsls.gtlibrary.R;
 import com.gsls.gtlibrary.util.GT;
@@ -18,13 +13,10 @@ public class MainActivity extends GT.GT_Activity.AnnotationActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
+        GT.DarknessMagic.GT_FloatingWindow.GT_Floating.setType_screenType(-1);
+        startFloatingWindow(GT.DarknessMagic.GT_FloatingWindow.GT_Floating.class);
 
     }
 
 
-    @SuppressLint({"MissingSuperCall", "NewApi"})
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-
-    }
 }

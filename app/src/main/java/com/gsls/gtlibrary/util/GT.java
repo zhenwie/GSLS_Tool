@@ -100,9 +100,15 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RemoteViews;
+import android.widget.ScrollView;
+import android.widget.SearchView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -123,6 +129,8 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.blankj.utilcode.util.AppUtils;
+import com.blankj.utilcode.util.DeviceUtils;
 import com.gsls.gtlibrary.R;
 import com.lzy.okgo.callback.StringCallback;
 
@@ -220,31 +228,58 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.6.5
- * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/category_9956339.html
+ * 更新时间:2021.7.13
+ * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.0.3 版本）
- * 1.重大更新内容：
+ * 更新内容：（1.3.0.5 版本）
+ * 超级重磅更新！！！
+ * 1.内容如下：
  * (1).Hibernate 类的更新
  * 1).Hibernate 数据库支持映射 “数组参数”、“多重继承关系”
- * 2).新增初始化 Hibernate的方式，可在Application中进行初始化操作：GT.Hibernate.initialize(); 与 GT.Hibernate.getHibernate(); 获取
+ * 2).新增初始化 Hibernate 的方式，可在Application中进行初始化操作：new GT.Hibernate().initialize(); 与 new GT.Hibernate().getHibernate(); （注意，这两个方法均是有创建的效果）
  * 3).新增聚合函数：count(求次数)、sum(求总和)、max(求最大值)、min(求最小值)、average(求平均数)，后续待添加新的...
  * 4).修改了增删查改的方式，优化增删查改的效率，增加了 saveAll() 保存数据方法，当前测试效率：存储10万条数据，09:07:53.199——09:07:59.646 耗时6秒多，具体详情还请参考方法说明
- * 5).
- * 6).
- * 7).
- * (2).新增悬浮窗封装类 GT_FloatingWindow 用于与 GT_Fragment 类似，具体使用教程请参考官网
- * (3).新增 GT.GT_Adapters.BaseAdapter 基类
+ * 5).正式支持事务操作具体教程请参考官网:saveAll();保存全部方法默认使用事务
+ * 6).支持 分库映射 若您创建了两个或两个以上的数据库，那么可以在实体类的标识上指定映射的数据库名称，
+ * 实例：不指定的话，默认给所有的数据库映射表，指定单个数据库：@GT.Hibernate.GT_Entity(setSqlName = "MySQL") OR 指定多个数据库：@GT.Hibernate.GT_Entity(setSqlName = {"MySQL","DemoSQL"})
+ * 7).将表字段属性设置更名为 “GT_Property”,
+ * GT_Property目前支持以下功能：
+ * 1).修改字段名：setOldTableValue    释：修改字段名后，数据依旧在
+ * 2).设置不为空: setNotNull          释：如果操作数据为null就会操作失败
+ * 3).设置限定值：setCheckValues      释：sex = 男 or 女 or 其他
+ * 4).设置字段长度：setLength         释：userName varchar(100)
+ * 5).设置最大值：setMax              释：设置数字的最大值
+ * 6).设置最小值：setMin              释：设置数字的最小值
+ * 7).设置不被持久化：setNotInit       释：将不被持久化的字段当做普通的 Java字段
+ * 8).设置默认值：setDefaultValue     释：设置默认值，用法有两种，如果是多个默认值，数据库会随机选择一个默认值
+ * 第一种：setDefaultValue = "默认值",
+ * 第二种：setDefaultValue = {"默认值1"，"默认值2"，"默认值3"....}
+ * GT_Key,主键标识目前只支持：设置自增长、设置字段长度、设置限定值、设置最大值、设置最小值
+ * 8).优化了 数据库 创建时的性能，增加创建方式：可在线程中创建数据库
+ * 9).支持动态创建表的操作：createTable(DemoBean.class);
+ * 10).
+ * 11).
+ * 2.新增悬浮窗封装类 GT_FloatingWindow 用法与 GT_Fragment 类似，具体使用教程请参考官网,(新增 GT_Floating 工具类，还在优化中)
+ *
  * <p>
- * 2.新版本的优化
+ * <p>
+ * 3.新增 GT.GT_Adapters.BaseAdapter 基类
+ * 4.新增 DataSendReception 数据传输类，用于传输数据目前可支持：跨类、跨进程、跨APP传输数据
+ * 5.新版本的优化
+ * <p>
  * (1).去掉所有基类自带的 log() toast() err() 类似等方法(不方便维护，故此版本去掉)
- * (2).修复 GT_Fragment 使用发送UI广播时无法接收的问题，优化了使用 Dialog方式启动Fragment时出现的切换问题。
+ * (2).去掉 GT_Fragment 与 DialogFragment类中内置的广播，改用 DataSendReception 方式进行传输数据，具体可参考官网教程
  * 注意：在使用 Dialog 方式切换时，会默认将Fragment加入回退栈
  * (3).修复 Fragment 与 DialogFragment 当焦点在EditText 时无法监听到返回事件
- * (4).将 DialogFragment 与 GT_AlertDialog 移植到 GT_Dialog类进行统一管理
- *
- *
+ * (4).将 DialogFragment 与 GT_AlertDialog 移植到 GT_Dialog类进行统一管理,新增了弹出DialogFragment隐藏虚拟按钮的方法
+ * <p>
+ * bug优化
+ * 1.Hibernate 在映射表时，父表与子表有相同的属性时，出现的映射问题（当前版本默认使用子表的属性映射）
+ * 2.Hibernate 在查询的时候，出现List<String> 赋值为null的情况下，查询出来会报异常日志（已优化）
+ * 3.Hibernate 在多数据库创建时出现的问题
+ * 4.优化了 Hibernate 的 保存所有 与 查询所有 的效率
+ * 5.优化 GT_Fragment 有几率点击穿透的问题
  *
  *
  *
@@ -265,6 +300,7 @@ public class GT {
     private static Toast toast;                  //吐司缓冲
     private Context activity;                     //设置 当前动态的 上下文对象
     //================================== 提供访问 GT 属性的接口======================================
+
 
     private GT() {
     }//设置不可实例化
@@ -20154,10 +20190,9 @@ public class GT {
          * 1.隐藏到后台许久后无法再次召唤出来
          * 2.点击一些系统应用时会被杀死
          */
-        /*public static class GT_FloatingWindow {
+        public static class GT_FloatingWindow {
 
             public static boolean isOpenLog = false;//有日志时判断是否发送广播
-
 
             @GT.Annotations.GT_AnnotationFloatingWindow(R.layout.floating_main)
             public static class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindowBase implements View.OnClickListener {
@@ -20399,9 +20434,9 @@ public class GT {
                     }
                 }
 
-                *//**
-         * 设置开关机界面的窗体拖动事件
-         *//*
+                /**
+                 * 设置开关机界面的窗体拖动事件
+                 */
                 public class FloatingOnTouchListener_Close implements View.OnTouchListener {
                     private int x;
                     private int y;
@@ -20431,9 +20466,9 @@ public class GT {
                     }
                 }
 
-                *//**
-         * 工具类
-         *//*
+                /**
+                 * 工具类
+                 */
                 class Utils {
 
                     //记录旧的宽高
@@ -20464,11 +20499,11 @@ public class GT {
                     public Utils() {
                     }
 
-                    *//**
-         * 提示吐司
-         *
-         * @param msg
-         *//*
+                    /**
+                     * 提示吐司
+                     *
+                     * @param msg
+                     */
                     public void toast(Object msg) {
                         GT.Thread.runAndroid(new Runnable() {
                             @Override
@@ -20478,9 +20513,9 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 切换屏幕大小
-         *//*
+                    /**
+                     * 切换屏幕大小
+                     */
                     private void changeSize() {
                         if (cb_expansion.isChecked()) {
                             //记录原始大小
@@ -20497,12 +20532,12 @@ public class GT {
                         updateView();//更新界面
                     }
 
-                    *//**
-         * 开关机
-         *
-         * @param startOrClose 是否开关机
-         * @param time         设置关机等待时间
-         *//*
+                    /**
+                     * 开关机
+                     *
+                     * @param startOrClose 是否开关机
+                     * @param time         设置关机等待时间
+                     */
                     private void shutdown(boolean startOrClose, int time) {
                         GT.Thread.runJava(new Runnable() {
                             @Override
@@ -20536,9 +20571,9 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 发送通知栏
-         *//*
+                    /**
+                     * 发送通知栏
+                     */
                     private NotificationManagerCompat notificationManagerCompat;
 
                     public void sendCustomViewNotification() {
@@ -20614,11 +20649,11 @@ public class GT {
                     };
 
 
-                    *//**
-         * 设置状态栏下滑展开
-         *
-         * @param cl_view
-         *//*
+                    /**
+                     * 设置状态栏下滑展开
+                     *
+                     * @param cl_view
+                     */
                     @RequiresApi(api = Build.VERSION_CODES.N)
                     @SuppressLint("ClickableViewAccessibility")
                     public void setTitleListener(View cl_view) {
@@ -20734,11 +20769,11 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 设置点击无法穿透
-         *
-         * @param view
-         *//*
+                    /**
+                     * 设置点击无法穿透
+                     *
+                     * @param view
+                     */
                     public View setNotClickPenetrate(View view) {
                         view.setOnTouchListener(new View.OnTouchListener() {
 
@@ -20750,9 +20785,9 @@ public class GT {
                         return view;
                     }
 
-                    *//**
-         * 隐藏状态栏背景
-         *//*
+                    /**
+                     * 隐藏状态栏背景
+                     */
                     public void setStatusBarBgHide(boolean tf) {
 
                         view_bg_floating_title.setVisibility(View.VISIBLE);
@@ -20803,11 +20838,11 @@ public class GT {
 
                     }
 
-                    *//**
-         * 设置状态栏内部的收缩事件
-         *
-         * @param view
-         *//*
+                    /**
+                     * 设置状态栏内部的收缩事件
+                     *
+                     * @param view
+                     */
                     @SuppressLint("ClickableViewAccessibility")
                     public void setStatusBarShrinkListener(View view, boolean isClick) {
                         //设置状态栏上滑事件
@@ -20849,11 +20884,11 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 设置状态栏中的 透明度拖动条
-         *
-         * @param seekBar
-         *//*
+                    /**
+                     * 设置状态栏中的 透明度拖动条
+                     *
+                     * @param seekBar
+                     */
                     public void setStatusBarDiaphaneityDrag(SeekBar seekBar) {
                         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                             @Override
@@ -20876,11 +20911,11 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 设置状态栏中宽度拖动条事件
-         *
-         * @param seekBar
-         *//*
+                    /**
+                     * 设置状态栏中宽度拖动条事件
+                     *
+                     * @param seekBar
+                     */
                     public void setStatusBarWidthDrag(SeekBar seekBar) {
                         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                             @Override
@@ -20902,11 +20937,11 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 设置状态栏中高度拖动条事件
-         *
-         * @param seekBar
-         *//*
+                    /**
+                     * 设置状态栏中高度拖动条事件
+                     *
+                     * @param seekBar
+                     */
                     public void setStatusBarHeightDrag(SeekBar seekBar) {
                         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                             @Override
@@ -20929,11 +20964,11 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 设置全图
-         *
-         * @param isFullScreen
-         *//*
+                    /**
+                     * 设置全图
+                     *
+                     * @param isFullScreen
+                     */
                     public void setIsFullScreen(boolean isFullScreen) {
                         if (isFullScreen) {
                             cl_title.setVisibility(View.GONE);
@@ -20946,9 +20981,9 @@ public class GT {
                         }
                     }
 
-                    *//**
-         * 设置双击全屏
-         *//*
+                    /**
+                     * 设置双击全屏
+                     */
                     @SuppressLint("ClickableViewAccessibility")
                     public View setDoubleClickFullScreen(View flowLayout) {
                         flowLayout.setOnTouchListener((v, event) -> {
@@ -20974,9 +21009,9 @@ public class GT {
                         return flowLayout;
                     }
 
-                    *//**
-         * 加载APP
-         *//*
+                    /**
+                     * 加载APP
+                     */
                     public void loadApp() {
 
                         cl_close.setVisibility(View.VISIBLE);//显示开关机组件
@@ -21045,9 +21080,9 @@ public class GT {
                     private Timer timer = new Timer();
                     private final long DELAY = 1000; // in ms
 
-                    *//**
-         * 设置搜索事件
-         *//*
+                    /**
+                     * 设置搜索事件
+                     */
                     public void setSearchEvent(SearchView sv_find) {
 
                         //搜索框展开时后面叉叉按钮的点击事件
@@ -21104,11 +21139,11 @@ public class GT {
 
                     }
 
-                    *//**
-         * 搜索方法
-         *
-         * @param keyValue
-         *//*
+                    /**
+                     * 搜索方法
+                     *
+                     * @param keyValue
+                     */
                     public void search(String keyValue) {
                         GT.Thread.runAndroid(new Runnable() {
                             @Override
@@ -21249,18 +21284,18 @@ public class GT {
                         });
                     }
 
-                    *//**
-         * 退出栈顶界面
-         *//*
+                    /**
+                     * 退出栈顶界面
+                     */
                     public void backStackTopFrame() {
                         if (fl_main.getChildCount() != 0) {
                             fl_main.removeViewAt(fl_main.getChildCount() - 1);//退出栈顶的页面
                         }
                     }
 
-                    *//**
-         * 退出指定的 Frame
-         *//*
+                    /**
+                     * 退出指定的 Frame
+                     */
                     public void backAssignFrame(int backFrameID) {
                         int childCount = fl_main.getChildCount();
                         if (backFrameID == -1) {
@@ -21279,9 +21314,9 @@ public class GT {
                         }
                     }
 
-                    *//**
-         * 退出栈顶界面
-         *//*
+                    /**
+                     * 退出栈顶界面
+                     */
                     public void backAllFrame() {
                         int childCount = fl_main.getChildCount();
                         for (int i = 0; i < childCount; i++) {
@@ -21291,11 +21326,11 @@ public class GT {
                         }
                     }
 
-                    *//**
-         * 获取最顶端的Frame
-         *
-         * @return
-         *//*
+                    /**
+                     * 获取最顶端的Frame
+                     *
+                     * @return
+                     */
                     public View getTopFrame() {
                         int childCount = fl_main.getChildCount();
                         if (childCount != 0) {
@@ -21309,9 +21344,9 @@ public class GT {
 
                 public class UtilsGTApp implements SQLAdapter.ClickSqlTable {
 
-                    *//**
-         * 定义一个接收到消息后刷新UI的内部类广播
-         *//*
+                    /**
+                     * 定义一个接收到消息后刷新UI的内部类广播
+                     */
                     private class UiReceiver extends BroadcastReceiver {
                         @Override
                         public void onReceive(Context context, Intent intent) {
@@ -21501,12 +21536,12 @@ public class GT {
                     private TableDataAdapter tableDataAdapter;
                     private List<String> tableVaues;
 
-                    *//**
-         * 初始化 表名称
-         * tableName
-         *
-         * @return
-         *//*
+                    /**
+                     * 初始化 表名称
+                     * tableName
+                     *
+                     * @return
+                     */
                     @SuppressLint("ResourceType")
                     public View initTable(String tableName) {
                         //初始化UI
@@ -21660,7 +21695,6 @@ public class GT {
 
             }
 
-
             public static class LogBean {
 
                 private String value;
@@ -21755,9 +21789,9 @@ public class GT {
 //        GT.log("strings:" + strings);
                     LinearLayout ll_allData = (LinearLayout) holder.itemView;
 
-     *//*   GT.ViewUtils.MarqueeTextView item_sql = (GT.ViewUtils.MarqueeTextView) LayoutInflater.from(getContext()).inflate(R.layout.item_sql_table_tv, null);
+     /*   GT.ViewUtils.MarqueeTextView item_sql = (GT.ViewUtils.MarqueeTextView) LayoutInflater.from(getContext()).inflate(R.layout.item_sql_table_tv, null);
         item_sql.setText(strings);
-        ll_allData.addView(item_sql);*//*
+        ll_allData.addView(item_sql);*/
 
                     String[] split = strings.split("-GT-");
                     GT.log("第 " + position + " 条");
@@ -21770,13 +21804,13 @@ public class GT {
                 }
 
 
-                *//**
-         * 适配字符
-         *
-         * @param maxLength
-         * @param data
-         * @return
-         *//*
+                /**
+                 * 适配字符
+                 *
+                 * @param maxLength
+                 * @param data
+                 * @return
+                 */
                 private String adaptationCharacter(int maxLength, String data) {
                     if (data == null) return data;
 //        GT.log("最大字符：" + maxLength + "当前字符：" + data.getBytes().length);
@@ -21805,7 +21839,7 @@ public class GT {
             }
 
 
-        }*/
+        }
 
 
     }

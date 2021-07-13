@@ -1,0 +1,83 @@
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_black_shell"
+    android:padding="8dp">
+
+    <!-- 背景大小 -->
+    <View
+        android:id="@+id/view_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_black"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- App图标显示 -->
+    <ScrollView
+        android:id="@+id/sv"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:padding="10dp"
+        app:layout_constraintBottom_toTopOf="@+id/ll_bottom"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/cl_title">
+
+        <view
+            android:id="@+id/flowLayout"
+            class="com.gsls.gtlibrary.util.GT$ViewUtils$FlowLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp" />
+    </ScrollView>
+
+    <!-- 页面容器 -->
+    <FrameLayout
+        android:id="@+id/fl_main"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="@+id/sv"
+        app:layout_constraintEnd_toEndOf="@+id/sv"
+        app:layout_constraintStart_toStartOf="@+id/sv"
+        app:layout_constraintTop_toTopOf="@+id/sv" />
+
+    <!-- 状态栏 -->
+    <include layout="@layout/floating_item_top_status_bar" />
+
+    <!-- 下面返回键 -->
+    <include layout="@layout/floating_item_below_btn" />
+
+    <!-- 全屏状态时才会显示出来 -->
+    <ImageView
+        android:id="@+id/iv_fillTop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:padding="10dp"
+        android:src="@drawable/img_fill_16"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/sv"
+        app:layout_constraintStart_toStartOf="@+id/sv" />
+
+    <!-- 展开的状态栏的背景 -->
+    <View
+        android:id="@+id/view_bg_floating_title"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0.01"
+        android:background="@drawable/bg_black_shell"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- 展开的状态栏 -->
+    <include layout="@layout/floating_item_status_bar" />
+
+    <!-- 关机或开机动画 -->
+    <include layout="@layout/floating_item_shutdown" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
