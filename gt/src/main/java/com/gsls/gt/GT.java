@@ -103,10 +103,10 @@ import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.ActionBar;
@@ -123,6 +123,7 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.friendlyarm.AndroidSDK.HardwareInit;
 import com.lzy.okgo.callback.StringCallback;
 
 import org.json.JSONArray;
@@ -144,6 +145,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.io.PrintStream;
 import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
@@ -163,11 +165,15 @@ import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Time;
+import java.sql.Timestamp;
 import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -201,6 +207,8 @@ import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.DESKeySpec;
 
+import android_serialport_api.SerialPort;
+import android_serialport_api.SerialPortFinder;
 import dalvik.system.DexClassLoader;
 import dalvik.system.DexFile;
 import dalvik.system.PathClassLoader;
@@ -219,14 +227,14 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.7.13
+ * 更新时间:2021.7.28
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.0.5 版本）
+ * 更新内容：（1.3.0.6 版本）
  * 超级重磅更新！！！
- * 1.内容如下：
- * (1).Hibernate 类的更新
+ * 内容如下：
+ * 1.Hibernate 类的更新
  * 1).Hibernate 数据库支持映射 “数组参数”、“多重继承关系”
  * 2).新增初始化 Hibernate 的方式，可在Application中进行初始化操作：new GT.Hibernate().initialize(); 与 new GT.Hibernate().getHibernate(); （注意，这两个方法均是有创建的效果）
  * 3).新增聚合函数：count(求次数)、sum(求总和)、max(求最大值)、min(求最小值)、average(求平均数)，后续待添加新的...
@@ -251,12 +259,16 @@ import static android.content.Context.POWER_SERVICE;
  * 9).支持动态创建表的操作：createTable(DemoBean.class);
  * 10).
  * 11).
- * 2.新增悬浮窗封装类 GT_FloatingWindow 用法与 GT_Fragment 类似，具体使用教程请参考官网,
+ * 2.新增悬浮窗封装类 GT_FloatingWindow 用法与 GT_Fragment 类似，具体使用教程请参考官网,(新增 GT_Floating 工具类，还在优化中)
+ * 3.增加可嵌套的滑动组件 ScrollView
+ * 4.新增 串口类 SerialPortUtils
+ * 5.新增 GT_Socket TCP 类
  * <p>
  * <p>
  * 3.新增 GT.GT_Adapters.BaseAdapter 基类
  * 4.新增 DataSendReception 数据传输类，用于传输数据目前可支持：跨类、跨进程、跨APP传输数据
- * 5.新版本的优化
+ * 5.新增 适配器 AnnotationAdapter 注解基类
+ * n.新版本的优化
  * <p>
  * (1).去掉所有基类自带的 log() toast() err() 类似等方法(不方便维护，故此版本去掉)
  * (2).去掉 GT_Fragment 与 DialogFragment类中内置的广播，改用 DataSendReception 方式进行传输数据，具体可参考官网教程
@@ -270,6 +282,7 @@ import static android.content.Context.POWER_SERVICE;
  * 3.Hibernate 在多数据库创建时出现的问题
  * 4.优化了 Hibernate 的 保存所有 与 查询所有 的效率
  * 5.优化 GT_Fragment 有几率点击穿透的问题
+ * 6.优化了所有注解的核心方法
  *
  *
  *
@@ -288,7 +301,7 @@ public class GT {
     //================================== 所有属于 GT 类的属性 =======================================
     private static GT gtAndroid = null;          //定义 GT 对象
     private static Toast toast;                  //吐司缓冲
-    private Context activity;                     //设置 当前动态的 上下文对象
+    public Context activity;                     //设置 当前动态的 上下文对象
     //================================== 提供访问 GT 属性的接口======================================
 
     private GT() {
@@ -328,44 +341,20 @@ public class GT {
      * @param activity
      * @Activity 为外部提供访问 GT Context 接口
      */
-    public void build(Context activity) {
-        this.activity = activity;
-        initGTUtilActivity();//初始化 GT 必要的工具
-    }
-
-    /**
-     * 绑定 Fragment
-     *
-     * @param object
-     * @param view
-     * @Fragment 为外部提供访问 GT Context 接口
-     */
-    public void build(Object object, View view) {
-        initGTUtilFragment(object, view);//初始化 GT 必要的工具
-    }
-
-    /**
-     * @param object
-     * @param view
-     * @初始化必要工具 为外部提供访问 GT Context 接口
-     */
-    public void build(Context context, Object object, View view) {
-        this.activity = context;
-        initGTUtilFragment(object, view);//初始化 GT 必要的工具
-    }
-
-    //============================================= 加载 GT 必要的工具 =============================
-
-    //初始化 GT 必要的工具 主要用于  Activity 的页面
-    private void initGTUtilActivity() {
-        //GT 包内部默认加载的工具包
-        AnnotationAssist.initAll((Activity) activity); //初始化 IOC 注解
-    }
-
-    //初始化 GT 必要的工具  主要用于 非 Activity 的页面 如：Fragment、DialogFragment 等页面
-    private void initGTUtilFragment(Object object, View view) {
-        //GT 包内部默认加载的工具包
-        AnnotationAssist.initAll(object, view); //初始化 IOC 注解
+    public void build(Object obj) {
+        if (obj instanceof Activity) {
+            activity = (Context) obj;
+        } else if (obj instanceof Fragment) {
+            Fragment fragment = (Fragment) obj;
+            activity = fragment.getContext();
+        } else {
+            View view = (View) obj;
+            activity = view.getContext();
+        }
+        if (activity == null) {
+            activity = getActivity();
+        }
+        AnnotationAssist.initAll(obj); //初始化 IOC 注解
     }
 
     /**
@@ -894,7 +883,7 @@ public class GT {
             return sInstance;
         }
 
-        public void init(@NonNull Context context) {
+        public void init(Context context) {
             mDefaultMyCrashHandler = java.lang.Thread.getDefaultUncaughtExceptionHandler();
             java.lang.Thread.setDefaultUncaughtExceptionHandler(this);
             mContext = context.getApplicationContext();
@@ -1404,6 +1393,11 @@ public class GT {
 
         }
 
+        /**
+         * 关闭广播
+         *
+         * @param broadcastName 要关闭广播的名字
+         */
         public static void close(Object broadcastName) {
             Context context = getGT().getActivity();
             if (context != null && broadcastName != null) {
@@ -1550,6 +1544,16 @@ public class GT {
      * 数据持久化 SharedPreferences
      */
     public static class GT_SharedPreferences implements SaveObject.SaveBean {
+
+        //构建 GT_SharedPreferences
+        @Target(ElementType.FIELD)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface Build {
+            String setSpName() default "GT";       //默认SP名称
+
+            boolean setISCommit() default true;     //默认自动提交
+        }
+
 
         private Context context;
 
@@ -4366,249 +4370,250 @@ public class GT {
                         String valueName = field.getName();
                         Class<?> type = field.getType();
                         field.setAccessible(true);
-                        for (String str : returnValues) {
-                            Object obj = null;
-                            if (str.equals(valueName)) {
-                                if (String.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (int.class == type || Integer.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (boolean.class == type || Boolean.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                    if (value == 1) {
-                                        obj = true;
-                                    } else if (value == 0) {
-                                        obj = false;
-                                    }
-                                } else if (double.class == type || Double.class == type) {
-                                    double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (float.class == type || Float.class == type) {
-                                    float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (Time.class == type) {
-                                    String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (time == null || time.length() == 0) {
-                                        obj = null;
-                                        continue;
-                                    }
-                                    SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                    Date d2 = null;
-                                    try {
-                                        d2 = format2.parse(time);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                    Time startTimeFmt = new Time(d2.getTime());
-                                    obj = startTimeFmt;
-                                } else if (Date.class == type || java.sql.Date.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null || value.length() == 0) {
-                                        obj = null;
-                                        continue;
-                                    }
-                                    try {
-                                        Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                        obj = date;
-                                    } catch (ParseException e) {
-                                        e.printStackTrace();
-                                    }
-                                } else if (long.class == type || Long.class == type) {
-                                    long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (short.class == type || Short.class == type) {
-                                    short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (byte[].class.equals(type)) {
-                                    byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                }
-
-
-                                //数组类型
-                                else if (String[].class == type) {
-                                    //String[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new String[]{};
-                                    } else if (value.length() >= 5) {
-                                        obj = value.substring(2, value.length() - 2).split("\",\"");
-                                    }
-                                } else if (int[].class == type) {
-                                    //int[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    int[] intArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new int[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            intArr = new int[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                intArr[p] = Integer.parseInt(split[p]);
-                                            }
-                                        } else {
-                                            intArr = new int[]{Integer.parseInt(value)};
+                        if (returnValues != null) {
+                            for (String str : returnValues) {
+                                Object obj = null;
+                                if (str.equals(valueName)) {
+                                    if (String.class == type) {
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (int.class == type || Integer.class == type) {
+                                        int value = cursor.getInt(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (boolean.class == type || Boolean.class == type) {
+                                        int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
+                                        if (value == 1) {
+                                            obj = true;
+                                        } else if (value == 0) {
+                                            obj = false;
                                         }
-                                    }
-                                    obj = intArr;
-                                } else if (boolean[].class == type) {
-                                    //boolean[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    boolean[] booleanArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new boolean[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            booleanArr = new boolean[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                booleanArr[p] = Boolean.parseBoolean(split[p]);
-                                            }
-                                        } else {
-                                            booleanArr = new boolean[]{Boolean.parseBoolean(value)};
+                                    } else if (double.class == type || Double.class == type) {
+                                        double value = cursor.getDouble(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (float.class == type || Float.class == type) {
+                                        float value = cursor.getFloat(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (Time.class == type) {
+                                        String time = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (time == null || time.length() == 0) {
+                                            obj = null;
+                                            continue;
                                         }
-                                    }
-                                    obj = booleanArr;
-                                } else if (double[].class == type) {
-                                    //double[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    double[] doubleArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new double[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            doubleArr = new double[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                doubleArr[p] = Double.parseDouble(split[p]);
-                                            }
-                                        } else {
-                                            doubleArr = new double[]{Double.parseDouble(value)};
+                                        SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
+                                        Date d2 = null;
+                                        try {
+                                            d2 = format2.parse(time);
+                                        } catch (Exception e) {
+                                            e.printStackTrace();
                                         }
-                                    }
-                                    obj = doubleArr;
-                                } else if (float[].class == type) {
-                                    //float[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    float[] floatArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new float[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            floatArr = new float[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                floatArr[p] = Float.parseFloat(split[p]);
-                                            }
-                                        } else {
-                                            floatArr = new float[]{Float.parseFloat(value)};
+                                        Time startTimeFmt = new Time(d2.getTime());
+                                        obj = startTimeFmt;
+                                    } else if (Date.class == type || java.sql.Date.class == type) {
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (value == null || value.length() == 0) {
+                                            obj = null;
+                                            continue;
                                         }
-                                    }
-                                    obj = floatArr;
-                                } else if (long[].class == type) {
-                                    //long[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    long[] longArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new long[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            longArr = new long[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                longArr[p] = Long.parseLong(split[p]);
-                                            }
-                                        } else {
-                                            longArr = new long[]{Long.parseLong(value)};
+                                        try {
+                                            Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
+                                            obj = date;
+                                        } catch (ParseException e) {
+                                            e.printStackTrace();
                                         }
+                                    } else if (long.class == type || Long.class == type) {
+                                        long value = cursor.getLong(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (short.class == type || Short.class == type) {
+                                        short value = cursor.getShort(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (byte[].class.equals(type)) {
+                                        byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
+                                        obj = value;
                                     }
-                                    obj = longArr;
-                                } else if (short[].class == type) {
-                                    //short[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    short[] shortArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new short[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
 
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            shortArr = new short[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                shortArr[p] = Short.parseShort(split[p]);
-                                            }
-                                        } else {
-                                            shortArr = new short[]{Short.parseShort(value)};
+
+                                    //数组类型
+                                    else if (String[].class == type) {
+                                        //String[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new String[]{};
+                                        } else if (value.length() >= 5) {
+                                            obj = value.substring(2, value.length() - 2).split("\",\"");
                                         }
-                                    }
-                                    obj = shortArr;
-                                } else if (List.class == type || Map.class == type) {
+                                    } else if (int[].class == type) {
+                                        //int[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        int[] intArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new int[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
 
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null || "null".equals(value)) {
-                                        obj = null;
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                intArr = new int[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    intArr[p] = Integer.parseInt(split[p]);
+                                                }
+                                            } else {
+                                                intArr = new int[]{Integer.parseInt(value)};
+                                            }
+                                        }
+                                        obj = intArr;
+                                    } else if (boolean[].class == type) {
+                                        //boolean[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        boolean[] booleanArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new boolean[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                booleanArr = new boolean[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    booleanArr[p] = Boolean.parseBoolean(split[p]);
+                                                }
+                                            } else {
+                                                booleanArr = new boolean[]{Boolean.parseBoolean(value)};
+                                            }
+                                        }
+                                        obj = booleanArr;
+                                    } else if (double[].class == type) {
+                                        //double[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        double[] doubleArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new double[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                doubleArr = new double[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    doubleArr[p] = Double.parseDouble(split[p]);
+                                                }
+                                            } else {
+                                                doubleArr = new double[]{Double.parseDouble(value)};
+                                            }
+                                        }
+                                        obj = doubleArr;
+                                    } else if (float[].class == type) {
+                                        //float[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        float[] floatArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new float[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                floatArr = new float[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    floatArr[p] = Float.parseFloat(split[p]);
+                                                }
+                                            } else {
+                                                floatArr = new float[]{Float.parseFloat(value)};
+                                            }
+                                        }
+                                        obj = floatArr;
+                                    } else if (long[].class == type) {
+                                        //long[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        long[] longArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new long[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                longArr = new long[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    longArr[p] = Long.parseLong(split[p]);
+                                                }
+                                            } else {
+                                                longArr = new long[]{Long.parseLong(value)};
+                                            }
+                                        }
+                                        obj = longArr;
+                                    } else if (short[].class == type) {
+                                        //short[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        short[] shortArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new short[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                shortArr = new short[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    shortArr[p] = Short.parseShort(split[p]);
+                                                }
+                                            } else {
+                                                shortArr = new short[]{Short.parseShort(value)};
+                                            }
+                                        }
+                                        obj = shortArr;
+                                    } else if (List.class == type || Map.class == type) {
+
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (value == null || "null".equals(value)) {
+                                            obj = null;
+                                        } else {
+                                            //第二次转换 List OR Map
+                                            obj = returnListOrMap(type, value);
+                                        }
                                     } else {
-                                        //第二次转换 List OR Map
-                                        obj = returnListOrMap(type, value);
-                                    }
-                                } else {
 //                                    err(getLineInfo(LOG.lineInfoIndex), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    String name = field.getName();//获取属性名
-                                    Object val = null;
-                                    try {
-                                        val = field.get(bean);// 得到此属性的值
-                                    } catch (IllegalAccessException e) {
-                                        e.printStackTrace();
-                                    }
-                                    try {
-                                        obj = JSON.fromJson(value, type);
-                                    } catch (JSONException e) {
-                                        e.printStackTrace();
-                                    }
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        String name = field.getName();//获取属性名
+                                        Object val = null;
+                                        try {
+                                            val = field.get(bean);// 得到此属性的值
+                                        } catch (IllegalAccessException e) {
+                                            e.printStackTrace();
+                                        }
+                                        try {
+                                            obj = JSON.fromJson(value, type);
+                                        } catch (JSONException e) {
+                                            e.printStackTrace();
+                                        }
 
+                                    }
                                 }
-                            }
 
-                            try {
-                                if (obj != null) {
-                                    field.set(bean, obj);
-                                }
-                                continue;
-                            } catch (Exception e) {
+                                try {
+                                    if (obj != null) {
+                                        field.set(bean, obj);
+                                    }
+                                    continue;
+                                } catch (Exception e) {
 //                                    e.printStackTrace();
-                                errs("查询数据中出现了无法转换的类型:" + e);
+                                    errs("查询数据中出现了无法转换的类型:" + e);
+                                }
                             }
                         }
-
                     }
                     beanList.add(bean);//存入查询到的数据
 
@@ -6229,6 +6234,7 @@ public class GT {
      * 随机类
      */
     public static class GT_Random {
+
         private final static Random random = new Random();
 
         /**
@@ -6250,22 +6256,979 @@ public class GT {
          * @return
          */
         public static int getInt(int min, int max) {
-            return random.nextInt(max) % (max - min + 1) + min;
+            return random.nextInt(max) % (max - min + 2) + min;
+        }
+
+        /**
+         * 获取定义字符之间的随机字符
+         *
+         * @param startChar
+         * @param closeChar
+         * @return
+         */
+        public static char getChar(char startChar, char closeChar) {
+            return (char) (startChar + Math.random() * (closeChar - startChar + 1));
+        }
+
+    }
+
+    /**
+     * 串口工具包
+     */
+    public static class SerialPortUtils {
+
+        @Target(ElementType.FIELD)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface Build {
+            String setComAll();       //默认SP名称
+
+            int setBaudRate();
+
+            boolean setISLog() default false;     //默认自动提交
+        }
+
+
+        public SerialPort serialPort;
+        public SerialPortFinder serialPortFinder;
+        public InputStream inputStream;
+        public OutputStream outputStream;
+        private int TYPE = 10;                  //默认十进制
+        public static int FLAGS = 0;            //默认为 0
+        private boolean isShowLog;              //是否显示串口内日志 true:显示  false:不显示
+        public int defaultSpeed = 1000;         //默认速度
+        public int waitingTime = defaultSpeed;  //默认等待读取数据时间 每次读取等待时间为 1 秒 注意：尽量使用默认的速率来读取数据，读取太快可能会读取数据异常
+        public int readSpeed = 1000;            //读取速度
+        public int readByteMax = 1024;          //读取字节的最大值
+        private byte[] buffer;                  //读取数据的容器
+
+        /**
+         * @param context   上下文
+         * @param COM_All   主板物理通讯地址
+         * @param BAUD_RATE 波特率
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE) {
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                }
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+
+        /**
+         * @param context     上下文
+         * @param COM_All     主板物理通讯地址
+         * @param BAUD_RATE   波特率
+         * @param readByteMax 读取Byte最大值
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE, int readByteMax) {
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                }
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    if (context != null) {
+                        Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                    }
+                }
+            }
+        }
+
+        /**
+         * @param context   上下文
+         * @param COM_All   主板物理通讯地址
+         * @param BAUD_RATE 波特率
+         * @param isShowLog 是否显示内部日志
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE, boolean isShowLog) {
+            this.isShowLog = isShowLog;
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    if (context != null) {
+                        Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                    }
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+
+        /**
+         * @param context     上下文
+         * @param COM_All     主板物理通讯地址
+         * @param BAUD_RATE   波特率
+         * @param readByteMax 读取Byte最大值
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE, int readByteMax, boolean isShowLog) {
+            this.isShowLog = isShowLog;
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    if (context != null) {
+                        Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                    }
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+
+
+        /***************************************************** 其他功能性方法 *****************************************************/
+
+        public SerialPortUtils setWaitingTimeAndReadSpeed(int waitingTime, int readSpeed) {
+            this.defaultSpeed = waitingTime;
+            this.readSpeed = readSpeed;
+            return this;
+        }
+
+        public int getReadSpeed() {
+            return readSpeed;
+        }
+
+        /**
+         * 设置读取数据期间的速度
+         *
+         * @param readSpeed 设置读取到数据后的读取数据速度
+         */
+        public SerialPortUtils setReadSpeed(int readSpeed) {
+            this.readSpeed = readSpeed;
+            return this;
+        }
+
+        public int getWaitingTime() {
+            return waitingTime;
+        }
+
+        /**
+         * 设置等待下位机发送数据的等待间隔时间
+         *
+         * @param waitingTime
+         */
+        public SerialPortUtils setWaitingTime(int waitingTime) {
+            this.defaultSpeed = waitingTime;
+            return this;
+        }
+
+        public int getTYPE() {
+            return TYPE;
+        }
+
+        public SerialPortUtils setTYPE(int TYPE) {
+            this.TYPE = TYPE;
+            return this;
+        }
+
+        //恢复默认的十进制
+        private void closeParameter() {
+            TYPE = 10;
+        }
+
+        /***************************************************** 读取下位机数据的原始方法 *****************************************************/
+
+        /**
+         * 按照次数读取数据
+         *
+         * @param count 本次读取多少次又有数据
+         * @return
+         */
+        public byte[] readByteDataCount(int count) {
+            if (inputStream == null || count <= 0) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取次数的
+            List<byte[]> byteList = new ArrayList<>();
+            int arrayMax = 0;
+
+            while (true) {
+                if (count <= 0) {
+                    break;
+                }
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        count--;
+                        arrayMax += size;
+                        byte[] readBytes = new byte[size];
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+            return bufferAll;
+        }
+
+        /**
+         * 按照时间读取数据
+         *
+         * @param time 读取多少秒的数据
+         * @return
+         */
+        public byte[] readByteDataTime(int time) {
+            if (inputStream == null || time <= 0) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个时间段的
+            List<byte[]> byteList = new ArrayList<>();
+            int arrayMax = 0;
+
+            while (true) {
+                if (time <= 0) {
+                    break;
+                }
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;
+                        arrayMax += size;
+                        byte[] readBytes = new byte[size];
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                    } else {
+                        waitingTime = defaultSpeed;
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+                time--;
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+            return bufferAll;
+        }
+
+        /**
+         * 按照在一定时间内读取的次数来读取数据
+         *
+         * @param time 读取多少秒的数据
+         * @return
+         */
+        public byte[] readByteDataTimeAddCount(int time, int count) {
+            if (inputStream == null || time <= 0 || count <= 0) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个时间段的
+            List<byte[]> byteList = new ArrayList<>();
+            int arrayMax = 0;
+
+            while (true) {
+                if (time <= 0 || count <= 0) {
+                    break;
+                }
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        count--;
+                        arrayMax += size;
+                        byte[] readBytes = new byte[size];
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+                time--;
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+            return bufferAll;
+        }
+
+        /**
+         * 按照起始符与结束符开始读取数据
+         *
+         * @param start 开始读取的标识
+         * @param close 结束读取的标识
+         * @return
+         */
+        public byte[] readByteDataStartAddClose(String start, String close) {
+
+            if (inputStream == null || start == null || close == null) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个区域间的
+            List<byte[]> byteList = new ArrayList<>();//总数据
+            int arrayMax = 0;//总数据索引
+            boolean isRead = false;//是否开始读取数据
+
+            //读取本次下位机发送的所有数据
+            while (true) {
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        byte[] readBytes = new byte[size];
+                        arrayMax += size;
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                        isRead = true;
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                    if (isRead && size == -1) {//如果等于 true 表示开始读取数据
+                        break;//结束本次读取
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+
+            //遍历截取起始符和结束符的数据
+            String sumData = "";
+            String startData = "";
+            String closeData = "";
+
+            //总数据
+            for (byte str : bufferAll) {
+                sumData += str + "-GT-";
+            }
+            //开始符数据
+            for (byte str : start.getBytes()) {
+                startData += str + "-GT-";
+            }
+            //结束符数据
+            for (byte str : close.getBytes()) {
+                closeData += str + "-GT-";
+            }
+            //截取需要的数据
+            sumData = sumData.substring(sumData.indexOf(startData) + startData.length(), sumData.indexOf(closeData));
+
+            String[] split = sumData.split("-GT-");
+            bufferAll = new byte[split.length];//最大容器
+            for (int i = 0; i < bufferAll.length; i++) {
+                bufferAll[i] = Byte.parseByte(split[i]);
+            }
+
+            return bufferAll;
+        }
+
+        /**
+         * 按照本次读取的所有数据
+         *
+         * @return
+         */
+        public byte[] readByteDataAll() {
+            if (inputStream == null) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个区域间的
+            List<byte[]> byteList = new ArrayList<>();//总数据
+            int arrayMax = 0;//总数据索引
+            boolean isRead = false;//是否开始读取数据
+
+            //读取本次下位机发送的所有数据
+            while (true) {
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        byte[] readBytes = new byte[size];
+                        arrayMax += size;
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                        isRead = true;
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                    if (isRead && size == -1) {//如果等于 true 表示开始读取数据
+                        break;//结束本次读取
+                    }
+                } catch (IOException e) {
+//                e.printStackTrace();
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+
+            return bufferAll;
+        }
+
+
+        /***************************************************** 读取数据方法 *****************************************************/
+
+        /**
+         * 按照次数读取数据
+         *
+         * @param count 读取数据的次数
+         * @return
+         */
+        public String readDataCount(int count) {
+            byte[] bytes = readByteDataCount(count);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 按时间读取数据
+         *
+         * @param time 读取数据的时间
+         * @return
+         */
+        public String readDataTime(int time) {
+            byte[] bytes = readByteDataTime(time);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 按照在一定时间内读取的次数来读取数据
+         *
+         * @param time  读取数据的时间
+         * @param count 在规定的时间内读取数据的次数
+         * @return
+         */
+        public String readDataTimeAddCount(int time, int count) {
+            byte[] bytes = readByteDataTimeAddCount(time, count);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 按照起始符与结束符读取数据
+         *
+         * @param start 开始读取数据的开始符号
+         * @param close 结束读取数据的结束符号
+         * @return
+         */
+        public String readDataStartAddClose(String start, String close) {
+            byte[] bytes = readByteDataStartAddClose(start, close);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 读取本次所有数据
+         *
+         * @return
+         */
+        public String readDataAll() {
+            byte[] bytes = readByteDataAll();
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+
+        }
+
+        /**
+         * 读取曲线数据
+         * 格式：,T:0.000,C:-3.620;90,91,92,91,91,91,91,91,91,90,90,90,91,91,90,90,92,91
+         *
+         * @param spValue 检测值与曲线值的分隔符
+         * @return
+         */
+        public String readCurveData(String spValue) {
+            if (spValue == null) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            byte[] bytes = readByteDataAll();//读取本次所有下位机发送的数据
+            if (bytes != null) {
+                //确定前后区数组大小
+                byte[] startByte = null;
+                byte[] closeByte = null;
+                for (int i = 0; i < bytes.length; i++) {
+                    byte aByte = bytes[i];
+                    if (aByte == spValue.getBytes()[0]) {
+                        startByte = new byte[i + 1];
+                        closeByte = new byte[bytes.length - startByte.length];
+                        break;
+                    }
+                }
+                String startStr = null, closeStr = null;
+                try {
+                    //处理分割区前的数据
+                    System.arraycopy(bytes, 0, startByte, 0, startByte.length);
+                    startStr = returnTypeData(startByte);
+                    //处理分割区后的数据
+                    System.arraycopy(bytes, startByte.length, closeByte, 0, closeByte.length);
+                    closeStr = setTYPE(16).returnTypeData(closeByte);
+                } catch (Exception e) {//NullPointerException
+                    log("串口读取异常:" + e);
+                }
+
+                return startStr + closeStr;
+            }
+            return null;
+        }
+
+        /***************************************************** 发送数据方法 *****************************************************/
+
+        /**
+         * 发送数据
+         * 比如：Charset.forName("GB2312")
+         *
+         * @param sendData 发送数据的内容
+         * @param charset  发送数据的格式
+         */
+        public SerialPortUtils sendData(final String sendData, Charset charset) {
+            if (outputStream == null || sendData == null) {
+                if (isShowLog)
+                    log("发送数据失败！");
+                return this;
+            }
+
+            if (isShowLog)
+                log("发送给下位机的数据:" + sendData);
+
+            //设置发送数据的格式
+            byte[] bytes;
+            if (charset == null) {
+                bytes = sendData.getBytes();
+            } else {
+                bytes = sendData.getBytes(charset);//发给打印机的
+            }
+
+            try {
+                outputStream.write(bytes);
+                outputStream.flush();
+                if (isShowLog)
+                    log("发送数据成功！");
+            } catch (IOException e) {
+                e.printStackTrace();
+                if (isShowLog)
+                    log("发送数据失败！");
+            }
+            return this;
+        }
+
+        /**
+         * 发送数据
+         *
+         * @param sendData
+         * @return
+         */
+        public SerialPortUtils sendData(final String sendData) {
+            if (outputStream == null || sendData == null) {
+                if (isShowLog)
+                    log("发送数据失败！");
+                return this;
+            }
+
+            if (isShowLog)
+                log("发送给下位机的数据:" + sendData);
+
+            //设置发送数据的格式
+            byte[] bytes = sendData.getBytes();
+            try {
+                outputStream.write(bytes);
+                outputStream.flush();
+                if (isShowLog)
+                    log("发送数据成功！");
+            } catch (IOException e) {
+                e.printStackTrace();
+                if (isShowLog)
+                    log("发送数据失败！");
+            }
+            return this;
+        }
+
+
+        /***************************************************** 数据进制转换方法 *****************************************************/
+
+        /**
+         * 返回转换好的进制数据
+         *
+         * @param bytes 需要转换进制的数据
+         * @return
+         */
+        public String returnTypeData(byte[] bytes) {
+            String readData = "";
+            switch (TYPE) {
+                case 10:
+                    readData = new String(bytes, Charset.forName("gbk"));
+                    break;
+                case 16:
+                    int[] ints = DataUtils.byte2Int(bytes);
+                    for (int value : ints) {
+                        readData += value + ",";
+                    }
+                    break;
+            }
+            closeParameter();
+            return readData;
+        }
+
+        /**
+         * 释放资源
+         */
+        public void close() {
+            if (inputStream != null) {
+                try {
+                    inputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if (outputStream != null) {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if (serialPort != null) {
+                serialPort.close();
+                serialPort = null;
+            }
+
+            if (serialPortFinder != null) {
+                serialPortFinder = null;
+            }
+
+        }
+
+        /**
+         * 日志
+         *
+         * @param msg
+         */
+        private static void log(Object msg) {
+            Log.i("GT_i", msg.toString());
+            GT.DataSendReception.sendUpdateUiBroadcast(SerialPortUtils.class.getName(), msg.toString());
+        }
+
+
+        /**
+         * 睡眠
+         *
+         * @param millis
+         */
+        public static void sleep(long millis) {
+            try {
+                java.lang.Thread.sleep(millis);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
 
     }
 
-    /**
-     * 进制数据
-     */
-    public static class HexadecimalNumberUtils {
+    /***************************************************** 数据转换工具类 *****************************************************/
+    public static class DataUtils {
 
-        public static Object hexadecimalNumber(Object obj, int value, int toValue) {
-
-
-            return null;
+        /**
+         * 16进制 byte 转10进制 int
+         *
+         * @param data
+         * @return
+         */
+        public static int[] byte2Int(byte[] data) {
+            int[] result = new int[data.length / 2];
+            int value;
+            int extra = 0;
+            if (data.length % 2 != 0) {
+                extra = 2;
+            }
+            for (int i = 0; i < data.length - extra; i += 2) {
+                int int1 = (data[i] & 0xff) << 8;
+                value = int1 + (data[i + 1] & 0xff);
+                result[i / 2] = value;
+            }
+            return result;
         }
+
+        // 判断奇数或偶数，位运算，最后一位是1则为奇数，为0是偶数
+        public static int isOdd(int num) {
+            return num & 1;
+        }
+
+        //Hex字符串转int
+        public static int HexToInt(String inHex) {
+            return Integer.parseInt(inHex, 16);
+        }
+
+        public static String IntToHex(int intHex) {
+            return Integer.toHexString(intHex);
+        }
+
+        //Hex字符串转byte
+        public static byte HexToByte(String inHex) {
+            return (byte) Integer.parseInt(inHex, 16);
+        }
+
+        //1字节转2个Hex字符
+        public static String Byte2Hex(Byte inByte) {
+            return String.format("%02x", new Object[]{inByte}).toUpperCase();
+        }
+
+        //字节数组转转hex字符串
+        public static String ByteArrToHex(byte[] inBytArr) {
+            StringBuilder strBuilder = new StringBuilder();
+            for (byte valueOf : inBytArr) {
+                strBuilder.append(Byte2Hex(Byte.valueOf(valueOf)));
+                strBuilder.append(" ");
+            }
+            return strBuilder.toString();
+        }
+
+        //字节数组转转hex字符串，可选长度
+        public static String ByteArrToHex(byte[] inBytArr, int offset, int byteCount) {
+            StringBuilder strBuilder = new StringBuilder();
+            int j = byteCount;
+            for (int i = offset; i < j; i++) {
+                strBuilder.append(Byte2Hex(Byte.valueOf(inBytArr[i])));
+            }
+            return strBuilder.toString();
+        }
+
+        //转hex字符串转字节数组
+        public static byte[] HexToByteArr(String inHex) {
+            byte[] result;
+            int hexlen = inHex.length();
+            if (isOdd(hexlen) == 1) {
+                hexlen++;
+                result = new byte[(hexlen / 2)];
+                inHex = "0" + inHex;
+            } else {
+                result = new byte[(hexlen / 2)];
+            }
+            int j = 0;
+            for (int i = 0; i < hexlen; i += 2) {
+                result[j] = HexToByte(inHex.substring(i, i + 2));
+                j++;
+            }
+            return result;
+        }
+
+        /**
+         * 按照指定长度切割字符串
+         *
+         * @param inputString 需要切割的源字符串
+         * @param length      指定的长度
+         * @return
+         */
+        public static List<String> getDivLines(String inputString, int length) {
+            List<String> divList = new ArrayList<>();
+            int remainder = (inputString.length()) % length;
+            // 一共要分割成几段
+            int number = (int) Math.floor((inputString.length()) / length);
+            for (int index = 0; index < number; index++) {
+                String childStr = inputString.substring(index * length, (index + 1) * length);
+                divList.add(childStr);
+            }
+            if (remainder > 0) {
+                String cStr = inputString.substring(number * length, inputString.length());
+                divList.add(cStr);
+            }
+            return divList;
+        }
+
+        /**
+         * 计算长度，两个字节长度
+         *
+         * @param val value
+         * @return 结果
+         */
+        public static String twoByte(String val) {
+            if (val.length() > 4) {
+                val = val.substring(0, 4);
+            } else {
+                int l = 4 - val.length();
+                for (int i = 0; i < l; i++) {
+                    val = "0" + val;
+                }
+            }
+            return val;
+        }
+
+        /**
+         * 校验和
+         *
+         * @param cmd 指令
+         * @return 结果
+         */
+        public static String sum(String cmd) {
+            List<String> cmdList = getDivLines(cmd, 2);
+            int sumInt = 0;
+            for (String c : cmdList) {
+                sumInt += HexToInt(c);
+            }
+            String sum = IntToHex(sumInt);
+            sum = twoByte(sum);
+            cmd += sum;
+            return cmd.toUpperCase();
+        }
+
 
     }
 
@@ -7586,38 +8549,65 @@ public class GT {
 
     /**
      * HttpUtil 原始网络请求类
+     * 将 Map 中的参数解析成想要的 get 参数
+     * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
      */
     public static class HttpUtil {
-
         private static final String UTF_8 = "utf-8";
         private static final String GET = "GET";
         private static final String POST = "POST";
+        private static String value = "";
+        private static String url = "";
+
+        private static String type = "text";//请求参数的类型
+
+        public static void setTextType() {
+            type = "text";
+        }
+
+        public static void setJsonType() {
+            type = "json";
+        }
 
         /**
-         * get请求封装
+         * Map转参数
+         *
+         * @param paramMap
+         * @return
          */
-        public static void getRequest(final String url, final Map<String, Object> params, final GT.HttpUtil.OnLoadData listener) {
-            if (url == null || listener == null) {
-                return;
-            }
-            /**
-             * 将 Map 中的参数解析成想要的 get 参数
-             * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
-             */
+        public static String mapToParams(Map<String, Object> paramMap) {
             StringBuffer stringBuffer = new StringBuffer();
-            if (params != null && params.size() > 0) {
+            if (paramMap != null && paramMap.size() > 0) {
                 stringBuffer.append("?");//url 与 请求参数的分隔符
-                for (Map.Entry<String, Object> entry : params.entrySet()) {
+                for (Map.Entry<String, Object> entry : paramMap.entrySet()) {
                     stringBuffer.append(entry.getKey());
                     stringBuffer.append("=");
                     stringBuffer.append(entry.getValue());
                     stringBuffer.append("&");
                 }
                 stringBuffer.deleteCharAt(stringBuffer.length() - 1);//去掉最后一个 & 字符
+                return stringBuffer.toString();
+            }
+
+            return null;
+        }
+
+        /**
+         * get请求封装
+         */
+        public static void getRequest(final String url, final Map<String, Object> paramMap, final GT.HttpUtil.OnLoadData listener) {
+            if (url == null || listener == null) {
+                return;
+            }
+
+            String params = mapToParams(paramMap);
+            if (params == null) {
+                err(getLineInfo(), "请求参数不能为null");
+                return;
             }
 
             //将解析好的参数直接调用 getRequest 进行get请求参数
-            getRequest(url + stringBuffer.toString(), listener);
+            getRequest(url + params, listener);
         }
 
         /**
@@ -7630,9 +8620,10 @@ public class GT {
             GT.Thread.runJava(new Runnable() { //为请求网络数据开启子线程
                 @Override
                 public void run() {
+                    HttpURLConnection conn = null;
                     try {
                         URL path = new URL(url);//获取 Url
-                        HttpURLConnection conn = (HttpURLConnection) path.openConnection();//打开连接
+                        conn = (HttpURLConnection) path.openConnection();//打开连接
                         conn.setRequestMethod(GET);    //设置请求方式
                         int code = conn.getResponseCode();
                         if (code == 200) {//应答码200表示请求成功
@@ -7646,7 +8637,7 @@ public class GT {
                         }
                     } catch (Exception error) {
                         try {
-                            onError(listener, error);//请求失败
+                            onError(listener, error, conn);//请求失败
                         } catch (Exception e1) {
                             err("e1:" + error);
                             err("e2:" + e1);
@@ -7657,24 +8648,19 @@ public class GT {
         }
 
         /**
-         * POST请求
+         * POST请求 get 与 Post 参数格式一样，请求类型不一样
+         * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
          */
-        public static void postRequest(final String url, final String params, final GT.HttpUtil.OnLoadData listener) {
+        public static void postRequest(final String url, final Map<String, Object> map, final GT.HttpUtil.OnLoadData listener) {
 
-            /**
-             * 将 Map 中的参数解析成想要的 post 参数
-             * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
-             */
+            String params = mapToParams(map);
+            if (params == null) {
+                err(getLineInfo(), "请求参数不能为null");
+            }
 
             postRequest(url + "?" + params, listener);
         }
 
-        private static String value = "";
-        private static String url = "";
-
-        /**
-         * POST请求
-         */
         /**
          * POST请求
          */
@@ -7704,18 +8690,26 @@ public class GT {
             Thread.runJava(new Runnable() {// 为网络请求开启子线程
                 @Override
                 public void run() {
+                    HttpURLConnection conn = null;
                     try {
                         // 打开连接
                         URL path = new URL(HttpUtil.url);// 1. 生成URL
-                        HttpURLConnection conn = (HttpURLConnection) path.openConnection();// 2. HttpURLConnection 打开连接
+                        conn = (HttpURLConnection) path.openConnection();// 2. HttpURLConnection 打开连接
                         conn.setRequestMethod(POST);// 3. 设置为 POST 请求
-                        // Text 请求
-//                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");//4. Content-Type,这里是固定写法，发送内容的类型
+                        conn.setDoInput(true);//可向连接中写入
+                        conn.setDoOutput(true);//可向连接中读取数据
+                        conn.setUseCaches(false);//禁止使用缓存
+                        conn.setInstanceFollowRedirects(true);//自动执行Http重定向
 
-                        // json 请求
+                        if (type.equals("text")) {
+                            // Text 请求
+                            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");//4. Content-Type,这里是固定写法，发送内容的类型
+                        } else {
+                            // json 请求
+                            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");// 设置文件类型:
+                        }
                         conn.setRequestProperty("Connection", "Keep-Alive");
                         conn.setRequestProperty("Charset", "UTF-8");
-                        conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");// 设置文件类型:
                         conn.setRequestProperty("accept", "application/json");
 
                         // 向服务器提交请求数据
@@ -7738,7 +8732,7 @@ public class GT {
 
                     } catch (Exception e) {
                         try {
-                            onError(listener, e);
+                            onError(listener, e, conn);
                         } catch (Exception e1) {
                             err("e1:" + e);
                             err("e2:" + e1);
@@ -7749,10 +8743,24 @@ public class GT {
 
         }
 
-        private static void onError(final GT.HttpUtil.OnLoadData listener, final Exception onError) {
+        /**
+         * 反馈失败
+         *
+         * @param listener
+         * @param onError
+         */
+        private static void onError(final GT.HttpUtil.OnLoadData listener, final Exception onError, HttpURLConnection conn) {
+            conn.disconnect();//断开连接
             listener.onError(onError.toString());
         }
 
+        /**
+         * 反馈成功
+         *
+         * @param listener
+         * @param con
+         * @throws IOException
+         */
         private static void onSuccess(final GT.HttpUtil.OnLoadData listener, HttpURLConnection con) throws IOException {
             InputStream inputStream = con.getInputStream();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();//创建内存输出流
@@ -7764,6 +8772,8 @@ public class GT {
                 }
                 final String str = new String(baos.toByteArray(), UTF_8);
                 listener.onSuccess(str);
+                inputStream.close();//关闭
+                con.disconnect();//断开连接
             }
         }
 
@@ -7773,6 +8783,62 @@ public class GT {
 
             void onError(String response);
         }
+
+
+         /* GT.Thread.runJava(new Runnable() {
+            @Override
+            public void run() {
+
+                URL url;
+                try {
+                    url = new URL(urlStr);
+                    HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+                    urlConnection.setRequestMethod("POST");
+                    urlConnection.setDoInput(true);
+                    urlConnection.setDoOutput(true);
+                    urlConnection.setUseCaches(false);
+                    urlConnection.setInstanceFollowRedirects(true);
+                    urlConnection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                    DataOutputStream out = new DataOutputStream(urlConnection.getOutputStream());
+
+                    String param = "location="
+                            + URLEncoder.encode("22.5948,114.3069163","utf-8")
+                            + "&get_poi="
+                            + URLEncoder.encode("1","utf-8")
+                            + "&key="
+                            + URLEncoder.encode("J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT","utf-8");
+
+                    out.writeBytes(param);
+                    out.flush();
+                    out.close();
+
+                    if(urlConnection.getResponseCode() == HttpURLConnection.HTTP_OK){
+
+                        InputStreamReader in = new InputStreamReader(urlConnection.getInputStream());
+                        BufferedReader buffer = new BufferedReader(in);
+                        String inputLine = null;
+
+                        String result = "\n";
+
+                        while ((inputLine = buffer.readLine()) != null){
+                            result += inputLine + "\n";
+                        }
+                        in.close();
+
+                        GT.log("result:" + result);
+
+                    }
+
+
+                } catch (MalformedURLException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        });*/
+
 
     }
 
@@ -7986,6 +9052,168 @@ public class GT {
              * @加载错误
              */
             void onLoadError(WebView view, int errorCode, String description, String failingUrl);
+
+        }
+
+    }
+
+    /**
+     * 网络连接
+     */
+    public static class GT_Socket {
+
+        public static boolean isLog = false;//是否打开日志
+
+        public static class TCP {
+
+            //构建 GT_SharedPreferences
+            @Target(ElementType.FIELD)
+            @Retention(RetentionPolicy.RUNTIME)
+            public @interface Build {
+                String setIP() default "null";      //默认IP地址
+
+                int setPort();              //默认的端口号
+            }
+
+            private ServerSocket serverSocket;//服务器套接字
+            private Socket socket;//服务器、客户端套接字
+            private PrintStream printStream;//输出
+            private BufferedReader bufferedReader;//输入
+            private int port = -1;//端口号：必须大于1023 0~1023为系统保留端口
+
+            /**
+             * 创建服务器
+             *
+             * @param port
+             */
+            public TCP(int port) {
+                this.port = port;
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            serverSocket = new ServerSocket(port);//创建服务器
+                            if (isLog)
+                                GT.log("服务器：创建好服务器，等待连接");
+                            socket = serverSocket.accept();//开始等待客户端连接
+                            if (isLog)
+                                GT.log("服务器：有客户端连接");
+                            printStream = new PrintStream(socket.getOutputStream());//输出
+                            bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));//输入
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            }
+
+            /**
+             * 创建客户端
+             *
+             * @param port
+             */
+            public TCP(String ip, int port) {
+                this.port = port;
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            if (isLog)
+                                GT.log("客户端：开始连接服务器");
+                            socket = new Socket(ip, port);//连接服务器
+                            if (isLog)
+                                GT.log("客户端：连接服务器成功！");
+                            printStream = new PrintStream(socket.getOutputStream());//输出
+                            bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));//输入
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            }
+
+            /**
+             * 读取数据
+             *
+             * @return
+             */
+            public String readData() {
+                String data = null;
+                try {
+                    if (bufferedReader != null) {
+                        data = bufferedReader.readLine();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return data;
+            }
+
+            /**
+             * 发送数据
+             *
+             * @param data
+             * @return
+             */
+            public TCP sendData(Object data) {
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (printStream != null) {
+                            printStream.println(String.valueOf(data));
+                        }
+                    }
+                });
+                return this;
+            }
+
+            /**
+             * 释放资源
+             */
+            public void close() {
+
+                //关闭输入输出流
+                if (socket != null) {
+                    try {
+                        socket.shutdownInput();
+                        socket.shutdownOutput();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+
+                if (bufferedReader != null) {
+                    try {
+                        bufferedReader.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    bufferedReader = null;
+                }
+
+                if (printStream != null) {
+                    printStream.close();
+                    printStream = null;
+                }
+
+                if (socket != null) {
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    socket = null;
+                }
+
+
+            }
+
+
+        }
+
+        public static class UDP {
+
 
         }
 
@@ -8293,7 +9521,7 @@ public class GT {
         }
 
         /**
-         * 时间戳转 时间
+         * 时间戳转 时间 YYYY-MM-DD 00:00:00
          *
          * @param dataTime
          * @return
@@ -8305,6 +9533,22 @@ public class GT {
             Date date = new Date(lt);
             String time = formatter.format(date);
             return time;
+        }
+
+        /**
+         * 时间转时间戳
+         *
+         * @param time 如：2021-07-23 16:36:12  格式必须为这样，单数也要前加 0 可以这样：2021-07-23 00:00:00
+         * @return 返回时间戳
+         */
+        public long toTimestamp(String time) {
+            long times = 0;
+            try {
+                times = (int) ((Timestamp.valueOf(time).getTime()) / 1000);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return times;
         }
 
         /**
@@ -10595,32 +11839,44 @@ public class GT {
             void function(final View view, final T bean);
         }
 
-
         /**
          * 用于继承新版的适配器
          */
         public static abstract class BaseAdapter<T> extends RecyclerView.Adapter<BaseAdapter.BaseHolder> {
 
             private Context context;
-            private List<T> detectionDataBeanList;
+            private List<T> beanList;
             private LinearLayoutManager linearLayoutManager;
+            private int layout = -1;
 
             public BaseAdapter(Context context) {
                 this.context = context;
             }
 
-            public BaseAdapter(Context context, List<T> detectionDataBeanList) {
+            /**
+             * @param context
+             * @param beanList 展示内容
+             */
+            public BaseAdapter(Context context, List<T> beanList) {
                 this.context = context;
-                this.detectionDataBeanList = detectionDataBeanList;
+                this.beanList = beanList;
                 notifyDataSetChanged();
             }
 
-            public BaseAdapter(Context context, RecyclerView rv, List<T> detectionDataBeanList, int layout) {
+            /**
+             * @param context
+             * @param rv
+             * @param beanList      展示内容
+             * @param layout_V_OR_H LinearLayoutManager.VERTICAL OR LinearLayoutManager.HORIZONTAL OR 瀑布流
+             * @param layout        加载的布局
+             */
+            public BaseAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
                 this.context = context;
-                linearLayoutManager = new LinearLayoutManager(context, layout, false);
+                this.layout = layout;
+                linearLayoutManager = new LinearLayoutManager(context, layout_V_OR_H, false);
                 rv.setAdapter(this);
                 rv.setLayoutManager(linearLayoutManager);
-                this.detectionDataBeanList = detectionDataBeanList;
+                this.beanList = beanList;
                 notifyDataSetChanged();
             }
 
@@ -10640,12 +11896,12 @@ public class GT {
                 this.linearLayoutManager = linearLayoutManager;
             }
 
-            public List<?> getDetectionDataBeanList() {
-                return detectionDataBeanList;
+            public List<?> getBeanList() {
+                return beanList;
             }
 
-            public void setDetectionDataBeanList(List<T> detectionDataBeanList) {
-                this.detectionDataBeanList = detectionDataBeanList;
+            public void setBeanList(List<T> beanList) {
+                this.beanList = beanList;
                 notifyDataSetChanged();
             }
 
@@ -10670,14 +11926,13 @@ public class GT {
              * @param adapter
              * @return
              */
-            public LinearLayoutManager setLinearLayoutManager_H(RecyclerView rv, RecyclerView.Adapter adapter) {
+            public LinearLayoutManager setLinearLayoutManager_H(RecyclerView rv) {
                 LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false);
-                rv.setAdapter(adapter);
+                rv.setAdapter(this);
                 rv.setLayoutManager(llm);
                 return llm;
             }
 
-            @NonNull
             @Override
             public BaseAdapter.BaseHolder onCreateViewHolder(ViewGroup parent, int viewType) {
                 BaseHolder baseHolder = new BaseHolder(LayoutInflater.from(context).inflate(loadLayout(), parent, false));
@@ -10685,20 +11940,33 @@ public class GT {
             }
 
             protected int loadLayout() {
-                return 0;
+                return layout;
             }
 
-            protected abstract void initView(BaseAdapter.BaseHolder holder, int position, T t);
+            protected void initView(BaseAdapter.BaseHolder holder, int position, T t) {
+            }
+
+            ;
+
+            protected void initView(View itemView, int position, T t) {
+            }
+
+            ;
+
+            protected void loadData(View itemView, int position, T t) {
+            }
 
             @Override
             public void onBindViewHolder(BaseAdapter.BaseHolder holder, int position) {
-                T t = detectionDataBeanList.get(position);
+                T t = beanList.get(position);
                 initView(holder, position, t);
+                initView(holder.itemView, position, t);
+                loadData(holder.itemView, position, t);
             }
 
             @Override
             public int getItemCount() {
-                return detectionDataBeanList == null ? 0 : detectionDataBeanList.size();
+                return beanList == null ? 0 : beanList.size();
             }
 
             protected static class BaseHolder extends RecyclerView.ViewHolder {
@@ -10709,6 +11977,34 @@ public class GT {
 
         }
 
+        public static abstract class AnnotationAdapter<T> extends BaseAdapter<T> {
+
+            //布局ID
+            private int resLayout;
+
+            public void setLayout(int resLayout) {
+                this.resLayout = resLayout;
+            }
+
+            public AnnotationAdapter(Context context) {
+                super(context);
+            }
+
+            public AnnotationAdapter(Context context, List<T> detectionDataBeanList) {
+                super(context, detectionDataBeanList);
+            }
+
+            public AnnotationAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
+                super(context, rv, beanList, layout_V_OR_H, layout);
+            }
+
+            @Override
+            protected int loadLayout() {
+                return resLayout;
+            }
+
+
+        }
 
     }
 
@@ -12229,43 +13525,6 @@ public class GT {
 
         }
 
-
-    }
-
-    /**
-     * 设置触摸放大
-     */
-    public static class ViewTouchMagnify {
-        private int viewWidth;        //保存按钮宽度
-        private int viewHeight;        //保存按钮高度
-
-        /**
-         * 为按钮设置触摸事件
-         *
-         * @param view
-         */
-        public void touchZoomInView(final View view) {
-            //设置按钮触摸事件
-            view.setOnTouchListener(new View.OnTouchListener() {
-                public boolean onTouch(View arg0, MotionEvent arg1) {
-                    ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {//如果用户手指触摸屏幕
-                        viewWidth = view.getWidth();        //保存按钮的宽度
-                        viewHeight = view.getHeight();        //保存按钮的高度
-                        //                        view.setTextSize(18);								//设置按钮放大时字体大小
-                        layoutParams.width = viewWidth + 20;                //设置按钮放大时的宽度
-                        layoutParams.height = viewHeight + 10;            //设置按钮放大时的高度
-                    } else if (arg1.getAction() == MotionEvent.ACTION_UP) {//如果用户手指离开屏幕
-                        //                        button.setTextSize(15);							//设置按钮为原来字体大小
-                        layoutParams.width = viewWidth;                //设置按钮为原来的宽度
-                        layoutParams.height = viewHeight;                //设置按钮为原来的高度
-                    }
-                    view.setLayoutParams(layoutParams);    //提交事务
-                    return false; //设置为未完成消耗掉的时间   如果将此返回为     true  那么按钮的  单击事件将会被屏蔽掉
-                }
-            });
-
-        }
 
     }
 
@@ -14186,16 +15445,10 @@ public class GT {
             // 定义 Activity
             protected Activity activity;
 
-            // 获取 GT 实例
-            public GT getGT() {
-                return getGT();
-            }
-
             // 如果重写该方法了的话就需要自己写 接收 Activity
             @Override
             public void onAttach(Context context) {
                 super.onAttach(context);
-
                 // 使用官方推荐的方法持有 Activity
                 activity = (Activity) context;
 
@@ -14221,7 +15474,7 @@ public class GT {
              * @param view
              * @param savedInstanceState
              */
-            protected abstract void initView(@NonNull View view, @Nullable Bundle savedInstanceState);
+            protected abstract void initView(View view, @Nullable Bundle savedInstanceState);
 
             /**
              * 用户在初始化布局前设置必要的参数 当前方法可不重写
@@ -14506,7 +15759,7 @@ public class GT {
 
             protected GT_Fragment gt_fragment;
 
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
                 View view = inflater.inflate(loadLayout(), container, false);
                 createView(view);
                 return view;
@@ -14519,7 +15772,7 @@ public class GT {
             }
 
             @Override
-            public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+            public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
 
                 //防止点击穿透
@@ -14595,17 +15848,6 @@ public class GT {
 
             }
 
-
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            protected void build(Object object, View view) {
-                GT.getGT().build(object, view);
-            }
-
             /**
              * 返回 true 则劫持返回事件
              *
@@ -14647,26 +15889,16 @@ public class GT {
             }
 
             @Override
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                build(this);// 注解赋值布局ID值
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+                getGT().build(this);// 注解赋值布局ID值
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
             }
 
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            private void build(Object object) {
-                GT.getGT().build(object, null);
-            }
-
             @Override
             protected void initView(View view, Bundle savedInstanceState) {
-                build(this, view);
+                getGT().build(this);
 
             }
         }
@@ -14980,7 +16212,7 @@ public class GT {
             protected GT_Fragment gt_fragment;
 
             @Override
-            public void onAttach(@NonNull Context context) {
+            public void onAttach(Context context) {
                 super.onAttach(context);
                 activity = (Activity) context;
             }
@@ -15000,7 +16232,7 @@ public class GT {
              * @param view
              * @param savedInstanceState
              */
-            protected abstract void initView(@NonNull View view, @Nullable Bundle savedInstanceState);
+            protected abstract void initView(View view, @Nullable Bundle savedInstanceState);
 
             /**
              * 主要实现的功能
@@ -15257,7 +16489,7 @@ public class GT {
 
             @Nullable
             @Override
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
                 View view = inflater.inflate(loadLayout(), container, false);
                 createView(view);
                 return view;
@@ -15391,7 +16623,7 @@ public class GT {
             }
 
             @Override
-            public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+            public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
                 initView(view, savedInstanceState);// 主要方法
                 loadData();
@@ -15464,17 +16696,6 @@ public class GT {
                 return false;
             }
 
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            protected void build(Object object, View view) {
-                GT.getGT().build(object, view);
-            }
-
-
         }
 
         /**
@@ -15489,26 +16710,17 @@ public class GT {
             }
 
             @Override
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                build(this);// 注解赋值布局ID值
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+                getGT().build(this);// 注解赋值布局ID值
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
             }
 
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            private void build(Object object) {
-                GT.getGT().build(object, null);
-            }
 
             @Override
-            protected void initView(@NonNull View view, @Nullable Bundle savedInstanceState) {
-                build(this, view);
+            protected void initView(View view, @Nullable Bundle savedInstanceState) {
+                getGT().build(this);
             }
         }
 
@@ -16033,7 +17245,7 @@ public class GT {
 
             @Override
             public void onCreate() {
-                GT.getGT().build(this, null);
+                getGT().build(this);
                 View view = LayoutInflater.from(this).inflate(resLayout, null);
                 setView(view);
                 super.onCreate();
@@ -16041,7 +17253,7 @@ public class GT {
 
             @Override
             protected void initView(View view) {
-                GT.getGT().build(this, view);
+                getGT().build(this);
             }
 
         }
@@ -16052,7 +17264,9 @@ public class GT {
     //自定义组工具集合
     public static class ViewUtils {
 
-        //跑马灯
+        /**
+         * 跑马灯
+         */
         public static class MarqueeTextView extends TextView {
 
             public MarqueeTextView(Context context) {
@@ -16894,6 +18108,31 @@ public class GT {
                     }
                 });
 
+            }
+
+        }
+
+        /**
+         * 嵌套滑动
+         */
+        public class NestScrollView extends ScrollView {
+            public NestScrollView(Context context) {
+                this(context, null);
+            }
+
+            public NestScrollView(Context context, AttributeSet attrs) {
+                this(context, attrs, 0);
+            }
+
+            public NestScrollView(Context context, AttributeSet attrs, int defStyleAttr) {
+                super(context, attrs, defStyleAttr);
+            }
+
+            @Override
+            public boolean onInterceptTouchEvent(MotionEvent ev) {
+                //关键点在这
+                getParent().requestDisallowInterceptTouchEvent(true);//不要拦截父事件
+                return super.onInterceptTouchEvent(ev);
             }
 
         }
@@ -17983,6 +19222,12 @@ public class GT {
             int value();
         }
 
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_AnnotationAdapter {
+            int value();
+        }
+
         /**
          * 为给 View 组件标的注解
          * 用法如下：
@@ -18327,92 +19572,54 @@ public class GT {
     public static class AnnotationAssist {
 
         //================================   下面是 初始化 注解内容   ==============================
-
-        //主要用于注解 非 Activity 以外的
-        public static void initAll(Object object, View view) {
-
-            if (object == null) {
-                return;
+        //主要用于注解 Activity 与 Fragment 共有的
+        public static void initAll(Object object) {
+            if (getGT().activity == null) {
+                getGT().activity = getGT().getActivity();
             }
 
             // SQL 注解
-            initSQL(object, object.getClass());                      //为加载 List SQL 成员变量初始化
+            initSQL(object);                         //为加载 List SQL 成员变量初始化
+
+            //注解加载布局
+            initAnnotationActivity(object);          //为加载 Activity 布局初始化
+            initAnnotationFragment(object);          // 为加载 AnnotationFragment 布局初始化
+            initGT_AnnotationDialogFragment(object); // 为加载 DialogFragment 布局初始化
+            initGT_AnnotationAdapter(object);       // 为加载 Adapter 布局初始化
+
+            //框架注解
+            initGT_Fragment(object);                 //为加载 Fragment 框架
+            initGT_SharedPreferences(object);        //SP框架注解
+            initSerialPortUtils(object);             //串口框架注解
+            initTCP(object);                         //TCP框架注解
+
+            //为加载 组件 初始化
+            initView(object);
+
+            //注解单击事件
+            initClick(object);
 
             //注解悬浮窗
-//            initAnnotationGT_Window(object, object.getClass());
-
-            //注解悬浮窗
-            initAnnotationWindow(object, object.getClass());
-
-            // Fragment 、注解
-            initAnnotationFragment(object, object.getClass());             // 为加载 AnnotationFragment 布局初始化
-            initGT_AnnotationDialogFragment(object, object.getClass());    // 为加载 DialogFragment 布局初始化
-            initGT_Fragment(object, object.getClass());                    //为加载 Fragment 成员变量初始化
+            initAnnotationWindow(object);
 
             // Java 注解部分
-            initObject(object, object.getClass());                    //为加载 Object 成员变量初始化
-            initList(object, object.getClass());                      //为加载 List 成员变量初始化
-            initMap(object, object.getClass());                       //为加载 Map 成员变量初始化
-            initSet(object, object.getClass());                       //为加载 Set 成员变量初始化
-
-            if (view == null) {
-                return;
-            }
-
-            // 组件、事件 注解
-            initView(object, object.getClass(), view);                 //为加载 组件 初始化
-            initClick(object, object.getClass(), view);                //为加载 组件单击 初始化
+            initObject(object);                    //为加载 Object 成员变量初始化
+            initList(object);                      //为加载 List 成员变量初始化
+            initMap(object);                       //为加载 Map 成员变量初始化
+            initSet(object);                       //为加载 Set 成员变量初始化
 
             //资源 注解
-            initAnimation(object, object.getClass(), view);            //为加载 Animation 资源初始化
-            initDimen(object, object.getClass(), view);                //为加载 Dimen 资源初始化
-            initDrawable(object, object.getClass(), view);             //为加载 Style 资源初始化
-            initColor(object, object.getClass(), view);                //为加载 Color 资源初始化
-            initString(object, object.getClass(), view);               //为加载 String 资源初始化
-            initIntArray(object, object.getClass(), view);             //为加载 IntArray 资源初始化
-            initStringArray(object, object.getClass(), view);          //为加载 StringArray 资源初始化
-            initLayout(object, object.getClass(), view);               //为加载 Layout 资源初始化
+            initAnimation(object);            //为加载 Animation 资源初始化
+            initDimen(object);                //为加载 Dimen 资源初始化
+            initDrawable(object);             //为加载 Style 资源初始化
+            initColor(object);                //为加载 Color 资源初始化
+            initString(object);               //为加载 String 资源初始化
+            initIntArray(object);             //为加载 IntArray 资源初始化
+            initStringArray(object);          //为加载 StringArray 资源初始化
+            initLayout(object);               //为加载 Layout 资源初始化
+
 
         }
-
-        //主要用于注解 Activity
-        private static void initAll(Activity activity) {
-
-            if (activity == null) return;
-
-            Class<? extends Activity> mClass = activity.getClass();
-
-            // SQL 注解
-            initSQL(activity, mClass);                      //为加载 List SQL 成员变量初始化
-
-            // Fragment 、注解
-            initAnnotationFragment(activity, mClass);             // 为加载 AnnotationFragment 布局初始化
-            initGT_AnnotationDialogFragment(activity, mClass);    // 为加载 DialogFragment 布局初始化
-            initGT_Fragment(activity, mClass);                    //为加载 Fragment 成员变量初始化
-
-            // Java 注解
-            initObject(activity, mClass);               //为加载 Object 成员变量初始化
-            initList(activity, mClass);                 //为加载 List 成员变量初始化
-            initMap(activity, mClass);                  //为加载 Map 成员变量初始化
-            initSet(activity, mClass);                  //为加载 Set 成员变量初始化
-
-            // Activity、组件、事件 注解
-            initAnnotationActivity(activity, mClass);             //为加载 Activity 布局初始化
-            initView(activity, mClass);                 //为加载 组件 初始化
-            initClick(activity, mClass);                //为加载 组件单击 初始化
-
-            //资源 注解
-            initAnimation(activity, mClass);            //为加载 Animation 资源初始化
-            initDimen(activity, mClass);                //为加载 Dimen 资源初始化
-            initDrawable(activity, mClass);             //为加载 Style 资源初始化
-            initColor(activity, mClass);                //为加载 Color 资源初始化
-            initString(activity, mClass);               //为加载 String 资源初始化
-            initIntArray(activity, mClass);             //为加载 IntArray 资源初始化
-            initStringArray(activity, mClass);          //为加载 StringArray 资源初始化
-            initLayout(activity, mClass);               //为加载 Layout 资源初始化
-
-        }
-
 
         //================================   下面是 SQL 的注解内容   ==============================
 
@@ -18423,8 +19630,8 @@ public class GT {
          */
         private static Object classObject = null;//最终注入的值
 
-        private static void initSQL(Object object, Class<? extends Object> mClass) {
-            Field[] fields = mClass.getDeclaredFields();//获致当前 Activity 所有成员变更
+        private static void initSQL(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
             for (Field field : fields) {
 
                 //获取识别注解
@@ -18511,8 +19718,8 @@ public class GT {
          *
          * @param object
          */
-        private static void initObject(Object object, Class<? extends Object> mClass) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initObject(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Object initView = field.getAnnotation(Annotations.GT_Object.class);
                 if (initView != null) {
@@ -18578,9 +19785,9 @@ public class GT {
         /**
          * 注入 List 资源字符串
          **/
-        private static void initList(Object object, Class<? extends Object> mClass) {
+        private static void initList(Object object) {
 
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Collection.GT_List initView = field.getAnnotation(Annotations.GT_Collection.GT_List.class);
                 if (initView != null) {
@@ -18678,9 +19885,9 @@ public class GT {
         /**
          * 注入 Map 资源字符串
          **/
-        private static void initMap(Object object, Class<? extends Object> mClass) {
+        private static void initMap(Object object) {
 
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Collection.GT_Map initView = field.getAnnotation(Annotations.GT_Collection.GT_Map.class);
                 if (initView != null) {
@@ -18787,9 +19994,9 @@ public class GT {
         /**
          * 注入 Set 资源字符串
          **/
-        private static void initSet(Object object, Class<? extends Object> mClass) {
+        private static void initSet(Object object) {
 
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Collection.GT_Set initView = field.getAnnotation(Annotations.GT_Collection.GT_Set.class);
                 if (initView != null) {
@@ -18887,24 +20094,27 @@ public class GT {
 
         //================================   下面是 通用 的注解内容   ==========================
 
-
-        /**
-         * 注入控件
-         *
-         * @param object
-         * @param mClass
-         * @param view
-         */
-        private static void initView(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initView(Object obj) {
+            Class<?> clazz = obj.getClass();//获取该类信息
+            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_View initView = field.getAnnotation(Annotations.GT_View.class);
                 if (initView != null) {
                     int viewId = initView.value();
                     try {
-                        View viewById = view.findViewById(viewId);
                         field.setAccessible(true);
-                        field.set(object, viewById);
+                        if (obj instanceof Activity) {
+                            Activity activity = (Activity) obj;
+                            field.set(obj, activity.findViewById(viewId));
+                        } else if (obj instanceof Fragment) {
+                            Fragment fragment = (Fragment) obj;
+                            View view = fragment.getView();
+                            if (view != null)
+                                field.set(obj, view.findViewById(viewId));
+                        } else {
+                            View view = (View) obj;
+                            field.set(obj, view.findViewById(viewId));
+                        }
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
@@ -18915,8 +20125,8 @@ public class GT {
         /**
          * 注入点击事件
          */
-        private static void initClick(Object object, Class<? extends Object> mClass, View view) {
-            Method[] methods = mClass.getMethods();//获取所有声明为公有的方法
+        private static void initClick(Object obj) {
+            Method[] methods = obj.getClass().getMethods();//获取所有声明为公有的方法
             for (Method method : methods) {//遍历所有公有方法
                 Annotation[] annotations = method.getAnnotations();//获取该公有方法的所有注解
                 for (Annotation annotation : annotations) {//遍历所有注解
@@ -18929,13 +20139,35 @@ public class GT {
                             Class<?> listenerType = onClickEvent.listenerType();//获取接口类型
                             String listenerSetter = onClickEvent.listenerSetter();//获取set方法
                             String methodName = onClickEvent.methodName();//获取接口需要实现的方法
-                            MyInvocationHandler handler = new MyInvocationHandler(object);//自己实现的代码，负责调用
+                            MyInvocationHandler handler = new MyInvocationHandler(obj);//自己实现的代码，负责调用
                             handler.setMethodMap(methodName, method);//设置方法及设置方法
                             Object object2 = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[]{listenerType}, handler);//创建动态代理对象类
-                            for (int viewId : viewIds) {//遍历要设置监听的控件
-                                View view2 = view.findViewById(viewId);//获取该控件
-                                Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                m.invoke(view2, object2);//调用方法
+
+                            if (obj instanceof Activity) {
+                                Activity activity = (Activity) obj;
+                                for (int viewId : viewIds) {//遍历要设置监听的控件
+                                    View view2 = activity.findViewById(viewId);//获取该控件
+                                    Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                    m.invoke(view2, object2);//调用方法
+                                }
+                            } else if (obj instanceof Fragment) {
+                                Fragment fragment = (Fragment) obj;
+                                View view = fragment.getView();
+                                if (view != null) {
+                                    for (int viewId : viewIds) {//遍历要设置监听的控件
+                                        View view2 = view.findViewById(viewId);//获取该控件
+                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                        m.invoke(view2, object2);//调用方法
+                                    }
+                                }
+
+                            } else {
+                                View view = (View) obj;
+                                for (int viewId : viewIds) {//遍历要设置监听的控件
+                                    View view2 = view.findViewById(viewId);//获取该控件
+                                    Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                    m.invoke(view2, object2);//调用方法
+                                }
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -18948,14 +20180,13 @@ public class GT {
         /**
          * 注入 Animation 资源字符串
          **/
-        private static void initAnimation(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
+        private static void initAnimation(Object object) {
+            for (Field field : object.getClass().getDeclaredFields()) {
                 Annotations.GT_Res.GT_Animation initView = field.getAnnotation(Annotations.GT_Res.GT_Animation.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Context context = view.getContext();
+                        Context context = getGT().activity;
                         if (context != null) {
                             Animation animation = AnimationUtils.loadAnimation(context, viewRes);
                             field.setAccessible(true);
@@ -18971,14 +20202,14 @@ public class GT {
         /**
          * 注入 Dimen 资源字符串
          **/
-        private static void initDimen(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initDimen(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Dimen initView = field.getAnnotation(Annotations.GT_Res.GT_Dimen.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        float dimension = view.getResources().getDimension(viewRes);
+                        float dimension = getGT().activity.getResources().getDimension(viewRes);
                         field.setAccessible(true);
                         field.set(object, dimension);
                     } catch (Exception e) {
@@ -18991,14 +20222,14 @@ public class GT {
         /**
          * 注入 Drawable 资源字符串
          **/
-        private static void initDrawable(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initDrawable(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Drawable initView = field.getAnnotation(Annotations.GT_Res.GT_Drawable.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Drawable drawable = view.getResources().getDrawable(viewRes);
+                        Drawable drawable = getGT().activity.getResources().getDrawable(viewRes);
                         field.setAccessible(true);
                         field.set(object, drawable);
                     } catch (Exception e) {
@@ -19011,14 +20242,14 @@ public class GT {
         /**
          * 注入 Color 资源字符串
          **/
-        private static void initColor(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initColor(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Color initView = field.getAnnotation(Annotations.GT_Res.GT_Color.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        int color = view.getResources().getColor(viewRes);
+                        int color = getGT().activity.getResources().getColor(viewRes);
                         field.setAccessible(true);
                         field.set(object, color);
                     } catch (Exception e) {
@@ -19031,15 +20262,14 @@ public class GT {
         /**
          * 注入 String 资源字符串
          **/
-        private static void initString(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initString(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_String initView = field.getAnnotation(Annotations.GT_Res.GT_String.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        String string = view.getResources().getString(viewRes);
+                        String string = getGT().activity.getResources().getString(viewRes);
                         field.setAccessible(true);
                         field.set(object, string);
                     } catch (Exception e) {
@@ -19053,15 +20283,14 @@ public class GT {
         /**
          * 注入 Int 资源字符串数组
          **/
-        private static void initIntArray(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initIntArray(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_IntArray initView = field.getAnnotation(Annotations.GT_Res.GT_IntArray.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        int[] intArray = view.getResources().getIntArray(viewRes);
+                        int[] intArray = getGT().activity.getResources().getIntArray(viewRes);
                         field.setAccessible(true);
                         field.set(object, intArray);
                     } catch (Exception e) {
@@ -19075,15 +20304,14 @@ public class GT {
         /**
          * 注入 String 资源字符串数组
          **/
-        private static void initStringArray(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initStringArray(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_StringArray initView = field.getAnnotation(Annotations.GT_Res.GT_StringArray.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        String[] stringArray = view.getResources().getStringArray(viewRes);
+                        String[] stringArray = getGT().activity.getResources().getStringArray(viewRes);
                         field.setAccessible(true);
                         field.set(object, stringArray);
                     } catch (Exception e) {
@@ -19097,15 +20325,14 @@ public class GT {
         /**
          * 解析 Layout 资源文件成 View
          **/
-        private static void initLayout(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initLayout(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Layout initView = field.getAnnotation(Annotations.GT_Res.GT_Layout.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Context context = view.getContext();
+                        Context context = getGT().activity;
                         if (context != null) {
                             View viewLayout = LayoutInflater.from(context).inflate(viewRes, null);
                             field.setAccessible(true);
@@ -19127,26 +20354,14 @@ public class GT {
          *
          * @param activity
          */
-        private static void initAnnotationActivity(Activity activity, Class<? extends Activity> mClass) {
-            Annotations.GT_AnnotationActivity contentView = mClass.getAnnotation(Annotations.GT_AnnotationActivity.class);//获取该类 ContextView 的注解类
+        private static void initAnnotationActivity(Object obj) {
+            Annotations.GT_AnnotationActivity contentView = obj.getClass().getAnnotation(Annotations.GT_AnnotationActivity.class);//获取该类 ContextView 的注解类
             //如果有注解
             if (contentView != null) {
-                int viewId = contentView.value();//获取注解类参数
-                Method method = null;//获取该方法的信息
-                try {
-                    method = mClass.getMethod("setContentView", int.class);
-                } catch (NoSuchMethodException e) {
-                    e.printStackTrace();
-                }
-                method.setAccessible(true);//获取该方法的访问权限
-                try {
-                    method.invoke(activity, viewId);//TODO 该的方法会产生无用日志 调用该方法的，并设置该方法参数
-                } catch (IllegalAccessException e) {
-//                    e.printStackTrace();
-                    GT.err("e1:" + e);
-                } catch (InvocationTargetException e) {
-//                    e.printStackTrace();
-                    GT.err("e2:" + e);
+                if (obj instanceof Activity) {
+                    Activity activity = (Activity) obj;
+                    int viewId = contentView.value();//获取注解类参数
+                    activity.setContentView(viewId);
                 }
             }
         }
@@ -19157,13 +20372,13 @@ public class GT {
          * @param object
          * @param mClass
          */
-        private static void initAnnotationFragment(Object object, Class<? extends Object> mClass) {
-            Annotations.GT_AnnotationFragment contentView = mClass.getAnnotation(Annotations.GT_AnnotationFragment.class);// 获取该类 ContextView 的注解类
+        private static void initAnnotationFragment(Object object) {
+            Annotations.GT_AnnotationFragment contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationFragment.class);// 获取该类 ContextView 的注解类
             // 如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();// 获取注解类参数
                 try {
-                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
                     method.setAccessible(true);// 获取该方法的访问权限
                     method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
                 } catch (NoSuchMethodException e) {
@@ -19185,13 +20400,41 @@ public class GT {
          * @param object
          * @param mClass
          */
-        private static void initGT_AnnotationDialogFragment(Object object, Class<? extends Object> mClass) {
-            Annotations.GT_AnnotationDialogFragment contentView = mClass.getAnnotation(Annotations.GT_AnnotationDialogFragment.class);// 获取该类 ContextView 的注解类
+        private static void initGT_AnnotationDialogFragment(Object object) {
+            Annotations.GT_AnnotationDialogFragment contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationDialogFragment.class);// 获取该类 ContextView 的注解类
             // 如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();// 获取注解类参数
                 try {
-                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
+                    method.setAccessible(true);// 获取该方法的访问权限
+                    method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
+                } catch (NoSuchMethodException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (IllegalAccessException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (InvocationTargetException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                }
+            }
+        }
+
+        /**
+         * 注解 Fragment
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initGT_AnnotationAdapter(Object object) {
+            Annotations.GT_AnnotationAdapter contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationAdapter.class);// 获取该类 ContextView 的注解类
+            // 如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();// 获取注解类参数
+                try {
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
                     method.setAccessible(true);// 获取该方法的访问权限
                     method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
                 } catch (NoSuchMethodException e) {
@@ -19213,8 +20456,8 @@ public class GT {
          * @param object
          * @param mClass
          */
-        private static void initGT_Fragment(Object object, Class<? extends Object> mClass) {
-            Field[] fields = mClass.getDeclaredFields();//获致当前 Activity 所有成员变更
+        private static void initGT_Fragment(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
             for (Field field : fields) {
                 Object classObject = null;//最终注入的值
 
@@ -19272,18 +20515,138 @@ public class GT {
         }
 
         /**
+         * 注解 GT_SharedPreferences
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initGT_SharedPreferences(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
+            for (Field field : fields) {
+                Object classObject = null;//最终注入的值
+
+                //带参数的
+                GT_SharedPreferences.Build initView_GT_SharedPreferences = field.getAnnotation(GT_SharedPreferences.Build.class);
+
+                //GT_Fragment 注解不为null
+                if (initView_GT_SharedPreferences != null) {
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = (Activity) getGT().getActivity();
+                    GT_SharedPreferences gt_sharedPreferences = null;
+                    if (activity != null) {
+                        //获取注解的值
+                        String spName = initView_GT_SharedPreferences.setSpName();
+                        boolean iSCommit = initView_GT_SharedPreferences.setISCommit();
+                        gt_sharedPreferences = new GT_SharedPreferences(getGT().activity, spName, iSCommit);
+                    }
+                    //实例注入
+                    try {
+                        field.setAccessible(true);
+                        field.set(object, gt_sharedPreferences);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+            }
+        }
+
+        /**
+         * 注解 SerialPortUtils
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initSerialPortUtils(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
+            for (Field field : fields) {
+                Object classObject = null;//最终注入的值
+
+                //带参数的
+                SerialPortUtils.Build initBuild = field.getAnnotation(SerialPortUtils.Build.class);
+
+                //GT_Fragment 注解不为null
+                if (initBuild != null) {
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = (Activity) getGT().getActivity();
+                    GT.SerialPortUtils serialPortUtils = null;
+                    if (activity != null) {
+                        //获取注解的值
+                        String comAll = initBuild.setComAll();
+                        int baudRate = initBuild.setBaudRate();
+                        boolean iSLog = initBuild.setISLog();
+                        serialPortUtils = new GT.SerialPortUtils(getGT().activity, comAll, baudRate);
+                    }
+                    //实例注入
+                    try {
+                        field.setAccessible(true);
+                        field.set(object, serialPortUtils);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+            }
+        }
+
+
+        /**
+         * 注解 TCP
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initTCP(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
+            for (Field field : fields) {
+                Object classObject = null;//最终注入的值
+
+                //带参数的
+                GT.GT_Socket.TCP.Build initBuild = field.getAnnotation(GT.GT_Socket.TCP.Build.class);
+
+                //GT_Fragment 注解不为null
+                if (initBuild != null) {
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = (Activity) getGT().getActivity();
+                    GT.GT_Socket.TCP tcp = null;
+                    if (activity != null) {
+                        //获取注解的值
+                        String iP = initBuild.setIP();
+                        int port = initBuild.setPort();
+                        if (iP == null || "null".equals(iP)) {
+                            tcp = new GT.GT_Socket.TCP(port);
+                        } else {
+                            tcp = new GT.GT_Socket.TCP(iP, port);
+                        }
+                    }
+                    //实例注入
+                    try {
+                        field.setAccessible(true);
+                        field.set(object, tcp);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+            }
+        }
+
+        /**
          * 注入 悬浮窗
          *
          * @param object
          * @param mClass
          */
-        private static void initAnnotationWindow(Object object, Class<? extends Object> mClass) {
-            Annotations.GT_AnnotationFloatingWindow contentView = mClass.getAnnotation(Annotations.GT_AnnotationFloatingWindow.class);// 获取该类 ContextView 的注解类
+        private static void initAnnotationWindow(Object object) {
+            Annotations.GT_AnnotationFloatingWindow contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationFloatingWindow.class);// 获取该类 ContextView 的注解类
             // 如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();// 获取注解类参数
                 try {
-                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
                     method.setAccessible(true);// 获取该方法的访问权限
                     method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
                 } catch (NoSuchMethodException e) {
@@ -19297,174 +20660,6 @@ public class GT {
                     GT.errs("e:" + e);
                 }
             }
-        }
-
-
-        /**
-         * 解析 Layout 资源文件成 View
-         **/
-        private static void initLayout(Activity activity, Class<? extends Activity> clazz) {
-
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Layout initView = field.getAnnotation(Annotations.GT_Res.GT_Layout.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        View view = LayoutInflater.from(activity).inflate(viewRes, null);
-                        field.setAccessible(true);
-                        field.set(activity, view);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
-        }
-
-        /**
-         * 注入 Int 资源字符串数组
-         **/
-        private static void initIntArray(Activity activity, Class<? extends Activity> clazz) {
-
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_IntArray initView = field.getAnnotation(Annotations.GT_Res.GT_IntArray.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        int[] intArray = activity.getResources().getIntArray(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, intArray);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
-        }
-
-        /**
-         * 注入 String 资源字符串数组
-         **/
-        private static void initStringArray(Activity activity, Class<? extends Activity> clazz) {
-
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_StringArray initView = field.getAnnotation(Annotations.GT_Res.GT_StringArray.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        String[] stringArray = activity.getResources().getStringArray(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, stringArray);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
-        }
-
-        /**
-         * 注入 Animation 资源字符串
-         **/
-        private static void initAnimation(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Animation initView = field.getAnnotation(Annotations.GT_Res.GT_Animation.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        Animation animation = AnimationUtils.loadAnimation(activity, viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, animation);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 Dimen 资源字符串
-         **/
-        private static void initDimen(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Dimen initView = field.getAnnotation(Annotations.GT_Res.GT_Dimen.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        float dimension = activity.getResources().getDimension(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, dimension);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 Drawable 资源字符串
-         **/
-        private static void initDrawable(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Drawable initView = field.getAnnotation(Annotations.GT_Res.GT_Drawable.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        Drawable drawable = activity.getResources().getDrawable(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, drawable);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 Color 资源字符串
-         **/
-        private static void initColor(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Color initView = field.getAnnotation(Annotations.GT_Res.GT_Color.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        int color = activity.getResources().getColor(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, color);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 String 资源字符串
-         **/
-        private static void initString(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_String initView = field.getAnnotation(Annotations.GT_Res.GT_String.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        String string = activity.getResources().getString(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, string);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
         }
 
         /**
@@ -19695,69 +20890,6 @@ public class GT {
 
         }
 
-        /**
-         * 注入控件
-         *
-         * @param activity
-         */
-        private static void initView(Activity activity, Class<? extends Activity> mClass) {
-
-            if (activity == null || mClass == null) return;
-
-            Class<? extends Activity> clazz = activity.getClass();//获取该类信息
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_View initView = field.getAnnotation(Annotations.GT_View.class);
-                if (initView != null) {
-                    int viewId = initView.value();
-                    try {
-                        Method method = clazz.getMethod("findViewById", int.class);
-                        method.setAccessible(true);
-                        field.setAccessible(true);
-                        Object object = method.invoke(activity, viewId);
-                        field.set(activity, object);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入点击事件
-         *
-         * @param activity
-         */
-        private static void initClick(Activity activity, Class<? extends Activity> mClass) {
-            Method[] methods = mClass.getMethods();//获取所有声明为公有的方法
-            for (Method method : methods) {//遍历所有公有方法
-                Annotation[] annotations = method.getAnnotations();//获取该公有方法的所有注解
-                for (Annotation annotation : annotations) {//遍历所有注解
-                    Class<? extends Annotation> annotationType = annotation.annotationType();//获取具体的注解类
-                    Annotations.OnClickEvent onClickEvent = annotationType.getAnnotation(Annotations.OnClickEvent.class);//取出注解的onClickEvent注解
-                    if (onClickEvent != null) {//如果不为空
-                        try {
-                            Method valueMethod = annotationType.getDeclaredMethod("value");//获取注解InjectOnClick的value方法
-                            int[] viewIds = (int[]) valueMethod.invoke(annotation, (Object[]) null);//获取控件值
-                            Class<?> listenerType = onClickEvent.listenerType();//获取接口类型
-                            String listenerSetter = onClickEvent.listenerSetter();//获取set方法
-                            String methodName = onClickEvent.methodName();//获取接口需要实现的方法
-                            MyInvocationHandler handler = new MyInvocationHandler(activity);//自己实现的代码，负责调用
-                            handler.setMethodMap(methodName, method);//设置方法及设置方法
-                            Object object = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[]{listenerType}, handler);//创建动态代理对象类
-                            for (int viewId : viewIds) {//遍历要设置监听的控件
-                                View view = activity.findViewById(viewId);//获取该控件
-                                Method m = view.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                m.invoke(view, object);//调用方法
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            }
-        }
-
 
         /**
          * 初始化注解帮助类
@@ -19860,8 +20992,6 @@ public class GT {
          * @param runnable
          */
         public static void runAndroid(Runnable runnable) {
-
-
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 runnable.run();
             } else {
@@ -20145,8 +21275,6 @@ public class GT {
 
 //=============================================== 黑科技 ===================================================
 
-
-
     /**
      * 黑魔法类
      */
@@ -20181,9 +21309,1656 @@ public class GT {
          * 1.隐藏到后台许久后无法再次召唤出来
          * 2.点击一些系统应用时会被杀死
          */
+        /*public static class GT_FloatingWindow {
 
-        
+            public static boolean isOpenLog = false;//有日志时判断是否发送广播
 
+            @GT.Annotations.GT_AnnotationFloatingWindow(R.layout.floating_main)
+            public static class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindowBase implements View.OnClickListener {
+
+                //组件加载
+                @GT.Annotations.GT_View(R.id.tv_shutdown)
+                protected TextView tv_shutdown;//开关机提示
+                @GT.Annotations.GT_View(R.id.cl_close)
+                private View cl_close;//开关机整体页面
+                @GT.Annotations.GT_View(R.id.cb_expansion)
+                protected CheckBox cb_expansion;//放大缩小按钮
+                @GT.Annotations.GT_View(R.id.cl_title)
+                private View cl_title;//缩小状态栏
+                @GT.Annotations.GT_View(R.id.ll_bottom)
+                private View ll_bottom;//下面按钮
+                @GT.Annotations.GT_View(R.id.ll_StatusBar_titleAll)
+                private View ll_StatusBar_titleAll;//展开状态栏
+                @GT.Annotations.GT_View(R.id.sv_StatusBar_titleData)
+                private ScrollView sv_StatusBar_titleData;//状态栏最顶端容器
+                @GT.Annotations.GT_View(R.id.ll_statusBar_set)
+                private View ll_statusBar_set;//状态栏内装功能的容器
+                @GT.Annotations.GT_View(R.id.view_bg_floating_title)
+                private View view_bg_floating_title;//展开状态栏后显示的背景黑色
+                @GT.Annotations.GT_View(R.id.tv_statusBar_message)
+                private TextView tv_statusBar_message;//状态栏内的消息提示
+                @GT.Annotations.GT_View(R.id.sb_diaphaneity)
+                private SeekBar sb_diaphaneity;//状态栏内的透明度调节拖动条
+                @GT.Annotations.GT_View(R.id.sb_width)
+                private SeekBar sb_width;//宽度拖动条
+                @GT.Annotations.GT_View(R.id.sb_height)
+                private SeekBar sb_height;//高度拖动条
+                @GT.Annotations.GT_View(R.id.flowLayout)
+                private GT.ViewUtils.FlowLayout flowLayout;//装APP容器
+                @GT.Annotations.GT_View(R.id.sv)
+                private View sv;//APP图标滑动组件
+                @GT.Annotations.GT_View(R.id.sv_find)
+                private SearchView sv_find;//搜索组件
+                @GT.Annotations.GT_View(R.id.fl_main)
+                private ViewGroup fl_main; //界面容器
+                @GT.Annotations.GT_View(R.id.iv_fillTop)
+                private ImageView iv_fillTop;//全屏最顶部
+
+                //创建内置APP工具
+                private UtilsGTApp utilsGTApp = new UtilsGTApp();
+                //创建工具
+                private Utils utils = new Utils();
+                //创建动画库
+                public final GT.GT_Animation animation = new GT.GT_Animation();
+                //内置APP
+                private final String[] GTApp = {
+                        "LOG", "SQL", "F栈",
+                };
+                //用于存储本次加载的APP
+                private final Map<String, View> viewMap = new HashMap<>();
+                //记录原始的宽高,用于重置初始化
+                private int originalWidth = 0;
+                private int originalHeight = 0;
+
+
+                @Override
+                protected void initView(View view) {
+                    super.initView(view);
+                    setDrag(true);//设置可拖动
+                    utils.loadApp();//加载安装系统内部APP
+                    //记录原始宽高
+                    originalWidth = getLayoutParams().width;
+                    originalHeight = getLayoutParams().height;
+                }
+
+                @SuppressLint({"NewApi", "UseCompatLoadingForDrawables"})
+                @Override
+                protected void loadData(Context context, Intent intent, View view) {
+                    super.loadData(context, intent, view);
+                    registerReceiver(utils.mBroadcastReceiver, new IntentFilter(Utils.ACTION));//单击事件 注册广播
+                    utils.setTitleListener(sv_find); //设置状态栏事件
+                    animation.translateY_T(0, -getHeight(), 1, 0, false, ll_StatusBar_titleAll);//状态栏默认收起来
+                    utils.setStatusBarShrinkListener(tv_statusBar_message, true);//设置状态栏内部上滑收缩事件
+                    utils.setStatusBarShrinkListener(sv_StatusBar_titleData, false);//设置状态栏内部上滑收缩事件
+                    utils.setStatusBarDiaphaneityDrag(sb_diaphaneity);//设置透明度拖动事件
+
+                    //创建屏幕拖动条参数
+                    sb_width.setMax(getWidth());//设置宽度拖动最大值
+                    sb_width.setProgress(getLayoutParams().width);//设置宽度拖动当前值
+                    sb_height.setMax(getHeight());//设置高度拖动最大值
+                    sb_height.setProgress(getLayoutParams().height);//设置高度拖动当前值
+                    utils.setStatusBarWidthDrag(sb_width);//设置状态栏宽度拖动事件
+                    utils.setStatusBarHeightDrag(sb_height);//设置状态栏高度拖动事件
+
+                    cl_close.setOnTouchListener(new FloatingOnTouchListener_Close());//开关机界面可拖动界面
+                    utils.setSearchEvent(sv_find);//设置搜索框事件
+                    flowLayout.removeAllViews();//清空所有组件
+                    fl_main.removeAllViews();//清空所有组件
+
+                    //APP单击
+                    for (int i = 0; i < GTApp.length; i++) {
+                        View item_app_ico = LayoutInflater.from(this).inflate(R.layout.item_app_ico, null);
+                        TextView tv_appName = item_app_ico.findViewById(R.id.tv_appName);
+                        ImageView iv_icon = item_app_ico.findViewById(R.id.iv_icon);
+                        iv_icon.setImageDrawable(getDrawable(R.mipmap.gt_logo));
+                        tv_appName.setText(GTApp[i]);
+                        flowLayout.addView(item_app_ico);//添加APP
+                        item_app_ico.setOnClickListener(this);
+                        //将APP存储到容器中
+                        viewMap.put(tv_appName.getText().toString(), item_app_ico);
+                    }
+
+                    //初始化页面
+                    isOpenLog = false;
+
+                }
+
+                //内置APP功能
+                @Override
+                public void onClick(View v) {
+                    TextView tv_appName = v.findViewById(R.id.tv_appName);
+                    String appName = tv_appName.getText().toString();
+//        GT.log("单击了:" + appName);
+                    switch (appName) {
+                        case "LOG":
+                            View view = utilsGTApp.initLog();
+                            utils.setDoubleClickFullScreen(view);//设置双击全屏
+                            fl_main.addView(view);
+                            break;
+                        case "SQL":
+                            view = utilsGTApp.initSQL();
+                            utils.setDoubleClickFullScreen(view);//设置双击全屏
+                            fl_main.addView(view);
+                            break;
+                        case "F栈":
+                            view = utilsGTApp.initFStack();
+                            utils.setDoubleClickFullScreen(view);//设置双击全屏
+                            fl_main.addView(view);
+                            break;
+                        default:
+
+                            break;
+                    }
+
+                }
+
+                //小手机事件
+                @SuppressLint("ResourceType")
+                @GT.Annotations.GT_Click({
+                        R.id.tv_hide, R.id.cb_expansion, R.id.tv_close, R.id.cl_title, //上面
+
+                        R.id.tv_statusBar_message, R.id.iv_cut, R.id.iv_reset, R.id.iv_fill, R.id.iv_fillTop, //状态栏内的
+
+                        R.id.tv_back, R.id.tv_home, R.id.tv_task,       //下面
+                })
+                public void onClickView(View view) {
+                    switch (view.getId()) {
+                        //上面
+                        case R.id.cl_title://状态栏
+                            if (utils.operationType == 2) return;//屏蔽掉长按事件的冲突
+                            utils.isUnfold = true;
+                            utils.setStatusBarBgHide(true);
+                            animation.translateY_T(-getHeight(), 0, 500, 0, false, ll_StatusBar_titleAll);
+//                GT.log("单击 状态栏");
+                            break;
+                        case R.id.tv_hide://隐藏按钮
+                            utils.sendCustomViewNotification();//发送通知
+                            hide();//隐藏GT小白
+                            break;
+                        case R.id.cb_expansion://切换屏幕大小
+                            utils.changeSize();
+                            break;
+                        case R.id.tv_close://关机
+                            utils.shutdown(false, 100);//关机且设置持续时间
+                            break;
+
+
+                        //状态栏内
+                        case R.id.tv_statusBar_message://状态栏内的消息提示
+                            animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
+                            utils.setStatusBarBgHide(false);
+                            utils.isUnfold = false;
+                            tv_statusBar_message.setText("暂无通知");
+//                GT.log("单击 暂无通知");
+                            break;
+                        case R.id.iv_cut://切换竖屏横屏
+//                GT.log("切换");
+                            int tmp_w = getLayoutParams().width;
+                            int tmp_h = getLayoutParams().height;
+                            getLayoutParams().width = tmp_h;
+                            getLayoutParams().height = tmp_w;
+                            updateView();
+                            break;
+                        case R.id.iv_reset://重置窗体属性
+                            sb_diaphaneity.setProgress(0);
+                            sb_width.setProgress(originalWidth);
+                            sb_height.setProgress(originalHeight);
+                            view.setAlpha(1);
+                            getLayoutParams().width = originalWidth;
+                            getLayoutParams().height = originalHeight;
+                            updateView();
+                            break;
+                        case R.id.iv_fill://充满全屏
+                        case R.id.iv_fillTop:
+                            //执行双击全屏操作
+                            utils.isFullScreen = !utils.isFullScreen;
+                            utils.setIsFullScreen(utils.isFullScreen);
+                            break;
+
+
+                        //下面三个按钮
+                        case R.id.tv_back:
+//                GT.log("返回上级");
+                            GT.toast(context, "返回上级");
+                            if (utils.isUnfold) {
+//                    GT.log("进入返回上级");
+                                utils.isUnfold = false;
+                                utils.setStatusBarBgHide(false);
+                                animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
+                                return;
+                            }
+
+                            if (utilsGTApp.hierarchyNumber > 0) {
+                                utilsGTApp.hierarchyNumber--;
+                            }
+
+                            //退出栈顶界面
+                            onBackPressed();
+                            break;
+                        case R.id.tv_home:
+//                GT.log("返回桌面");
+//                GT.toast(context, "返回桌面");
+                            utils.backAllFrame();//退出所有内置APP
+                            break;
+                        case R.id.tv_task:
+//                GT.log("浏览任务");
+//                GT.toast(context, "浏览任务");
+                            for (int i = 0; i < fl_main.getChildCount(); i++) {
+                                View childAt = fl_main.getChildAt(i);
+//                    GT.log("TAG:" + childAt);
+                            }
+                            break;
+
+
+                    }
+                }
+
+                *//**
+         * 设置开关机界面的窗体拖动事件
+         *//*
+                public class FloatingOnTouchListener_Close implements View.OnTouchListener {
+                    private int x;
+                    private int y;
+
+                    @Override
+                    public boolean onTouch(View view, MotionEvent event) {
+                        switch (event.getAction()) {
+                            case MotionEvent.ACTION_DOWN:
+                                x = (int) event.getRawX();
+                                y = (int) event.getRawY();
+                                break;
+                            case MotionEvent.ACTION_MOVE:
+                                int nowX = (int) event.getRawX();
+                                int nowY = (int) event.getRawY();
+                                int movedX = nowX - x;
+                                int movedY = nowY - y;
+                                x = nowX;
+                                y = nowY;
+                                getLayoutParams().x = getLayoutParams().x + movedX;
+                                getLayoutParams().y = getLayoutParams().y + movedY;
+                                updateView();
+                                break;
+                            default:
+                                break;
+                        }
+                        return true;
+                    }
+                }
+
+                *//**
+         * 工具类
+         *//*
+                class Utils {
+
+                    //记录旧的宽高
+                    protected int oldWidth;
+                    protected int oldHeight;
+                    //发送通知栏
+                    public static final String ACTION = "召唤";    //动作1
+                    public static final int NOTIFICATION_ID = 0x1079;    //通知ID
+                    //状态栏下滑展开
+                    private float x, oldX;  //记录位置X
+                    private float y, oldY;  //记录位置Y
+                    private final int slidingRate = 50;//所有手势滑动的速率
+                    private int operationType = -1;//默认(无事件)：-1、滑动：0、下拉状态栏：1、长按事件：2
+                    private float pullY = 0;//下拉Y位置
+                    private float alphaBG = 0.00f;//下拉时具体显示渐变色
+                    private boolean isUnfold = false;//状态栏是否展开
+                    private float topMax = 0;//拉到底部后的最大值
+                    private float bgTransparencyValue = 0.8f;//状态栏背景透明度
+                    //状态栏中下拉与上提的返回类型
+                    private boolean returnType = false;//如果按下位置与抬起位置是一致的，那就判定为单击返回 false,否则返回 true 滑动事件
+                    private boolean isFullScreen = false;//是否全屏
+                    //实现双击功能的参数
+                    private long DOUBLE_TIME = 300;
+                    private long lastClickTime = 0;
+                    //下面三个按钮是否需要触发
+                    public boolean isBottom = false;//默认是需要去触发的，如果设置喂true,那就说明是触摸消耗了事件
+
+                    public Utils() {
+                    }
+
+                    *//**
+         * 提示吐司
+         *
+         * @param msg
+         *//*
+                    public void toast(Object msg) {
+                        GT.Thread.runAndroid(new Runnable() {
+                            @Override
+                            public void run() {
+                                GT.toast(context, String.valueOf(msg));
+                            }
+                        });
+                    }
+
+                    *//**
+         * 切换屏幕大小
+         *//*
+                    private void changeSize() {
+                        if (cb_expansion.isChecked()) {
+                            //记录原始大小
+                            oldWidth = getLayoutParams().width;
+                            oldHeight = getLayoutParams().height;
+                            //设置界面最大
+                            getLayoutParams().width = getWidth();
+                            getLayoutParams().height = getHeight();
+                        } else {
+                            //还原原始大小
+                            getLayoutParams().width = oldWidth;
+                            getLayoutParams().height = oldHeight;
+                        }
+                        updateView();//更新界面
+                    }
+
+                    *//**
+         * 开关机
+         *
+         * @param startOrClose 是否开关机
+         * @param time         设置关机等待时间
+         *//*
+                    private void shutdown(boolean startOrClose, int time) {
+                        GT.Thread.runJava(new Runnable() {
+                            @Override
+                            public void run() {
+                                GT.Thread.runAndroid(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        cl_close.setVisibility(View.VISIBLE);//显示开关机组件
+                                        if (startOrClose) {
+                                            tv_shutdown.setText("开机");
+                                        } else {
+                                            tv_shutdown.setText("关机");
+
+                                        }
+                                    }
+                                });
+                                GT.Thread.sleep(time);
+                                GT.Thread.runAndroid(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (startOrClose) {
+                                            cl_close.setVisibility(View.GONE);//隐藏开关机组件
+                                        } else {
+                                            finish();
+                                        }
+
+                                    }
+                                });
+
+                            }
+                        });
+                    }
+
+                    *//**
+         * 发送通知栏
+         *//*
+                    private NotificationManagerCompat notificationManagerCompat;
+
+                    public void sendCustomViewNotification() {
+
+                        //加载自定义布局
+                        RemoteViews remoteViews = new RemoteViews(getPackageName(), R.layout.item_notification);//普通 normal_notification 用到的视图
+
+                        //直接更新 通知栏上的 UI 组件方法 ，但并不能进行监听
+//        remoteViews.setTextViewText(R.id.tv_data, "点击召唤小白");//更新 textView 的内容
+//        remoteViews.setImageViewResource(R.id.iv_head, R.mipmap.gt_logo);
+
+                        //这下面则是发送通知的
+                        String channelId = createNotificationChannel(getApplicationContext());//创建Notification Channel
+                        final NotificationCompat.Builder builder = new NotificationCompat.Builder(context, channelId);//创建Notification并与Channel关联
+
+                        builder.setSmallIcon(R.mipmap.gt_logo);
+                        builder.setTicker("GT-小白");
+                        builder.setOngoing(true);
+                        builder.setAutoCancel(true);//跳转后消失
+                        builder.setContent(remoteViews);//设置普通notification视图 将自定义布局设置为 通知栏的布局
+                        builder.setCustomBigContentView(remoteViews);//设置显示bigView的notification视图
+                        builder.setPriority(NotificationCompat.PRIORITY_MAX);//设置最大优先级
+
+
+                        //单击后跳转回 主页面
+//            Intent intent = new Intent(context, MainActivity.class);
+//            PendingIntent pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+//            builder.setContentIntent(pi);//设置通知栏 点击跳转
+
+                        //设置单击后发布的广播
+                        Intent intent_music_left = new Intent("召唤");
+                        PendingIntent pendingIntent_music_left = PendingIntent.getBroadcast(context, 0, intent_music_left, PendingIntent.FLAG_UPDATE_CURRENT);
+                        remoteViews.setOnClickPendingIntent(R.id.tv_data, pendingIntent_music_left);
+                        remoteViews.setOnClickPendingIntent(R.id.iv_head, pendingIntent_music_left);
+
+                        //创建一个启动详细页面的 Intent 对象
+//            Intent[] intent = new Intent[]{new Intent(GT_Floating.this, MainActivity.class)};
+//            PendingIntent pi = PendingIntent.getActivities(context,0,intent,0);
+//            builder.setContentIntent(pi);//设置通知栏 点击跳转
+
+                        //发布通知
+                        notificationManagerCompat = NotificationManagerCompat.from(getApplicationContext());
+                        notificationManagerCompat.notify(NOTIFICATION_ID, builder.build());
+
+                    }
+
+                    private String createNotificationChannel(Context context) {
+                        // O (API 26)及以上版本的通知需要NotificationChannels。
+                        if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            // 初始化NotificationChannel。
+                            NotificationChannel notificationChannel = new NotificationChannel("com.gsls.king", "GT-应用", NotificationManager.IMPORTANCE_DEFAULT);
+                            notificationChannel.setDescription("GT 小白等待您的召唤");
+                            // 向系统添加 NotificationChannel。试图创建现有通知
+                            // 通道的初始值不执行任何操作，因此可以安全地执行
+                            // 启动顺序
+                            NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                            notificationManager.createNotificationChannel(notificationChannel);
+                            return "com.gsls.king";
+                        } else {
+                            return null; // 为pre-O(26)设备返回 null
+                        }
+                    }
+
+                    // 声明一个广播用于接受单击状态栏
+                    public BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+                        @Override
+                        public void onReceive(Context context, Intent intent) {
+                            if (intent.getAction().equals(ACTION)) { //弹出广播
+                                show();//显示GT小白
+                                notificationManagerCompat.cancel(NOTIFICATION_ID);//清除当前 id 为 NOTIFICATION_ID 的通知
+                            }
+                        }
+                    };
+
+
+                    *//**
+         * 设置状态栏下滑展开
+         *
+         * @param cl_view
+         *//*
+                    @RequiresApi(api = Build.VERSION_CODES.N)
+                    @SuppressLint("ClickableViewAccessibility")
+                    public void setTitleListener(View cl_view) {
+
+                        cl_view.setOnLongClickListener(new View.OnLongClickListener() {
+                            @Override
+                            public boolean onLongClick(View v) {
+//                    GT.log("开始锁定事件");
+                                if (operationType == 0) return false;//如果是正在拖动，那就拦截长按锁定功能
+                                if (isDrag()) {
+                                    utils.toast("已锁定");
+                                    setDrag(false);
+                                } else {
+                                    utils.toast("已解锁");
+                                    setDrag(true);
+                                }
+                                operationType = 2;//赋值为长按事件
+                                return false;
+                            }
+                        });
+
+                        //设置状态栏下拉、上滑、左滑、右滑事件
+                        cl_view.setOnTouchListener((v, event) -> {
+                            switch (event.getAction()) {
+                                case MotionEvent.ACTION_DOWN://按下
+                                    //如果展开状态没有显示那就显示
+                                    if (ll_StatusBar_titleAll.getVisibility() != View.VISIBLE) {
+                                        ll_StatusBar_titleAll.setVisibility(View.VISIBLE);//显示状态栏
+                                    }
+                                    if (view_bg_floating_title.getVisibility() != View.VISIBLE) {
+                                        view_bg_floating_title.setVisibility(View.VISIBLE);//显示状态栏渐变色
+                                    }
+                                    oldX = (int) event.getRawX();
+                                    oldY = (int) event.getRawY();
+                                    //初始化
+                                    alphaBG = 0f;
+                                    operationType = -1;
+                                    topMax = -1;
+//                        GT.log("按下 X:" + oldX + " Y:" + oldY);
+                                    break;
+                                case MotionEvent.ACTION_UP://抬起
+                                    x = (int) event.getRawX();
+                                    y = (int) event.getRawY();
+
+                                    if (oldX == x && oldY == y) {
+                                        returnType = false;
+                                        cl_title.performClick();//多加一个点击事件
+                                    } else {
+                                        returnType = true;
+                                    }
+//                        GT.log("抬起1:" + returnType + " X:" + x + " Y:" + y);
+
+                                    //如果之前做的是下拉动作
+                                    if (operationType == 1) {
+//                            GT.log("ll_StatusBar_titleAll.getY():" + ll_StatusBar_titleAll.getY());
+                                        if (ll_StatusBar_titleAll.getY() == topMax) {//下拉到顶了
+                                            isUnfold = true;
+                                        } else if (event.getY() >= (getLayoutParams().height / 4)) {//下拉到展开状态，进行展开操作
+                                            animation.translateY_T(pullY, 0, 500, 0, false, ll_StatusBar_titleAll);
+                                            isUnfold = true;
+                                        } else {//未下拉到展开状态，进行收缩回去
+                                            animation.translateY_T(pullY, -getHeight() - pullY, 500, 0, false, ll_StatusBar_titleAll);
+                                            isUnfold = false;
+                                            setStatusBarBgHide(false);
+                                        }
+                                    }
+
+                                    break;
+                                case MotionEvent.ACTION_MOVE://移动
+                                    int nowX = (int) event.getRawX();
+                                    int nowY = (int) event.getRawY();
+                                    int movedX = (int) (nowX - x);
+                                    int movedY = (int) (nowY - y);
+                                    x = nowX;
+                                    y = nowY;
+//                            GT.log("滑动X:" + movedX + " Y:" + movedY);
+                                    if ((x - oldX >= slidingRate || x - oldX <= Math.negateExact(slidingRate)) && (operationType == -1 || operationType == 0) && isDrag()) {
+                                        getLayoutParams().x = getLayoutParams().x + movedX;
+                                        getLayoutParams().y = getLayoutParams().y + movedY;
+                                        updateView();
+                                        operationType = 0;//赋值为滑动
+                                    } else {
+                                        if (y - oldY >= slidingRate && (operationType == -1 || operationType == 1)) {
+                                            //下拉状态栏逻辑
+                                            if (event.getY() <= (getLayoutParams().height / 2) - (slidingRate / 2)) {//设置下拉限度
+                                                pullY = event.getY() - (getLayoutParams().height / 2);
+                                                animation.translateY_T(pullY, pullY, 10, 0, false, ll_StatusBar_titleAll);
+                                                //下拉渐变色
+                                                alphaBG += movedY * 0.005;
+                                                if (alphaBG > bgTransparencyValue) {//状态栏背景色显示限制
+                                                    alphaBG = bgTransparencyValue;
+                                                }
+                                                view_bg_floating_title.setAlpha(alphaBG);
+                                            } else {//拉到顶了
+                                                topMax = ll_StatusBar_titleAll.getY();
+                                                animation.translateY_T(pullY, 0, 0, 0, false, ll_StatusBar_titleAll);
+                                                view_bg_floating_title.setAlpha(bgTransparencyValue);
+                                            }
+                                            operationType = 1;
+                                        } else if (y - oldY <= Math.negateExact(slidingRate) && (operationType == -1 || operationType == 0) && isDrag()) {
+                                            getLayoutParams().x = getLayoutParams().x + movedX;
+                                            getLayoutParams().y = getLayoutParams().y + movedY;
+                                            updateView();
+                                            operationType = 0;//赋值为滑动
+                                        }
+                                    }
+                                    break;
+                                default:
+                                    break;
+                            }
+//                GT.log("抬起1返回:" + returnType);
+                            return returnType;
+                        });
+                    }
+
+                    *//**
+         * 设置点击无法穿透
+         *
+         * @param view
+         *//*
+                    public View setNotClickPenetrate(View view) {
+                        view.setOnTouchListener(new View.OnTouchListener() {
+
+                            @Override
+                            public boolean onTouch(View v, MotionEvent event) {
+                                return true;
+                            }
+                        });
+                        return view;
+                    }
+
+                    *//**
+         * 隐藏状态栏背景
+         *//*
+                    public void setStatusBarBgHide(boolean tf) {
+
+                        view_bg_floating_title.setVisibility(View.VISIBLE);
+
+                        GT.Thread.runJava(new Runnable() {
+                            @Override
+                            public void run() {
+
+                                if (!tf) {
+                                    float value = bgTransparencyValue;
+                                    while (true) {
+                                        value -= 0.03;
+                                        if (value <= 0) break;
+                                        float finalValue = value;
+                                        GT.Thread.runAndroid(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                view_bg_floating_title.setAlpha(finalValue);
+                                            }
+                                        });
+                                        GT.Thread.sleep(10);
+                                    }
+                                    GT.Thread.runAndroid(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            view_bg_floating_title.setVisibility(View.GONE);
+                                        }
+                                    });
+                                } else {
+                                    float value = 0f;
+                                    while (true) {
+                                        value += 0.03;
+                                        if (value >= bgTransparencyValue) break;
+                                        float finalValue = value;
+                                        GT.Thread.runAndroid(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                view_bg_floating_title.setAlpha(finalValue);
+                                            }
+                                        });
+                                        GT.Thread.sleep(10);
+                                    }
+                                }
+
+
+                            }
+                        });
+
+                    }
+
+                    *//**
+         * 设置状态栏内部的收缩事件
+         *
+         * @param view
+         *//*
+                    @SuppressLint("ClickableViewAccessibility")
+                    public void setStatusBarShrinkListener(View view, boolean isClick) {
+                        //设置状态栏上滑事件
+                        view.setOnTouchListener((v, event) -> {
+                            switch (event.getAction()) {
+                                case MotionEvent.ACTION_DOWN://按下
+                                    oldX = (int) event.getRawX();
+                                    oldY = (int) event.getRawY();
+//                        GT.log("按下 X:" + oldX + " Y:" + oldY);
+                                    break;
+                                case MotionEvent.ACTION_UP://抬起
+                                    x = (int) event.getRawX();
+                                    y = (int) event.getRawY();
+                                    if (oldX == x && oldY == y) {
+                                        returnType = false;
+                                        if (isClick)
+                                            tv_statusBar_message.performClick();//多加一个点击事件
+                                    } else {
+                                        returnType = true;
+                                    }
+//                        GT.log("抬起2:" + returnType + " X:" + x + " Y:" + y);
+                                    break;
+                                case MotionEvent.ACTION_MOVE://移动
+                                    int nowY = (int) event.getRawY();
+                                    y = nowY;
+                                    if (oldY - nowY >= slidingRate) {
+                                        //直接划掉
+                                        isUnfold = false;
+                                        animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
+                                        setStatusBarBgHide(false);
+                                        tv_statusBar_message.setText("暂无通知");
+                                    }
+                                    break;
+                                default:
+                                    break;
+                            }
+//                GT.log("抬起2返回:" + returnType);
+                            return returnType;
+                        });
+                    }
+
+                    *//**
+         * 设置状态栏中的 透明度拖动条
+         *
+         * @param seekBar
+         *//*
+                    public void setStatusBarDiaphaneityDrag(SeekBar seekBar) {
+                        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                            @Override
+                            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+//                    GT.log("当前进度:" + progress);
+                                tv_statusBar_message.setText("透明度:" + progress + "%");
+                                float v = (float) ((seekBar.getMax() - progress) * 0.01);
+                                getView().setAlpha(v);
+                            }
+
+                            @Override
+                            public void onStartTrackingTouch(SeekBar seekBar) {
+//                    GT.log("开始进度:" + seekBar.getProgress());
+                            }
+
+                            @Override
+                            public void onStopTrackingTouch(SeekBar seekBar) {
+//                    GT.log("进度:" + seekBar.getProgress());
+                            }
+                        });
+                    }
+
+                    *//**
+         * 设置状态栏中宽度拖动条事件
+         *
+         * @param seekBar
+         *//*
+                    public void setStatusBarWidthDrag(SeekBar seekBar) {
+                        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                            @Override
+                            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                                tv_statusBar_message.setText("宽度:" + progress + "px");
+                            }
+
+                            @Override
+                            public void onStartTrackingTouch(SeekBar seekBar) {
+//                    GT.log("开始进度:" + seekBar.getProgress());
+                            }
+
+                            @Override
+                            public void onStopTrackingTouch(SeekBar seekBar) {
+//                    GT.log("进度:" + seekBar.getProgress());
+                                getLayoutParams().width = seekBar.getProgress();
+                                updateView();
+                            }
+                        });
+                    }
+
+                    *//**
+         * 设置状态栏中高度拖动条事件
+         *
+         * @param seekBar
+         *//*
+                    public void setStatusBarHeightDrag(SeekBar seekBar) {
+                        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                            @Override
+                            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                                tv_statusBar_message.setText("高度:" + progress + "px");
+
+                            }
+
+                            @Override
+                            public void onStartTrackingTouch(SeekBar seekBar) {
+//                    GT.log("开始进度:" + seekBar.getProgress());
+                            }
+
+                            @Override
+                            public void onStopTrackingTouch(SeekBar seekBar) {
+//                    GT.log("进度:" + seekBar.getProgress());
+                                getLayoutParams().height = seekBar.getProgress();
+                                updateView();
+                            }
+                        });
+                    }
+
+                    *//**
+         * 设置全图
+         *
+         * @param isFullScreen
+         *//*
+                    public void setIsFullScreen(boolean isFullScreen) {
+                        if (isFullScreen) {
+                            cl_title.setVisibility(View.GONE);
+                            ll_bottom.setVisibility(View.GONE);
+                            iv_fillTop.setVisibility(View.VISIBLE);
+                        } else {
+                            cl_title.setVisibility(View.VISIBLE);
+                            ll_bottom.setVisibility(View.VISIBLE);
+                            iv_fillTop.setVisibility(View.GONE);
+                        }
+                    }
+
+                    *//**
+         * 设置双击全屏
+         *//*
+                    @SuppressLint("ClickableViewAccessibility")
+                    public View setDoubleClickFullScreen(View flowLayout) {
+                        flowLayout.setOnTouchListener((v, event) -> {
+                            switch (event.getAction()) {
+                                case MotionEvent.ACTION_DOWN://按下
+                                    long currentTimeMillis = System.currentTimeMillis();
+                                    if (currentTimeMillis - lastClickTime < DOUBLE_TIME) {//如果双击的时间在300毫秒之内就执行双击操作
+                                        //执行双击全屏操作
+                                        if (isFullScreen) {
+                                            isFullScreen = false;
+                                        } else {
+                                            isFullScreen = true;
+                                        }
+                                        setIsFullScreen(isFullScreen);
+                                    }
+                                    lastClickTime = currentTimeMillis;
+                                    break;
+                                default:
+                                    break;
+                            }
+                            return true;
+                        });
+                        return flowLayout;
+                    }
+
+                    *//**
+         * 加载APP
+         *//*
+                    public void loadApp() {
+
+                        cl_close.setVisibility(View.VISIBLE);//显示开关机组件
+                        tv_shutdown.setText("开机");
+                        GT.Thread.runJava(new Runnable() {
+                            @Override
+                            public void run() {
+                                cl_close.setVisibility(View.VISIBLE);//显示开关机组件
+                                tv_shutdown.setText("开机");
+                                String manufacturer = DeviceUtils.getManufacturer().toLowerCase();
+                                List<AppUtils.AppInfo> appsInfo = AppUtils.getAppsInfo();//获取手机所有APP信息
+                                for (int i = 0; i < appsInfo.size(); i++) {
+                                    AppUtils.AppInfo appInfo = appsInfo.get(i);
+                                    String name = appInfo.getName();
+                                    String packageName = appInfo.getPackageName().toLowerCase();//获取当前遍历的包名
+                                    if (packageName.contains("google") || packageName.contains("android") || packageName.contains(manufacturer)) {
+                                        continue;//过滤掉系统自带应用
+                                    }
+//                        GT.log("packageName:" + packageName);
+                                    View item_app_ico = LayoutInflater.from(context).inflate(R.layout.item_app_ico, null);
+                                    TextView tv_appName = item_app_ico.findViewById(R.id.tv_appName);
+                                    ImageView iv_icon = item_app_ico.findViewById(R.id.iv_icon);
+                                    tv_appName.setText(name);//设置APP名称
+                                    iv_icon.setImageDrawable(appInfo.getIcon());
+                                    GT.Thread.runAndroid(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            flowLayout.addView(item_app_ico);//添加APP
+                                        }
+                                    });
+
+                                    item_app_ico.setOnClickListener(new View.OnClickListener() {
+                                        @Override
+                                        public void onClick(View v) {
+                                            String s = tv_appName.getText().toString();
+//                                GT.log("单击了：" + s);
+
+                                            PackageManager packageManager = getPackageManager();
+                                            Intent intent = new Intent();
+                                            // 这里面的值是你要跳转app的包名，你跳转的清单文件里的package名
+                                            intent = packageManager.getLaunchIntentForPackage(packageName);
+                                            startActivity(intent);
+
+                                        }
+                                    });
+
+
+                                    //将APP存储到容器中
+                                    viewMap.put(tv_appName.getText().toString(), item_app_ico);
+
+                                }
+
+                                GT.Thread.runAndroid(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        cl_close.setVisibility(View.GONE);//隐藏开关机组件
+                                    }
+                                });
+
+                            }
+                        });
+
+                    }
+
+
+                    private Timer timer = new Timer();
+                    private final long DELAY = 1000; // in ms
+
+                    *//**
+         * 设置搜索事件
+         *//*
+                    public void setSearchEvent(SearchView sv_find) {
+
+                        //搜索框展开时后面叉叉按钮的点击事件
+                        sv_find.setOnCloseListener(new SearchView.OnCloseListener() {
+                            @Override
+                            public boolean onClose() {
+                                getView().findViewById(R.id.tv_hide).setVisibility(View.VISIBLE);
+                                getView().findViewById(R.id.cb_expansion).setVisibility(View.VISIBLE);
+                                getView().findViewById(R.id.tv_close).setVisibility(View.VISIBLE);
+                                setGetFocus(false);//设置取消焦点
+                                return false;
+                            }
+                        });
+                        //搜索图标按钮(打开搜索框的按钮)的点击事件
+                        sv_find.setOnSearchClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+//                    GT.log("搜索图标按钮(打开搜索框的按钮)的点击事件");
+                                getView().findViewById(R.id.tv_hide).setVisibility(View.GONE);
+                                getView().findViewById(R.id.cb_expansion).setVisibility(View.GONE);
+                                getView().findViewById(R.id.tv_close).setVisibility(View.GONE);
+                                setGetFocus(true);//设置获取焦点
+
+                            }
+                        });
+                        //搜索框文字变化监听
+                        sv_find.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+                            @Override
+                            public boolean onQueryTextSubmit(String s) {
+//                    GT.log("TextSubmit : " + s);//点击了搜索框的搜索
+                                search(s);
+                                return false;
+                            }
+
+                            @Override
+                            public boolean onQueryTextChange(String s) {
+                                if (timer != null) {
+                                    timer.cancel();
+                                    timer = null;
+                                }
+
+                                timer = new Timer();
+                                timer.schedule(new TimerTask() {
+                                    @Override
+                                    public void run() {
+                                        search(s);
+                                    }
+                                }, DELAY);
+
+
+                                return false;
+                            }
+                        });
+
+                    }
+
+                    *//**
+         * 搜索方法
+         *
+         * @param keyValue
+         *//*
+                    public void search(String keyValue) {
+                        GT.Thread.runAndroid(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (fl_main.getChildCount() == 0) {
+                                    //桌面查询事件
+                                    flowLayout.removeAllViews();//清空所有View
+                                    GT.Thread.runJava(new Runnable() {
+                                        @Override
+                                        public void run() {
+
+                                            for (String appName : viewMap.keySet()) {
+                                                GT.Thread.runAndroid(new Runnable() {
+                                                    @Override
+                                                    public void run() {
+                                                        if (keyValue.length() == 0) {
+                                                            flowLayout.addView(viewMap.get(appName));
+                                                        } else if (appName.toLowerCase().contains(keyValue.toLowerCase())) {
+                                                            flowLayout.addView(viewMap.get(appName));
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    View childAt = fl_main.getChildAt(fl_main.getChildCount() - 1);
+                                    switch (childAt.getId()) {
+                                        case R.layout.frame_log:
+
+                                            GT.Thread.runJava(new Runnable() {
+                                                @Override
+                                                public void run() {
+
+                                                    List<LogBean> logBeans = utilsGTApp.getLogBeans();
+                                                    List<LogBean> logBeans2 = new ArrayList<>();
+                                                    for (LogBean logBean : logBeans) {
+
+                                                        if (keyValue.length() != 0) {
+                                                            if (logBean.getValue().toLowerCase().contains(keyValue.toLowerCase())) {
+                                                                logBeans2.add(new LogBean(logBean.getValue()));
+                                                            }
+                                                        } else {
+                                                            logBeans2.add(new LogBean(logBean.getValue()));
+                                                        }
+                                                    }
+
+                                                    GT.Thread.runAndroid(new Runnable() {
+                                                        @Override
+                                                        public void run() {
+                                                            //更新数据
+                                                            utilsGTApp.getLogAdapter().setBeanList(logBeans2);
+                                                        }
+                                                    });
+
+                                                }
+                                            });
+
+
+                                            break;
+                                        case R.layout.frame_sql:
+//                                GT.log("搜索进入 SQL页面:" + keyValue);
+                                            List<String> sqlValues = utilsGTApp.getSQLValues();
+                                            sqlValues.clear();
+
+                                            switch (utilsGTApp.hierarchyNumber) {
+                                                case 1:
+//                                        GT.log("数据库过滤:" + keyValue);
+                                                    List<String> sqlAllNames = utilsGTApp.hibernate.getSqlAllName();//获取数据库所有名称
+//                                        GT.log("sqlAllNames:" + sqlAllNames);
+                                                    if (sqlAllNames == null || sqlAllNames.size() == 0) {
+//                                            GT.log("进入 if");
+                                                        sqlValues.add("暂无数据，\n请通过搜索框搜索！");
+                                                    } else {
+//                                            GT.log("进入 else:" + keyValue.length());
+//                                            GT.log("sqlValues:" + sqlValues);
+                                                        if (keyValue.length() == 0) {
+                                                            sqlValues.addAll(sqlAllNames);
+                                                        } else {
+                                                            for (String sqlName : sqlAllNames) {
+                                                                if (sqlName.split("\\.")[0].toLowerCase().contains(keyValue.toLowerCase())) {
+//                                                        GT.log("单个添加:" + sqlName);
+                                                                    sqlValues.add(sqlName);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    utilsGTApp.getSqlAdapter().setBeanList(sqlValues);
+                                                    break;
+                                                case 2:
+//                                        GT.log("表过滤:" + keyValue);
+                                                    List<String> sqlAllTableName = utilsGTApp.hibernate.getSqlAllTableName();
+                                                    if (sqlAllTableName == null || sqlAllTableName.size() == 0) {
+                                                        sqlValues.add("暂无数据，\n请通过搜索框搜索！");
+                                                    } else {
+                                                        if (keyValue.length() == 0) {
+                                                            sqlValues.addAll(sqlAllTableName);
+                                                        } else {
+                                                            for (String sqlTableName : sqlAllTableName) {
+                                                                if (sqlTableName.toLowerCase().contains(keyValue.toLowerCase())) {
+                                                                    sqlValues.add(sqlTableName);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    utilsGTApp.getTableAdapter().setBeanList(sqlValues);
+                                                    break;
+
+                                            }
+
+                                            //刷新数据
+//                                GT.log("刷新适配器", sqlValues);
+                                            break;
+
+                                        case R.layout.frame_sql_table:
+//                                GT.log("表字段过滤");
+                                            break;
+                                        case R.layout.frame_fragment_stack:
+//                                GT.log("搜索进入 FStack页面:" + keyValue);
+                                            LinearLayout ll_fragmentStack = utilsGTApp.getLl_fragmentStack();
+                                            if (ll_fragmentStack != null) {
+                                                for (int i = 0; i < ll_fragmentStack.getChildCount(); i++) {
+                                                    View childAtView = ll_fragmentStack.getChildAt(i);
+                                                    TextView tv_showStack = childAtView.findViewById(R.id.tv_showStack);
+                                                    String showStackData = tv_showStack.getText().toString();
+//                                        GT.log("showStackData:" + showStackData);
+                                                }
+                                            }
+
+                                            break;
+                                        default:
+//                                GT.log("默认的过滤");
+                                            break;
+                                    }
+
+                                }
+                            }
+                        });
+                    }
+
+                    *//**
+         * 退出栈顶界面
+         *//*
+                    public void backStackTopFrame() {
+                        if (fl_main.getChildCount() != 0) {
+                            fl_main.removeViewAt(fl_main.getChildCount() - 1);//退出栈顶的页面
+                        }
+                    }
+
+                    *//**
+         * 退出指定的 Frame
+         *//*
+                    public void backAssignFrame(int backFrameID) {
+                        int childCount = fl_main.getChildCount();
+                        if (backFrameID == -1) {
+                            if (childCount != 0) {
+                                fl_main.removeViewAt(0);
+                            }
+                        } else {
+                            for (int i = 0; i < childCount; i++) {
+                                View childAt = fl_main.getChildAt(i);
+                                if (childAt.getId() == backFrameID) {
+                                    fl_main.removeView(childAt);//退出指定的界面
+                                    break;
+                                }
+
+                            }
+                        }
+                    }
+
+                    *//**
+         * 退出栈顶界面
+         *//*
+                    public void backAllFrame() {
+                        int childCount = fl_main.getChildCount();
+                        for (int i = 0; i < childCount; i++) {
+                            View childAt = fl_main.getChildAt(i);
+                            fl_main.removeView(childAt);//退出指定的界面
+
+                        }
+                    }
+
+                    *//**
+         * 获取最顶端的Frame
+         *
+         * @return
+         *//*
+                    public View getTopFrame() {
+                        int childCount = fl_main.getChildCount();
+                        if (childCount != 0) {
+                            return fl_main.getChildAt(0);
+                        }
+                        return null;
+                    }
+
+
+                }//工具方法结尾
+
+                public class UtilsGTApp implements SQLAdapter.ClickSqlTable {
+
+                    *//**
+         * 定义一个接收到消息后刷新UI的内部类广播
+         *//*
+                    private class UiReceiver extends BroadcastReceiver {
+                        @Override
+                        public void onReceive(Context context, Intent intent) {
+                            if (intent != null) {
+                                String logAllData = intent.getStringExtra("logAllData");
+                                logBeans.add(new LogBean(logAllData));
+                                logAdapter.setBeanList(logBeans);//刷新数据
+                                if (cb_dynamicRefresh.isChecked()) {
+                                    linearLayoutManager_log.scrollToPosition(logBeans.size() - 1);//每次滑动最底部
+                                }
+                            }
+                        }
+
+                    }
+
+                    private LogAdapter logAdapter;
+                    private List<LogBean> logBeans = new ArrayList<>();
+                    private UiReceiver uiReceiver;
+                    private CheckBox cb_dynamicRefresh;
+                    private LinearLayoutManager linearLayoutManager_log;
+
+                    public LogAdapter getLogAdapter() {
+                        return logAdapter;
+                    }
+
+                    public void setLogAdapter(LogAdapter logAdapter) {
+                        this.logAdapter = logAdapter;
+                    }
+
+                    public List<LogBean> getLogBeans() {
+                        return logBeans;
+                    }
+
+                    public void setLogBeans(List<LogBean> logBeans) {
+                        this.logBeans = logBeans;
+                    }
+
+                    @SuppressLint("ResourceType")
+                    public View initLog() {
+                        View frame_log = LayoutInflater.from(context).inflate(R.layout.frame_log, null);
+                        frame_log.setId(R.layout.frame_log);//设置ID
+                        RecyclerView recyclerView = frame_log.findViewById(R.id.recyclerView);
+                        cb_dynamicRefresh = frame_log.findViewById(R.id.cb_dynamicRefresh);
+                        logAdapter = new LogAdapter(context);
+                        linearLayoutManager_log = logAdapter.setLinearLayoutManager_V(recyclerView);
+
+                        //实例化过滤器并设置要过滤的广播
+                        uiReceiver = new UiReceiver();
+                        IntentFilter intentFilter = new IntentFilter();
+                        intentFilter.addAction(getClass().getName());
+                        context.registerReceiver(uiReceiver, intentFilter); //注册广播
+                        isOpenLog = true;//设置成功注册广播
+//            GT.log("日志 注册成功");
+
+                        GT.Thread.runJava(new Runnable() {
+                            @Override
+                            public void run() {
+                                while (true) {
+                                    if (frame_log.getParent() == null) {
+                                        try {
+                                            unregisterReceiver(uiReceiver);//解除广播
+                                            uiReceiver = null;
+                                            isOpenLog = false;
+                                            logBeans.clear();
+                                        } catch (IllegalArgumentException e) {
+//                                GT.log("异常:" + e);
+                                        }
+                                        break;
+                                    }
+                                    GT.Thread.sleep(300);
+                                }
+                            }
+                        });
+                        return frame_log;
+                    }
+
+
+                    private GT.Hibernate hibernate = new GT.Hibernate();
+                    private List<String> sqlValues = new ArrayList<>();
+                    private SQLAdapter sqlAdapter;
+                    private SQLAdapter tableAdapter;
+                    private SQLiteDatabase sqLiteDatabase;
+                    public int hierarchyNumber = 0;
+
+                    public GT.Hibernate getHibernate() {
+                        return hibernate;
+                    }
+
+                    public void setHibernate(GT.Hibernate hibernate) {
+                        this.hibernate = hibernate;
+                    }
+
+
+                    public SQLAdapter getTableAdapter() {
+                        return tableAdapter;
+                    }
+
+                    public void setTableAdapter(SQLAdapter tableAdapter) {
+                        this.tableAdapter = tableAdapter;
+                    }
+
+                    public SQLAdapter getSqlAdapter() {
+                        return sqlAdapter;
+                    }
+
+                    public void setSqlAdapter(SQLAdapter sqlAdapter) {
+                        this.sqlAdapter = sqlAdapter;
+                    }
+
+                    public List<String> getSQLValues() {
+                        return sqlValues;
+                    }
+
+                    public void setSQLValues(List<String> sqlValues) {
+                        this.sqlValues = sqlValues;
+                    }
+
+                    @SuppressLint("ResourceType")
+                    public View initSQL() {
+                        //初始化UI
+                        View frame_sqlAll = LayoutInflater.from(context).inflate(R.layout.frame_sql, null);
+                        frame_sqlAll.setId(R.layout.frame_sql);
+                        RecyclerView recyclerView = frame_sqlAll.findViewById(R.id.recyclerView);
+                        sqlAdapter = new SQLAdapter(context, this);
+                        sqlAdapter.setLinearLayoutManager_V(recyclerView);
+
+                        if (sqlValues != null) {
+                            sqlValues.clear();
+                        }
+
+                        List<String> sqlAllNames = hibernate.getSqlAllName();//获取数据库所有名称
+                        if (sqlAllNames == null || sqlAllNames.size() == 0) {
+                            sqlValues.add("暂无数据，\n请通过搜索框搜索！");
+                        } else {
+                            sqlValues.addAll(sqlAllNames);
+                        }
+
+                        //刷新数据
+                        sqlAdapter.setBeanList(sqlValues);
+                        hierarchyNumber = 1;
+                        return frame_sqlAll;
+                    }
+
+                    @SuppressLint("ResourceType")
+                    @Override
+                    public void clickTable(String name) {
+
+                        if (name.contains(".db")) {
+                            //单击数据库
+                            sqLiteDatabase = context.openOrCreateDatabase(name, context.MODE_PRIVATE, null);
+                            hibernate.setSqLiteDatabase(sqLiteDatabase);
+//                GT.log("单击的数据库名称:" + name);
+
+
+                            View frame_sql = LayoutInflater.from(context).inflate(R.layout.frame_sql, null);
+                            frame_sql.setId(R.layout.frame_sql);
+                            RecyclerView recyclerView = frame_sql.findViewById(R.id.recyclerView);
+                            tableAdapter = new SQLAdapter(context, this);
+                            tableAdapter.setLinearLayoutManager_V(recyclerView);
+                            if (sqlValues != null) {
+                                sqlValues.clear();
+                            }
+
+                            List<String> sqlAllTableName = hibernate.getSqlAllTableName();
+                            if (sqlAllTableName == null || sqlAllTableName.size() == 0) {
+                                sqlValues.add("暂无数据，\n请通过搜索框搜索！");
+                            } else {
+                                sqlValues.addAll(sqlAllTableName);
+                            }
+
+                            //刷新数据
+                            tableAdapter.setBeanList(sqlValues);
+                            utils.setDoubleClickFullScreen(frame_sql);//设置双击全屏
+                            fl_main.addView(frame_sql);
+                            hierarchyNumber = 2;
+                        } else {
+                            //单击表
+                            View view = initTable(name);
+                            utils.setDoubleClickFullScreen(view);//设置双击全屏
+                            fl_main.addView(view);
+                        }
+
+
+                    }
+
+
+                    private TableDataAdapter tableDataAdapter;
+                    private List<String> tableVaues;
+
+                    *//**
+         * 初始化 表名称
+         * tableName
+         *
+         * @return
+         *//*
+                    @SuppressLint("ResourceType")
+                    public View initTable(String tableName) {
+                        //初始化UI
+                        View frame_sqlTitle = LayoutInflater.from(context).inflate(R.layout.frame_sql_table, null);
+                        frame_sqlTitle.setId(R.layout.frame_sql_table);
+                        LinearLayout ll_title = frame_sqlTitle.findViewById(R.id.ll_title);
+
+
+                        RecyclerView recyclerView = frame_sqlTitle.findViewById(R.id.recyclerView);
+                        tableDataAdapter = new TableDataAdapter(context);
+                        tableDataAdapter.setLinearLayoutManager_V(recyclerView);
+
+
+                        GT.Thread.runJava(new Runnable() {
+                            @Override
+                            public void run() {
+//                    GT.log("tableName:" + tableName);
+                                Cursor cursor = hibernate.query(tableName);
+//                    GT.log("tableAllValues:" + cursor.getColumnCount());
+                                String[] tableAllValues = cursor.getColumnNames();
+
+                                if (tableDataAdapter.bytesList != null) {
+                                    tableDataAdapter.bytesList.clear();
+                                }
+
+                                //初始化标题
+                                for (int i = 0; i < tableAllValues.length; i++) {
+                                    TextView item_sql_tv = (TextView) LayoutInflater.from(context).inflate(R.layout.item_sql_tv, null);
+                                    item_sql_tv.setText(tableAllValues[i]);
+                                    GT.Thread.runAndroid(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            tableDataAdapter.bytesList.add(item_sql_tv.getText().toString().getBytes().length);
+                                            ll_title.addView(item_sql_tv);
+                                        }
+                                    });
+                                }
+
+                                if (tableVaues == null) {
+                                    tableVaues = new ArrayList<>();
+                                } else {
+                                    tableVaues.clear();
+                                }
+                                //初始化内容
+                                GT.Thread.runJava(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        String[] columnNames = cursor.getColumnNames();
+                                        StringBuffer val = new StringBuffer();
+                                        for (int j = 0; j < cursor.getCount(); j++) {
+                                            val.delete(0, val.length());//清空
+                                            for (int i = 0; i < columnNames.length; i++) {
+                                                String string = cursor.getString(cursor.getColumnIndex(columnNames[i]));
+//                                    val += string + "-GT-";
+                                                val.append(string).append("-GT-");
+//                                    val += string + "    ,    ";
+                                            }
+//                                GT.log("val:" + val);
+                                            tableVaues.add(val.toString());
+                                            cursor.moveToNext();//移动到下一位
+                                        }
+
+
+//                            GT.log("总共有：" + tableVaues.size());
+                                        GT.Thread.runAndroid(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                tableDataAdapter.setBeanList(tableVaues);
+                                            }
+                                        });
+
+                                    }
+                                });
+
+
+                                hierarchyNumber = 3;
+                            }
+                        });
+
+                        return frame_sqlTitle;
+                    }
+
+
+                    private LinearLayout ll_fragmentStack;
+
+                    public LinearLayout getLl_fragmentStack() {
+                        return ll_fragmentStack;
+                    }
+
+                    public void setLl_fragmentStack(LinearLayout ll_fragmentStack) {
+                        this.ll_fragmentStack = ll_fragmentStack;
+                    }
+
+                    @SuppressLint("ResourceType")
+                    public View initFStack() {
+                        View frame_f_stack = LayoutInflater.from(context).inflate(R.layout.frame_fragment_stack, null);
+                        frame_f_stack.setId(R.layout.frame_fragment_stack);
+                        ll_fragmentStack = frame_f_stack.findViewById(R.id.ll_fragmentStack);
+                        updateFStack();//更新栈数据
+
+                        frame_f_stack.findViewById(R.id.btn_refresh).setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                GT.toast("更新完成!");
+                                updateFStack();//更新栈数据
+                            }
+                        });
+
+                        return frame_f_stack;
+                    }
+
+                    //更新Fragment栈信息
+                    private void updateFStack() {
+                        ll_fragmentStack.removeAllViews();//情况所有组件
+                        List<String> stackFragmentNames = GT.GT_Fragment.getGt_fragment().getStackFragmentNames();
+//            GT.log("stackFragmentNames:" + stackFragmentNames);
+                        if (stackFragmentNames != null && stackFragmentNames.size() != 0) {
+                            for (String stackFragmentName : stackFragmentNames) {
+                                View item_fragment_stack = LayoutInflater.from(context).inflate(R.layout.item_fragment_stack, null);
+                                TextView tv_showStack = item_fragment_stack.findViewById(R.id.tv_showStack);
+                                tv_showStack.setText(stackFragmentName);
+                                ll_fragmentStack.addView(item_fragment_stack);
+                            }
+                        } else {
+                            View item_fragment_stack = LayoutInflater.from(context).inflate(R.layout.item_fragment_stack, null);
+                            TextView tv_showStack = item_fragment_stack.findViewById(R.id.tv_showStack);
+                            tv_showStack.setText("栈中无Fragment信息");
+                            ll_fragmentStack.addView(item_fragment_stack);
+                        }
+                    }
+
+
+                }
+
+                @Override
+                protected boolean onBackPressed() {
+                    utils.backStackTopFrame();
+                    return super.onBackPressed();
+                }
+
+                @Override
+                public void onDestroy() {
+                    super.onDestroy();
+                    try {
+                        unregisterReceiver(utils.mBroadcastReceiver);//解除广播
+                    } catch (RuntimeException e) {
+//            GT.log("异常:" + e);
+                    }
+//        System.exit(0);
+                }
+
+            }
+
+            public static class LogBean {
+
+                private String value;
+
+                public LogBean() {
+                    super();
+                }
+
+                public LogBean(String value) {
+                    this.value = value;
+                }
+
+                public String getValue() {
+                    return value;
+                }
+
+                public void setValue(String value) {
+                    this.value = value;
+                }
+            }
+
+            public static class LogAdapter extends GT.GT_Adapters.BaseAdapter<LogBean> {
+
+                public LogAdapter(Context context) {
+                    super(context);
+                }
+
+                @Override
+                protected int loadLayout() {
+                    return R.layout.item_log;
+                }
+
+                @Override
+                protected void initView(BaseHolder holder, int position, LogBean logBean) {
+                    TextView tv_data = holder.itemView.findViewById(R.id.tv_data);
+                    tv_data.setText(logBean.getValue());
+                }
+
+
+            }
+
+            public static class SQLAdapter extends GT.GT_Adapters.BaseAdapter<String> {
+
+                private ClickSqlTable clickSqlTable;
+
+                public SQLAdapter(Context context, ClickSqlTable clickSqlTable) {
+                    super(context);
+                    this.clickSqlTable = clickSqlTable;
+                }
+
+
+                @Override
+                protected int loadLayout() {
+                    return R.layout.item_sql;
+                }
+
+                @Override
+                protected void initView(BaseHolder holder, int position, String string) {
+                    TextView tv_sql = (TextView) holder.itemView;
+                    tv_sql.setText(string);
+                    //单击事件
+                    tv_sql.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            clickSqlTable.clickTable(string);
+                        }
+                    });
+
+                }
+
+                public interface ClickSqlTable {
+                    public void clickTable(String name);
+                }
+
+            }
+
+            public static class TableDataAdapter extends GT.GT_Adapters.BaseAdapter<String> {
+
+                public List<Integer> bytesList = new ArrayList<>();
+
+                public TableDataAdapter(Context context) {
+                    super(context);
+                }
+
+                @Override
+                protected int loadLayout() {
+                    return R.layout.item_table_all_data;
+                }
+
+                @Override
+                protected void initView(BaseHolder holder, int position, String strings) {
+//        GT.log("strings:" + strings);
+                    LinearLayout ll_allData = (LinearLayout) holder.itemView;
+
+     *//*   GT.ViewUtils.MarqueeTextView item_sql = (GT.ViewUtils.MarqueeTextView) LayoutInflater.from(getContext()).inflate(R.layout.item_sql_table_tv, null);
+        item_sql.setText(strings);
+        ll_allData.addView(item_sql);*//*
+
+                    String[] split = strings.split("-GT-");
+                    GT.log("第 " + position + " 条");
+                    for (int i = 0; i < split.length; i++) {
+                        GT.ViewUtils.MarqueeTextView item_sql = (GT.ViewUtils.MarqueeTextView) LayoutInflater.from(getContext()).inflate(R.layout.item_sql_table_tv, null);
+                        String data = adaptationCharacter(bytesList.get(i), split[i]); //字符适配
+                        item_sql.setText(data);
+                        ll_allData.addView(item_sql);
+                    }
+                }
+
+
+                *//**
+         * 适配字符
+         *
+         * @param maxLength
+         * @param data
+         * @return
+         *//*
+                private String adaptationCharacter(int maxLength, String data) {
+                    if (data == null) return data;
+//        GT.log("最大字符：" + maxLength + "当前字符：" + data.getBytes().length);
+                    maxLength = 15;
+                    if (data.getBytes().length < maxLength) {
+                        //小于
+                        while (true) {
+                            data += " ";
+                            if (data.getBytes().length >= maxLength) {
+                                break;
+                            }
+                        }
+                    } else if (data.getBytes().length > maxLength) {
+                        //大于
+                        if (maxLength > 6) {
+                            data = data.substring(0, maxLength - 2) + "..";
+                        } else {
+                            data = data.substring(0, maxLength);
+                        }
+                    }
+                    GT.log("最大长度：" + maxLength + " 返回：" + data + " : " + data.getBytes().length);
+                    return data;
+                }
+
+
+            }
+
+
+        }*/
 
 
     }

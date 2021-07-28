@@ -112,7 +112,6 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.ActionBar;
@@ -131,6 +130,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.blankj.utilcode.util.AppUtils;
 import com.blankj.utilcode.util.DeviceUtils;
+import com.friendlyarm.AndroidSDK.HardwareInit;
 import com.gsls.gtlibrary.R;
 import com.lzy.okgo.callback.StringCallback;
 
@@ -153,6 +153,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.io.PrintStream;
 import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
@@ -172,11 +173,15 @@ import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Time;
+import java.sql.Timestamp;
 import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -210,6 +215,8 @@ import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.DESKeySpec;
 
+import android_serialport_api.SerialPort;
+import android_serialport_api.SerialPortFinder;
 import dalvik.system.DexClassLoader;
 import dalvik.system.DexFile;
 import dalvik.system.PathClassLoader;
@@ -228,14 +235,14 @@ import static android.content.Context.POWER_SERVICE;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.7.13
+ * 更新时间:2021.7.28
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.0.5 版本）
+ * 更新内容：（1.3.0.6 版本）
  * 超级重磅更新！！！
- * 1.内容如下：
- * (1).Hibernate 类的更新
+ * 内容如下：
+ * 1.Hibernate 类的更新
  * 1).Hibernate 数据库支持映射 “数组参数”、“多重继承关系”
  * 2).新增初始化 Hibernate 的方式，可在Application中进行初始化操作：new GT.Hibernate().initialize(); 与 new GT.Hibernate().getHibernate(); （注意，这两个方法均是有创建的效果）
  * 3).新增聚合函数：count(求次数)、sum(求总和)、max(求最大值)、min(求最小值)、average(求平均数)，后续待添加新的...
@@ -261,12 +268,15 @@ import static android.content.Context.POWER_SERVICE;
  * 10).
  * 11).
  * 2.新增悬浮窗封装类 GT_FloatingWindow 用法与 GT_Fragment 类似，具体使用教程请参考官网,(新增 GT_Floating 工具类，还在优化中)
- *
+ * 3.增加可嵌套的滑动组件 ScrollView
+ * 4.新增 串口类 SerialPortUtils
+ * 5.新增 GT_Socket TCP 类
  * <p>
  * <p>
  * 3.新增 GT.GT_Adapters.BaseAdapter 基类
  * 4.新增 DataSendReception 数据传输类，用于传输数据目前可支持：跨类、跨进程、跨APP传输数据
- * 5.新版本的优化
+ * 5.新增 适配器 AnnotationAdapter 注解基类
+ * n.新版本的优化
  * <p>
  * (1).去掉所有基类自带的 log() toast() err() 类似等方法(不方便维护，故此版本去掉)
  * (2).去掉 GT_Fragment 与 DialogFragment类中内置的广播，改用 DataSendReception 方式进行传输数据，具体可参考官网教程
@@ -280,6 +290,7 @@ import static android.content.Context.POWER_SERVICE;
  * 3.Hibernate 在多数据库创建时出现的问题
  * 4.优化了 Hibernate 的 保存所有 与 查询所有 的效率
  * 5.优化 GT_Fragment 有几率点击穿透的问题
+ * 6.优化了所有注解的核心方法
  *
  *
  *
@@ -298,9 +309,8 @@ public class GT {
     //================================== 所有属于 GT 类的属性 =======================================
     private static GT gtAndroid = null;          //定义 GT 对象
     private static Toast toast;                  //吐司缓冲
-    private Context activity;                     //设置 当前动态的 上下文对象
+    public Context activity;                     //设置 当前动态的 上下文对象
     //================================== 提供访问 GT 属性的接口======================================
-
 
     private GT() {
     }//设置不可实例化
@@ -339,44 +349,20 @@ public class GT {
      * @param activity
      * @Activity 为外部提供访问 GT Context 接口
      */
-    public void build(Context activity) {
-        this.activity = activity;
-        initGTUtilActivity();//初始化 GT 必要的工具
-    }
-
-    /**
-     * 绑定 Fragment
-     *
-     * @param object
-     * @param view
-     * @Fragment 为外部提供访问 GT Context 接口
-     */
-    public void build(Object object, View view) {
-        initGTUtilFragment(object, view);//初始化 GT 必要的工具
-    }
-
-    /**
-     * @param object
-     * @param view
-     * @初始化必要工具 为外部提供访问 GT Context 接口
-     */
-    public void build(Context context, Object object, View view) {
-        this.activity = context;
-        initGTUtilFragment(object, view);//初始化 GT 必要的工具
-    }
-
-    //============================================= 加载 GT 必要的工具 =============================
-
-    //初始化 GT 必要的工具 主要用于  Activity 的页面
-    private void initGTUtilActivity() {
-        //GT 包内部默认加载的工具包
-        AnnotationAssist.initAll((Activity) activity); //初始化 IOC 注解
-    }
-
-    //初始化 GT 必要的工具  主要用于 非 Activity 的页面 如：Fragment、DialogFragment 等页面
-    private void initGTUtilFragment(Object object, View view) {
-        //GT 包内部默认加载的工具包
-        AnnotationAssist.initAll(object, view); //初始化 IOC 注解
+    public void build(Object obj) {
+        if (obj instanceof Activity) {
+            activity = (Context) obj;
+        } else if (obj instanceof Fragment) {
+            Fragment fragment = (Fragment) obj;
+            activity = fragment.getContext();
+        } else {
+            View view = (View) obj;
+            activity = view.getContext();
+        }
+        if (activity == null) {
+            activity = getActivity();
+        }
+        AnnotationAssist.initAll(obj); //初始化 IOC 注解
     }
 
     /**
@@ -905,7 +891,7 @@ public class GT {
             return sInstance;
         }
 
-        public void init(@NonNull Context context) {
+        public void init(Context context) {
             mDefaultMyCrashHandler = java.lang.Thread.getDefaultUncaughtExceptionHandler();
             java.lang.Thread.setDefaultUncaughtExceptionHandler(this);
             mContext = context.getApplicationContext();
@@ -1415,6 +1401,11 @@ public class GT {
 
         }
 
+        /**
+         * 关闭广播
+         *
+         * @param broadcastName 要关闭广播的名字
+         */
         public static void close(Object broadcastName) {
             Context context = getGT().getActivity();
             if (context != null && broadcastName != null) {
@@ -1561,6 +1552,16 @@ public class GT {
      * 数据持久化 SharedPreferences
      */
     public static class GT_SharedPreferences implements SaveObject.SaveBean {
+
+        //构建 GT_SharedPreferences
+        @Target(ElementType.FIELD)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface Build {
+            String setSpName() default "GT";       //默认SP名称
+
+            boolean setISCommit() default true;     //默认自动提交
+        }
+
 
         private Context context;
 
@@ -4377,249 +4378,250 @@ public class GT {
                         String valueName = field.getName();
                         Class<?> type = field.getType();
                         field.setAccessible(true);
-                        for (String str : returnValues) {
-                            Object obj = null;
-                            if (str.equals(valueName)) {
-                                if (String.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (int.class == type || Integer.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (boolean.class == type || Boolean.class == type) {
-                                    int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
-                                    if (value == 1) {
-                                        obj = true;
-                                    } else if (value == 0) {
-                                        obj = false;
-                                    }
-                                } else if (double.class == type || Double.class == type) {
-                                    double value = cursor.getDouble(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (float.class == type || Float.class == type) {
-                                    float value = cursor.getFloat(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (Time.class == type) {
-                                    String time = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (time == null || time.length() == 0) {
-                                        obj = null;
-                                        continue;
-                                    }
-                                    SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
-                                    Date d2 = null;
-                                    try {
-                                        d2 = format2.parse(time);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                    Time startTimeFmt = new Time(d2.getTime());
-                                    obj = startTimeFmt;
-                                } else if (Date.class == type || java.sql.Date.class == type) {
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null || value.length() == 0) {
-                                        obj = null;
-                                        continue;
-                                    }
-                                    try {
-                                        Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
-                                        obj = date;
-                                    } catch (ParseException e) {
-                                        e.printStackTrace();
-                                    }
-                                } else if (long.class == type || Long.class == type) {
-                                    long value = cursor.getLong(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (short.class == type || Short.class == type) {
-                                    short value = cursor.getShort(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                } else if (byte[].class.equals(type)) {
-                                    byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
-                                    obj = value;
-                                }
-
-
-                                //数组类型
-                                else if (String[].class == type) {
-                                    //String[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new String[]{};
-                                    } else if (value.length() >= 5) {
-                                        obj = value.substring(2, value.length() - 2).split("\",\"");
-                                    }
-                                } else if (int[].class == type) {
-                                    //int[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    int[] intArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new int[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            intArr = new int[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                intArr[p] = Integer.parseInt(split[p]);
-                                            }
-                                        } else {
-                                            intArr = new int[]{Integer.parseInt(value)};
+                        if (returnValues != null) {
+                            for (String str : returnValues) {
+                                Object obj = null;
+                                if (str.equals(valueName)) {
+                                    if (String.class == type) {
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (int.class == type || Integer.class == type) {
+                                        int value = cursor.getInt(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (boolean.class == type || Boolean.class == type) {
+                                        int value = cursor.getInt(cursor.getColumnIndex(valueName));// false:0   true:1
+                                        if (value == 1) {
+                                            obj = true;
+                                        } else if (value == 0) {
+                                            obj = false;
                                         }
-                                    }
-                                    obj = intArr;
-                                } else if (boolean[].class == type) {
-                                    //boolean[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    boolean[] booleanArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new boolean[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            booleanArr = new boolean[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                booleanArr[p] = Boolean.parseBoolean(split[p]);
-                                            }
-                                        } else {
-                                            booleanArr = new boolean[]{Boolean.parseBoolean(value)};
+                                    } else if (double.class == type || Double.class == type) {
+                                        double value = cursor.getDouble(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (float.class == type || Float.class == type) {
+                                        float value = cursor.getFloat(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (Time.class == type) {
+                                        String time = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (time == null || time.length() == 0) {
+                                            obj = null;
+                                            continue;
                                         }
-                                    }
-                                    obj = booleanArr;
-                                } else if (double[].class == type) {
-                                    //double[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    double[] doubleArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new double[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            doubleArr = new double[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                doubleArr[p] = Double.parseDouble(split[p]);
-                                            }
-                                        } else {
-                                            doubleArr = new double[]{Double.parseDouble(value)};
+                                        SimpleDateFormat format2 = new SimpleDateFormat("hh:mm:ss");// 格式化类型
+                                        Date d2 = null;
+                                        try {
+                                            d2 = format2.parse(time);
+                                        } catch (Exception e) {
+                                            e.printStackTrace();
                                         }
-                                    }
-                                    obj = doubleArr;
-                                } else if (float[].class == type) {
-                                    //float[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    float[] floatArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new float[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            floatArr = new float[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                floatArr[p] = Float.parseFloat(split[p]);
-                                            }
-                                        } else {
-                                            floatArr = new float[]{Float.parseFloat(value)};
+                                        Time startTimeFmt = new Time(d2.getTime());
+                                        obj = startTimeFmt;
+                                    } else if (Date.class == type || java.sql.Date.class == type) {
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (value == null || value.length() == 0) {
+                                            obj = null;
+                                            continue;
                                         }
-                                    }
-                                    obj = floatArr;
-                                } else if (long[].class == type) {
-                                    //long[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    long[] longArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new long[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
-
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            longArr = new long[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                longArr[p] = Long.parseLong(split[p]);
-                                            }
-                                        } else {
-                                            longArr = new long[]{Long.parseLong(value)};
+                                        try {
+                                            Date date = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US).parse(value);
+                                            obj = date;
+                                        } catch (ParseException e) {
+                                            e.printStackTrace();
                                         }
+                                    } else if (long.class == type || Long.class == type) {
+                                        long value = cursor.getLong(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (short.class == type || Short.class == type) {
+                                        short value = cursor.getShort(cursor.getColumnIndex(valueName));
+                                        obj = value;
+                                    } else if (byte[].class.equals(type)) {
+                                        byte[] value = cursor.getBlob(cursor.getColumnIndex(valueName));
+                                        obj = value;
                                     }
-                                    obj = longArr;
-                                } else if (short[].class == type) {
-                                    //short[]
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    short[] shortArr = null;
-                                    if (value == null) {
-                                        obj = null;
-                                    } else if ("[]".equals(value)) {
-                                        obj = new short[]{};
-                                    } else if (value.length() >= 3) {
-                                        value = value.substring(1, value.length() - 1);
 
-                                        if (value.indexOf(",") != -1) {
-                                            String[] split = value.split(",");
-                                            shortArr = new short[split.length];
-                                            for (int p = 0; p < split.length; p++) {
-                                                shortArr[p] = Short.parseShort(split[p]);
-                                            }
-                                        } else {
-                                            shortArr = new short[]{Short.parseShort(value)};
+
+                                    //数组类型
+                                    else if (String[].class == type) {
+                                        //String[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new String[]{};
+                                        } else if (value.length() >= 5) {
+                                            obj = value.substring(2, value.length() - 2).split("\",\"");
                                         }
-                                    }
-                                    obj = shortArr;
-                                } else if (List.class == type || Map.class == type) {
+                                    } else if (int[].class == type) {
+                                        //int[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        int[] intArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new int[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
 
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    if (value == null || "null".equals(value)) {
-                                        obj = null;
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                intArr = new int[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    intArr[p] = Integer.parseInt(split[p]);
+                                                }
+                                            } else {
+                                                intArr = new int[]{Integer.parseInt(value)};
+                                            }
+                                        }
+                                        obj = intArr;
+                                    } else if (boolean[].class == type) {
+                                        //boolean[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        boolean[] booleanArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new boolean[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                booleanArr = new boolean[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    booleanArr[p] = Boolean.parseBoolean(split[p]);
+                                                }
+                                            } else {
+                                                booleanArr = new boolean[]{Boolean.parseBoolean(value)};
+                                            }
+                                        }
+                                        obj = booleanArr;
+                                    } else if (double[].class == type) {
+                                        //double[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        double[] doubleArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new double[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                doubleArr = new double[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    doubleArr[p] = Double.parseDouble(split[p]);
+                                                }
+                                            } else {
+                                                doubleArr = new double[]{Double.parseDouble(value)};
+                                            }
+                                        }
+                                        obj = doubleArr;
+                                    } else if (float[].class == type) {
+                                        //float[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        float[] floatArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new float[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                floatArr = new float[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    floatArr[p] = Float.parseFloat(split[p]);
+                                                }
+                                            } else {
+                                                floatArr = new float[]{Float.parseFloat(value)};
+                                            }
+                                        }
+                                        obj = floatArr;
+                                    } else if (long[].class == type) {
+                                        //long[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        long[] longArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new long[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                longArr = new long[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    longArr[p] = Long.parseLong(split[p]);
+                                                }
+                                            } else {
+                                                longArr = new long[]{Long.parseLong(value)};
+                                            }
+                                        }
+                                        obj = longArr;
+                                    } else if (short[].class == type) {
+                                        //short[]
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        short[] shortArr = null;
+                                        if (value == null) {
+                                            obj = null;
+                                        } else if ("[]".equals(value)) {
+                                            obj = new short[]{};
+                                        } else if (value.length() >= 3) {
+                                            value = value.substring(1, value.length() - 1);
+
+                                            if (value.indexOf(",") != -1) {
+                                                String[] split = value.split(",");
+                                                shortArr = new short[split.length];
+                                                for (int p = 0; p < split.length; p++) {
+                                                    shortArr[p] = Short.parseShort(split[p]);
+                                                }
+                                            } else {
+                                                shortArr = new short[]{Short.parseShort(value)};
+                                            }
+                                        }
+                                        obj = shortArr;
+                                    } else if (List.class == type || Map.class == type) {
+
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        if (value == null || "null".equals(value)) {
+                                            obj = null;
+                                        } else {
+                                            //第二次转换 List OR Map
+                                            obj = returnListOrMap(type, value);
+                                        }
                                     } else {
-                                        //第二次转换 List OR Map
-                                        obj = returnListOrMap(type, value);
-                                    }
-                                } else {
 //                                    err(getLineInfo(LOG.lineInfoIndex), "解析的表文件 [" + tableName + "] 类中的字段 [" + field + "] 出现不支持类型。");
-                                    String value = cursor.getString(cursor.getColumnIndex(valueName));
-                                    String name = field.getName();//获取属性名
-                                    Object val = null;
-                                    try {
-                                        val = field.get(bean);// 得到此属性的值
-                                    } catch (IllegalAccessException e) {
-                                        e.printStackTrace();
-                                    }
-                                    try {
-                                        obj = JSON.fromJson(value, type);
-                                    } catch (JSONException e) {
-                                        e.printStackTrace();
-                                    }
+                                        String value = cursor.getString(cursor.getColumnIndex(valueName));
+                                        String name = field.getName();//获取属性名
+                                        Object val = null;
+                                        try {
+                                            val = field.get(bean);// 得到此属性的值
+                                        } catch (IllegalAccessException e) {
+                                            e.printStackTrace();
+                                        }
+                                        try {
+                                            obj = JSON.fromJson(value, type);
+                                        } catch (JSONException e) {
+                                            e.printStackTrace();
+                                        }
 
+                                    }
                                 }
-                            }
 
-                            try {
-                                if (obj != null) {
-                                    field.set(bean, obj);
-                                }
-                                continue;
-                            } catch (Exception e) {
+                                try {
+                                    if (obj != null) {
+                                        field.set(bean, obj);
+                                    }
+                                    continue;
+                                } catch (Exception e) {
 //                                    e.printStackTrace();
-                                errs("查询数据中出现了无法转换的类型:" + e);
+                                    errs("查询数据中出现了无法转换的类型:" + e);
+                                }
                             }
                         }
-
                     }
                     beanList.add(bean);//存入查询到的数据
 
@@ -6240,6 +6242,7 @@ public class GT {
      * 随机类
      */
     public static class GT_Random {
+
         private final static Random random = new Random();
 
         /**
@@ -6261,22 +6264,979 @@ public class GT {
          * @return
          */
         public static int getInt(int min, int max) {
-            return random.nextInt(max) % (max - min + 1) + min;
+            return random.nextInt(max) % (max - min + 2) + min;
+        }
+
+        /**
+         * 获取定义字符之间的随机字符
+         *
+         * @param startChar
+         * @param closeChar
+         * @return
+         */
+        public static char getChar(char startChar, char closeChar) {
+            return (char) (startChar + Math.random() * (closeChar - startChar + 1));
+        }
+
+    }
+
+    /**
+     * 串口工具包
+     */
+    public static class SerialPortUtils {
+
+        @Target(ElementType.FIELD)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface Build {
+            String setComAll();       //默认SP名称
+
+            int setBaudRate();
+
+            boolean setISLog() default false;     //默认自动提交
+        }
+
+
+        public SerialPort serialPort;
+        public SerialPortFinder serialPortFinder;
+        public InputStream inputStream;
+        public OutputStream outputStream;
+        private int TYPE = 10;                  //默认十进制
+        public static int FLAGS = 0;            //默认为 0
+        private boolean isShowLog;              //是否显示串口内日志 true:显示  false:不显示
+        public int defaultSpeed = 1000;         //默认速度
+        public int waitingTime = defaultSpeed;  //默认等待读取数据时间 每次读取等待时间为 1 秒 注意：尽量使用默认的速率来读取数据，读取太快可能会读取数据异常
+        public int readSpeed = 1000;            //读取速度
+        public int readByteMax = 1024;          //读取字节的最大值
+        private byte[] buffer;                  //读取数据的容器
+
+        /**
+         * @param context   上下文
+         * @param COM_All   主板物理通讯地址
+         * @param BAUD_RATE 波特率
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE) {
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                }
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+
+        /**
+         * @param context     上下文
+         * @param COM_All     主板物理通讯地址
+         * @param BAUD_RATE   波特率
+         * @param readByteMax 读取Byte最大值
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE, int readByteMax) {
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                }
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    if (context != null) {
+                        Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                    }
+                }
+            }
+        }
+
+        /**
+         * @param context   上下文
+         * @param COM_All   主板物理通讯地址
+         * @param BAUD_RATE 波特率
+         * @param isShowLog 是否显示内部日志
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE, boolean isShowLog) {
+            this.isShowLog = isShowLog;
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    if (context != null) {
+                        Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                    }
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+
+        /**
+         * @param context     上下文
+         * @param COM_All     主板物理通讯地址
+         * @param BAUD_RATE   波特率
+         * @param readByteMax 读取Byte最大值
+         */
+        public SerialPortUtils(Context context, String COM_All, int BAUD_RATE, int readByteMax, boolean isShowLog) {
+            this.isShowLog = isShowLog;
+            if (serialPortFinder == null) {
+                serialPortFinder = new SerialPortFinder();
+            }
+            try {
+                serialPort = new SerialPort(new File(COM_All), BAUD_RATE, FLAGS);
+                inputStream = serialPort.getInputStream();
+                outputStream = serialPort.getOutputStream();
+
+                try {
+                    HardwareInit.InitSerialPort(COM_All, BAUD_RATE);//初始化插件校准数据
+                } catch (Exception e) {
+                    log("初始化插件失败！");
+                }
+
+                if (isShowLog) {
+                    log(COM_All + "——打开串口成功!");
+                    if (context != null) {
+                        Toast.makeText(context, COM_All + "——打开串口成功!", Toast.LENGTH_LONG).show();
+                    }
+                }
+
+                buffer = new byte[readByteMax]; //读取数据的容器
+
+            } catch (IOException e) {
+                if (isShowLog) {
+                    log(COM_All + "打开串口失败!");
+                    Toast.makeText(context, COM_All + "打开串口失败!", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+
+
+        /***************************************************** 其他功能性方法 *****************************************************/
+
+        public SerialPortUtils setWaitingTimeAndReadSpeed(int waitingTime, int readSpeed) {
+            this.defaultSpeed = waitingTime;
+            this.readSpeed = readSpeed;
+            return this;
+        }
+
+        public int getReadSpeed() {
+            return readSpeed;
+        }
+
+        /**
+         * 设置读取数据期间的速度
+         *
+         * @param readSpeed 设置读取到数据后的读取数据速度
+         */
+        public SerialPortUtils setReadSpeed(int readSpeed) {
+            this.readSpeed = readSpeed;
+            return this;
+        }
+
+        public int getWaitingTime() {
+            return waitingTime;
+        }
+
+        /**
+         * 设置等待下位机发送数据的等待间隔时间
+         *
+         * @param waitingTime
+         */
+        public SerialPortUtils setWaitingTime(int waitingTime) {
+            this.defaultSpeed = waitingTime;
+            return this;
+        }
+
+        public int getTYPE() {
+            return TYPE;
+        }
+
+        public SerialPortUtils setTYPE(int TYPE) {
+            this.TYPE = TYPE;
+            return this;
+        }
+
+        //恢复默认的十进制
+        private void closeParameter() {
+            TYPE = 10;
+        }
+
+        /***************************************************** 读取下位机数据的原始方法 *****************************************************/
+
+        /**
+         * 按照次数读取数据
+         *
+         * @param count 本次读取多少次又有数据
+         * @return
+         */
+        public byte[] readByteDataCount(int count) {
+            if (inputStream == null || count <= 0) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取次数的
+            List<byte[]> byteList = new ArrayList<>();
+            int arrayMax = 0;
+
+            while (true) {
+                if (count <= 0) {
+                    break;
+                }
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        count--;
+                        arrayMax += size;
+                        byte[] readBytes = new byte[size];
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+            return bufferAll;
+        }
+
+        /**
+         * 按照时间读取数据
+         *
+         * @param time 读取多少秒的数据
+         * @return
+         */
+        public byte[] readByteDataTime(int time) {
+            if (inputStream == null || time <= 0) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个时间段的
+            List<byte[]> byteList = new ArrayList<>();
+            int arrayMax = 0;
+
+            while (true) {
+                if (time <= 0) {
+                    break;
+                }
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;
+                        arrayMax += size;
+                        byte[] readBytes = new byte[size];
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                    } else {
+                        waitingTime = defaultSpeed;
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+                time--;
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+            return bufferAll;
+        }
+
+        /**
+         * 按照在一定时间内读取的次数来读取数据
+         *
+         * @param time 读取多少秒的数据
+         * @return
+         */
+        public byte[] readByteDataTimeAddCount(int time, int count) {
+            if (inputStream == null || time <= 0 || count <= 0) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个时间段的
+            List<byte[]> byteList = new ArrayList<>();
+            int arrayMax = 0;
+
+            while (true) {
+                if (time <= 0 || count <= 0) {
+                    break;
+                }
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        count--;
+                        arrayMax += size;
+                        byte[] readBytes = new byte[size];
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+                time--;
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+            return bufferAll;
+        }
+
+        /**
+         * 按照起始符与结束符开始读取数据
+         *
+         * @param start 开始读取的标识
+         * @param close 结束读取的标识
+         * @return
+         */
+        public byte[] readByteDataStartAddClose(String start, String close) {
+
+            if (inputStream == null || start == null || close == null) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个区域间的
+            List<byte[]> byteList = new ArrayList<>();//总数据
+            int arrayMax = 0;//总数据索引
+            boolean isRead = false;//是否开始读取数据
+
+            //读取本次下位机发送的所有数据
+            while (true) {
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        byte[] readBytes = new byte[size];
+                        arrayMax += size;
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                        isRead = true;
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                    if (isRead && size == -1) {//如果等于 true 表示开始读取数据
+                        break;//结束本次读取
+                    }
+                } catch (IOException e) {
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+
+            //遍历截取起始符和结束符的数据
+            String sumData = "";
+            String startData = "";
+            String closeData = "";
+
+            //总数据
+            for (byte str : bufferAll) {
+                sumData += str + "-GT-";
+            }
+            //开始符数据
+            for (byte str : start.getBytes()) {
+                startData += str + "-GT-";
+            }
+            //结束符数据
+            for (byte str : close.getBytes()) {
+                closeData += str + "-GT-";
+            }
+            //截取需要的数据
+            sumData = sumData.substring(sumData.indexOf(startData) + startData.length(), sumData.indexOf(closeData));
+
+            String[] split = sumData.split("-GT-");
+            bufferAll = new byte[split.length];//最大容器
+            for (int i = 0; i < bufferAll.length; i++) {
+                bufferAll[i] = Byte.parseByte(split[i]);
+            }
+
+            return bufferAll;
+        }
+
+        /**
+         * 按照本次读取的所有数据
+         *
+         * @return
+         */
+        public byte[] readByteDataAll() {
+            if (inputStream == null) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            //读取一个区域间的
+            List<byte[]> byteList = new ArrayList<>();//总数据
+            int arrayMax = 0;//总数据索引
+            boolean isRead = false;//是否开始读取数据
+
+            //读取本次下位机发送的所有数据
+            while (true) {
+                try {
+                    int size = inputStream.read(buffer);
+                    if (isShowLog)
+                        log("size:" + size);
+                    if (size > 0) {
+                        waitingTime = readSpeed;//加速
+                        byte[] readBytes = new byte[size];
+                        arrayMax += size;
+                        System.arraycopy(buffer, 0, readBytes, 0, size);
+                        byteList.add(readBytes);
+                        isRead = true;
+                    } else {
+                        waitingTime = defaultSpeed;//恢复默认速度
+                    }
+                    if (isRead && size == -1) {//如果等于 true 表示开始读取数据
+                        break;//结束本次读取
+                    }
+                } catch (IOException e) {
+//                e.printStackTrace();
+                    if (isShowLog)
+                        log("读取失败:" + e);
+                    break;
+                }
+
+                sleep(waitingTime);
+            }
+
+            //将所有的片段都组合在一起
+            byte[] bufferAll = new byte[arrayMax];//最大容器
+            int allIndex = 0;//最大容器的索引
+            for (int i = 0; i < byteList.size(); i++) {
+                byte[] bytes = byteList.get(i);
+                for (int j = 0; j < bytes.length; j++) {
+                    bufferAll[allIndex++] = bytes[j];
+                }
+            }
+
+            return bufferAll;
+        }
+
+
+        /***************************************************** 读取数据方法 *****************************************************/
+
+        /**
+         * 按照次数读取数据
+         *
+         * @param count 读取数据的次数
+         * @return
+         */
+        public String readDataCount(int count) {
+            byte[] bytes = readByteDataCount(count);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 按时间读取数据
+         *
+         * @param time 读取数据的时间
+         * @return
+         */
+        public String readDataTime(int time) {
+            byte[] bytes = readByteDataTime(time);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 按照在一定时间内读取的次数来读取数据
+         *
+         * @param time  读取数据的时间
+         * @param count 在规定的时间内读取数据的次数
+         * @return
+         */
+        public String readDataTimeAddCount(int time, int count) {
+            byte[] bytes = readByteDataTimeAddCount(time, count);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 按照起始符与结束符读取数据
+         *
+         * @param start 开始读取数据的开始符号
+         * @param close 结束读取数据的结束符号
+         * @return
+         */
+        public String readDataStartAddClose(String start, String close) {
+            byte[] bytes = readByteDataStartAddClose(start, close);
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+        }
+
+        /**
+         * 读取本次所有数据
+         *
+         * @return
+         */
+        public String readDataAll() {
+            byte[] bytes = readByteDataAll();
+            if (bytes != null) {
+                return returnTypeData(bytes);
+            }
+            return null;
+
+        }
+
+        /**
+         * 读取曲线数据
+         * 格式：,T:0.000,C:-3.620;90,91,92,91,91,91,91,91,91,90,90,90,91,91,90,90,92,91
+         *
+         * @param spValue 检测值与曲线值的分隔符
+         * @return
+         */
+        public String readCurveData(String spValue) {
+            if (spValue == null) {
+                if (isShowLog)
+                    log("读取数据失败！");
+                return null;
+            }
+            byte[] bytes = readByteDataAll();//读取本次所有下位机发送的数据
+            if (bytes != null) {
+                //确定前后区数组大小
+                byte[] startByte = null;
+                byte[] closeByte = null;
+                for (int i = 0; i < bytes.length; i++) {
+                    byte aByte = bytes[i];
+                    if (aByte == spValue.getBytes()[0]) {
+                        startByte = new byte[i + 1];
+                        closeByte = new byte[bytes.length - startByte.length];
+                        break;
+                    }
+                }
+                String startStr = null, closeStr = null;
+                try {
+                    //处理分割区前的数据
+                    System.arraycopy(bytes, 0, startByte, 0, startByte.length);
+                    startStr = returnTypeData(startByte);
+                    //处理分割区后的数据
+                    System.arraycopy(bytes, startByte.length, closeByte, 0, closeByte.length);
+                    closeStr = setTYPE(16).returnTypeData(closeByte);
+                } catch (Exception e) {//NullPointerException
+                    log("串口读取异常:" + e);
+                }
+
+                return startStr + closeStr;
+            }
+            return null;
+        }
+
+        /***************************************************** 发送数据方法 *****************************************************/
+
+        /**
+         * 发送数据
+         * 比如：Charset.forName("GB2312")
+         *
+         * @param sendData 发送数据的内容
+         * @param charset  发送数据的格式
+         */
+        public SerialPortUtils sendData(final String sendData, Charset charset) {
+            if (outputStream == null || sendData == null) {
+                if (isShowLog)
+                    log("发送数据失败！");
+                return this;
+            }
+
+            if (isShowLog)
+                log("发送给下位机的数据:" + sendData);
+
+            //设置发送数据的格式
+            byte[] bytes;
+            if (charset == null) {
+                bytes = sendData.getBytes();
+            } else {
+                bytes = sendData.getBytes(charset);//发给打印机的
+            }
+
+            try {
+                outputStream.write(bytes);
+                outputStream.flush();
+                if (isShowLog)
+                    log("发送数据成功！");
+            } catch (IOException e) {
+                e.printStackTrace();
+                if (isShowLog)
+                    log("发送数据失败！");
+            }
+            return this;
+        }
+
+        /**
+         * 发送数据
+         *
+         * @param sendData
+         * @return
+         */
+        public SerialPortUtils sendData(final String sendData) {
+            if (outputStream == null || sendData == null) {
+                if (isShowLog)
+                    log("发送数据失败！");
+                return this;
+            }
+
+            if (isShowLog)
+                log("发送给下位机的数据:" + sendData);
+
+            //设置发送数据的格式
+            byte[] bytes = sendData.getBytes();
+            try {
+                outputStream.write(bytes);
+                outputStream.flush();
+                if (isShowLog)
+                    log("发送数据成功！");
+            } catch (IOException e) {
+                e.printStackTrace();
+                if (isShowLog)
+                    log("发送数据失败！");
+            }
+            return this;
+        }
+
+
+        /***************************************************** 数据进制转换方法 *****************************************************/
+
+        /**
+         * 返回转换好的进制数据
+         *
+         * @param bytes 需要转换进制的数据
+         * @return
+         */
+        public String returnTypeData(byte[] bytes) {
+            String readData = "";
+            switch (TYPE) {
+                case 10:
+                    readData = new String(bytes, Charset.forName("gbk"));
+                    break;
+                case 16:
+                    int[] ints = DataUtils.byte2Int(bytes);
+                    for (int value : ints) {
+                        readData += value + ",";
+                    }
+                    break;
+            }
+            closeParameter();
+            return readData;
+        }
+
+        /**
+         * 释放资源
+         */
+        public void close() {
+            if (inputStream != null) {
+                try {
+                    inputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if (outputStream != null) {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if (serialPort != null) {
+                serialPort.close();
+                serialPort = null;
+            }
+
+            if (serialPortFinder != null) {
+                serialPortFinder = null;
+            }
+
+        }
+
+        /**
+         * 日志
+         *
+         * @param msg
+         */
+        private static void log(Object msg) {
+            Log.i("GT_i", msg.toString());
+            GT.DataSendReception.sendUpdateUiBroadcast(SerialPortUtils.class.getName(), msg.toString());
+        }
+
+
+        /**
+         * 睡眠
+         *
+         * @param millis
+         */
+        public static void sleep(long millis) {
+            try {
+                java.lang.Thread.sleep(millis);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
 
     }
 
-    /**
-     * 进制数据
-     */
-    public static class HexadecimalNumberUtils {
+    /***************************************************** 数据转换工具类 *****************************************************/
+    public static class DataUtils {
 
-        public static Object hexadecimalNumber(Object obj, int value, int toValue) {
-
-
-            return null;
+        /**
+         * 16进制 byte 转10进制 int
+         *
+         * @param data
+         * @return
+         */
+        public static int[] byte2Int(byte[] data) {
+            int[] result = new int[data.length / 2];
+            int value;
+            int extra = 0;
+            if (data.length % 2 != 0) {
+                extra = 2;
+            }
+            for (int i = 0; i < data.length - extra; i += 2) {
+                int int1 = (data[i] & 0xff) << 8;
+                value = int1 + (data[i + 1] & 0xff);
+                result[i / 2] = value;
+            }
+            return result;
         }
+
+        // 判断奇数或偶数，位运算，最后一位是1则为奇数，为0是偶数
+        public static int isOdd(int num) {
+            return num & 1;
+        }
+
+        //Hex字符串转int
+        public static int HexToInt(String inHex) {
+            return Integer.parseInt(inHex, 16);
+        }
+
+        public static String IntToHex(int intHex) {
+            return Integer.toHexString(intHex);
+        }
+
+        //Hex字符串转byte
+        public static byte HexToByte(String inHex) {
+            return (byte) Integer.parseInt(inHex, 16);
+        }
+
+        //1字节转2个Hex字符
+        public static String Byte2Hex(Byte inByte) {
+            return String.format("%02x", new Object[]{inByte}).toUpperCase();
+        }
+
+        //字节数组转转hex字符串
+        public static String ByteArrToHex(byte[] inBytArr) {
+            StringBuilder strBuilder = new StringBuilder();
+            for (byte valueOf : inBytArr) {
+                strBuilder.append(Byte2Hex(Byte.valueOf(valueOf)));
+                strBuilder.append(" ");
+            }
+            return strBuilder.toString();
+        }
+
+        //字节数组转转hex字符串，可选长度
+        public static String ByteArrToHex(byte[] inBytArr, int offset, int byteCount) {
+            StringBuilder strBuilder = new StringBuilder();
+            int j = byteCount;
+            for (int i = offset; i < j; i++) {
+                strBuilder.append(Byte2Hex(Byte.valueOf(inBytArr[i])));
+            }
+            return strBuilder.toString();
+        }
+
+        //转hex字符串转字节数组
+        public static byte[] HexToByteArr(String inHex) {
+            byte[] result;
+            int hexlen = inHex.length();
+            if (isOdd(hexlen) == 1) {
+                hexlen++;
+                result = new byte[(hexlen / 2)];
+                inHex = "0" + inHex;
+            } else {
+                result = new byte[(hexlen / 2)];
+            }
+            int j = 0;
+            for (int i = 0; i < hexlen; i += 2) {
+                result[j] = HexToByte(inHex.substring(i, i + 2));
+                j++;
+            }
+            return result;
+        }
+
+        /**
+         * 按照指定长度切割字符串
+         *
+         * @param inputString 需要切割的源字符串
+         * @param length      指定的长度
+         * @return
+         */
+        public static List<String> getDivLines(String inputString, int length) {
+            List<String> divList = new ArrayList<>();
+            int remainder = (inputString.length()) % length;
+            // 一共要分割成几段
+            int number = (int) Math.floor((inputString.length()) / length);
+            for (int index = 0; index < number; index++) {
+                String childStr = inputString.substring(index * length, (index + 1) * length);
+                divList.add(childStr);
+            }
+            if (remainder > 0) {
+                String cStr = inputString.substring(number * length, inputString.length());
+                divList.add(cStr);
+            }
+            return divList;
+        }
+
+        /**
+         * 计算长度，两个字节长度
+         *
+         * @param val value
+         * @return 结果
+         */
+        public static String twoByte(String val) {
+            if (val.length() > 4) {
+                val = val.substring(0, 4);
+            } else {
+                int l = 4 - val.length();
+                for (int i = 0; i < l; i++) {
+                    val = "0" + val;
+                }
+            }
+            return val;
+        }
+
+        /**
+         * 校验和
+         *
+         * @param cmd 指令
+         * @return 结果
+         */
+        public static String sum(String cmd) {
+            List<String> cmdList = getDivLines(cmd, 2);
+            int sumInt = 0;
+            for (String c : cmdList) {
+                sumInt += HexToInt(c);
+            }
+            String sum = IntToHex(sumInt);
+            sum = twoByte(sum);
+            cmd += sum;
+            return cmd.toUpperCase();
+        }
+
 
     }
 
@@ -7597,38 +8557,65 @@ public class GT {
 
     /**
      * HttpUtil 原始网络请求类
+     * 将 Map 中的参数解析成想要的 get 参数
+     * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
      */
     public static class HttpUtil {
-
         private static final String UTF_8 = "utf-8";
         private static final String GET = "GET";
         private static final String POST = "POST";
+        private static String value = "";
+        private static String url = "";
+
+        private static String type = "text";//请求参数的类型
+
+        public static void setTextType() {
+            type = "text";
+        }
+
+        public static void setJsonType() {
+            type = "json";
+        }
 
         /**
-         * get请求封装
+         * Map转参数
+         *
+         * @param paramMap
+         * @return
          */
-        public static void getRequest(final String url, final Map<String, Object> params, final GT.HttpUtil.OnLoadData listener) {
-            if (url == null || listener == null) {
-                return;
-            }
-            /**
-             * 将 Map 中的参数解析成想要的 get 参数
-             * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
-             */
+        public static String mapToParams(Map<String, Object> paramMap) {
             StringBuffer stringBuffer = new StringBuffer();
-            if (params != null && params.size() > 0) {
+            if (paramMap != null && paramMap.size() > 0) {
                 stringBuffer.append("?");//url 与 请求参数的分隔符
-                for (Map.Entry<String, Object> entry : params.entrySet()) {
+                for (Map.Entry<String, Object> entry : paramMap.entrySet()) {
                     stringBuffer.append(entry.getKey());
                     stringBuffer.append("=");
                     stringBuffer.append(entry.getValue());
                     stringBuffer.append("&");
                 }
                 stringBuffer.deleteCharAt(stringBuffer.length() - 1);//去掉最后一个 & 字符
+                return stringBuffer.toString();
+            }
+
+            return null;
+        }
+
+        /**
+         * get请求封装
+         */
+        public static void getRequest(final String url, final Map<String, Object> paramMap, final GT.HttpUtil.OnLoadData listener) {
+            if (url == null || listener == null) {
+                return;
+            }
+
+            String params = mapToParams(paramMap);
+            if (params == null) {
+                err(getLineInfo(), "请求参数不能为null");
+                return;
             }
 
             //将解析好的参数直接调用 getRequest 进行get请求参数
-            getRequest(url + stringBuffer.toString(), listener);
+            getRequest(url + params, listener);
         }
 
         /**
@@ -7641,9 +8628,10 @@ public class GT {
             GT.Thread.runJava(new Runnable() { //为请求网络数据开启子线程
                 @Override
                 public void run() {
+                    HttpURLConnection conn = null;
                     try {
                         URL path = new URL(url);//获取 Url
-                        HttpURLConnection conn = (HttpURLConnection) path.openConnection();//打开连接
+                        conn = (HttpURLConnection) path.openConnection();//打开连接
                         conn.setRequestMethod(GET);    //设置请求方式
                         int code = conn.getResponseCode();
                         if (code == 200) {//应答码200表示请求成功
@@ -7657,7 +8645,7 @@ public class GT {
                         }
                     } catch (Exception error) {
                         try {
-                            onError(listener, error);//请求失败
+                            onError(listener, error, conn);//请求失败
                         } catch (Exception e1) {
                             err("e1:" + error);
                             err("e2:" + e1);
@@ -7668,24 +8656,19 @@ public class GT {
         }
 
         /**
-         * POST请求
+         * POST请求 get 与 Post 参数格式一样，请求类型不一样
+         * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
          */
-        public static void postRequest(final String url, final String params, final GT.HttpUtil.OnLoadData listener) {
+        public static void postRequest(final String url, final Map<String, Object> map, final GT.HttpUtil.OnLoadData listener) {
 
-            /**
-             * 将 Map 中的参数解析成想要的 post 参数
-             * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
-             */
+            String params = mapToParams(map);
+            if (params == null) {
+                err(getLineInfo(), "请求参数不能为null");
+            }
 
             postRequest(url + "?" + params, listener);
         }
 
-        private static String value = "";
-        private static String url = "";
-
-        /**
-         * POST请求
-         */
         /**
          * POST请求
          */
@@ -7715,18 +8698,26 @@ public class GT {
             Thread.runJava(new Runnable() {// 为网络请求开启子线程
                 @Override
                 public void run() {
+                    HttpURLConnection conn = null;
                     try {
                         // 打开连接
                         URL path = new URL(HttpUtil.url);// 1. 生成URL
-                        HttpURLConnection conn = (HttpURLConnection) path.openConnection();// 2. HttpURLConnection 打开连接
+                        conn = (HttpURLConnection) path.openConnection();// 2. HttpURLConnection 打开连接
                         conn.setRequestMethod(POST);// 3. 设置为 POST 请求
-                        // Text 请求
-//                        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");//4. Content-Type,这里是固定写法，发送内容的类型
+                        conn.setDoInput(true);//可向连接中写入
+                        conn.setDoOutput(true);//可向连接中读取数据
+                        conn.setUseCaches(false);//禁止使用缓存
+                        conn.setInstanceFollowRedirects(true);//自动执行Http重定向
 
-                        // json 请求
+                        if (type.equals("text")) {
+                            // Text 请求
+                            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");//4. Content-Type,这里是固定写法，发送内容的类型
+                        } else {
+                            // json 请求
+                            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");// 设置文件类型:
+                        }
                         conn.setRequestProperty("Connection", "Keep-Alive");
                         conn.setRequestProperty("Charset", "UTF-8");
-                        conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");// 设置文件类型:
                         conn.setRequestProperty("accept", "application/json");
 
                         // 向服务器提交请求数据
@@ -7749,7 +8740,7 @@ public class GT {
 
                     } catch (Exception e) {
                         try {
-                            onError(listener, e);
+                            onError(listener, e, conn);
                         } catch (Exception e1) {
                             err("e1:" + e);
                             err("e2:" + e1);
@@ -7760,10 +8751,24 @@ public class GT {
 
         }
 
-        private static void onError(final GT.HttpUtil.OnLoadData listener, final Exception onError) {
+        /**
+         * 反馈失败
+         *
+         * @param listener
+         * @param onError
+         */
+        private static void onError(final GT.HttpUtil.OnLoadData listener, final Exception onError, HttpURLConnection conn) {
+            conn.disconnect();//断开连接
             listener.onError(onError.toString());
         }
 
+        /**
+         * 反馈成功
+         *
+         * @param listener
+         * @param con
+         * @throws IOException
+         */
         private static void onSuccess(final GT.HttpUtil.OnLoadData listener, HttpURLConnection con) throws IOException {
             InputStream inputStream = con.getInputStream();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();//创建内存输出流
@@ -7775,6 +8780,8 @@ public class GT {
                 }
                 final String str = new String(baos.toByteArray(), UTF_8);
                 listener.onSuccess(str);
+                inputStream.close();//关闭
+                con.disconnect();//断开连接
             }
         }
 
@@ -7784,6 +8791,62 @@ public class GT {
 
             void onError(String response);
         }
+
+
+         /* GT.Thread.runJava(new Runnable() {
+            @Override
+            public void run() {
+
+                URL url;
+                try {
+                    url = new URL(urlStr);
+                    HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+                    urlConnection.setRequestMethod("POST");
+                    urlConnection.setDoInput(true);
+                    urlConnection.setDoOutput(true);
+                    urlConnection.setUseCaches(false);
+                    urlConnection.setInstanceFollowRedirects(true);
+                    urlConnection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                    DataOutputStream out = new DataOutputStream(urlConnection.getOutputStream());
+
+                    String param = "location="
+                            + URLEncoder.encode("22.5948,114.3069163","utf-8")
+                            + "&get_poi="
+                            + URLEncoder.encode("1","utf-8")
+                            + "&key="
+                            + URLEncoder.encode("J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT","utf-8");
+
+                    out.writeBytes(param);
+                    out.flush();
+                    out.close();
+
+                    if(urlConnection.getResponseCode() == HttpURLConnection.HTTP_OK){
+
+                        InputStreamReader in = new InputStreamReader(urlConnection.getInputStream());
+                        BufferedReader buffer = new BufferedReader(in);
+                        String inputLine = null;
+
+                        String result = "\n";
+
+                        while ((inputLine = buffer.readLine()) != null){
+                            result += inputLine + "\n";
+                        }
+                        in.close();
+
+                        GT.log("result:" + result);
+
+                    }
+
+
+                } catch (MalformedURLException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        });*/
+
 
     }
 
@@ -7997,6 +9060,168 @@ public class GT {
              * @加载错误
              */
             void onLoadError(WebView view, int errorCode, String description, String failingUrl);
+
+        }
+
+    }
+
+    /**
+     * 网络连接
+     */
+    public static class GT_Socket {
+
+        public static boolean isLog = false;//是否打开日志
+
+        public static class TCP {
+
+            //构建 GT_SharedPreferences
+            @Target(ElementType.FIELD)
+            @Retention(RetentionPolicy.RUNTIME)
+            public @interface Build {
+                String setIP() default "null";      //默认IP地址
+
+                int setPort();              //默认的端口号
+            }
+
+            private ServerSocket serverSocket;//服务器套接字
+            private Socket socket;//服务器、客户端套接字
+            private PrintStream printStream;//输出
+            private BufferedReader bufferedReader;//输入
+            private int port = -1;//端口号：必须大于1023 0~1023为系统保留端口
+
+            /**
+             * 创建服务器
+             *
+             * @param port
+             */
+            public TCP(int port) {
+                this.port = port;
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            serverSocket = new ServerSocket(port);//创建服务器
+                            if (isLog)
+                                GT.log("服务器：创建好服务器，等待连接");
+                            socket = serverSocket.accept();//开始等待客户端连接
+                            if (isLog)
+                                GT.log("服务器：有客户端连接");
+                            printStream = new PrintStream(socket.getOutputStream());//输出
+                            bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));//输入
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            }
+
+            /**
+             * 创建客户端
+             *
+             * @param port
+             */
+            public TCP(String ip, int port) {
+                this.port = port;
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            if (isLog)
+                                GT.log("客户端：开始连接服务器");
+                            socket = new Socket(ip, port);//连接服务器
+                            if (isLog)
+                                GT.log("客户端：连接服务器成功！");
+                            printStream = new PrintStream(socket.getOutputStream());//输出
+                            bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));//输入
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            }
+
+            /**
+             * 读取数据
+             *
+             * @return
+             */
+            public String readData() {
+                String data = null;
+                try {
+                    if (bufferedReader != null) {
+                        data = bufferedReader.readLine();
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return data;
+            }
+
+            /**
+             * 发送数据
+             *
+             * @param data
+             * @return
+             */
+            public TCP sendData(Object data) {
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (printStream != null) {
+                            printStream.println(String.valueOf(data));
+                        }
+                    }
+                });
+                return this;
+            }
+
+            /**
+             * 释放资源
+             */
+            public void close() {
+
+                //关闭输入输出流
+                if (socket != null) {
+                    try {
+                        socket.shutdownInput();
+                        socket.shutdownOutput();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+
+                if (bufferedReader != null) {
+                    try {
+                        bufferedReader.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    bufferedReader = null;
+                }
+
+                if (printStream != null) {
+                    printStream.close();
+                    printStream = null;
+                }
+
+                if (socket != null) {
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    socket = null;
+                }
+
+
+            }
+
+
+        }
+
+        public static class UDP {
+
 
         }
 
@@ -8304,7 +9529,7 @@ public class GT {
         }
 
         /**
-         * 时间戳转 时间
+         * 时间戳转 时间 YYYY-MM-DD 00:00:00
          *
          * @param dataTime
          * @return
@@ -8316,6 +9541,22 @@ public class GT {
             Date date = new Date(lt);
             String time = formatter.format(date);
             return time;
+        }
+
+        /**
+         * 时间转时间戳
+         *
+         * @param time 如：2021-07-23 16:36:12  格式必须为这样，单数也要前加 0 可以这样：2021-07-23 00:00:00
+         * @return 返回时间戳
+         */
+        public long toTimestamp(String time) {
+            long times = 0;
+            try {
+                times = (int) ((Timestamp.valueOf(time).getTime()) / 1000);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return times;
         }
 
         /**
@@ -10606,32 +11847,44 @@ public class GT {
             void function(final View view, final T bean);
         }
 
-
         /**
          * 用于继承新版的适配器
          */
         public static abstract class BaseAdapter<T> extends RecyclerView.Adapter<BaseAdapter.BaseHolder> {
 
             private Context context;
-            private List<T> detectionDataBeanList;
+            private List<T> beanList;
             private LinearLayoutManager linearLayoutManager;
+            private int layout = -1;
 
             public BaseAdapter(Context context) {
                 this.context = context;
             }
 
-            public BaseAdapter(Context context, List<T> detectionDataBeanList) {
+            /**
+             * @param context
+             * @param beanList 展示内容
+             */
+            public BaseAdapter(Context context, List<T> beanList) {
                 this.context = context;
-                this.detectionDataBeanList = detectionDataBeanList;
+                this.beanList = beanList;
                 notifyDataSetChanged();
             }
 
-            public BaseAdapter(Context context, RecyclerView rv, List<T> detectionDataBeanList, int layout) {
+            /**
+             * @param context
+             * @param rv
+             * @param beanList      展示内容
+             * @param layout_V_OR_H LinearLayoutManager.VERTICAL OR LinearLayoutManager.HORIZONTAL OR 瀑布流
+             * @param layout        加载的布局
+             */
+            public BaseAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
                 this.context = context;
-                linearLayoutManager = new LinearLayoutManager(context, layout, false);
+                this.layout = layout;
+                linearLayoutManager = new LinearLayoutManager(context, layout_V_OR_H, false);
                 rv.setAdapter(this);
                 rv.setLayoutManager(linearLayoutManager);
-                this.detectionDataBeanList = detectionDataBeanList;
+                this.beanList = beanList;
                 notifyDataSetChanged();
             }
 
@@ -10651,12 +11904,12 @@ public class GT {
                 this.linearLayoutManager = linearLayoutManager;
             }
 
-            public List<?> getDetectionDataBeanList() {
-                return detectionDataBeanList;
+            public List<?> getBeanList() {
+                return beanList;
             }
 
-            public void setDetectionDataBeanList(List<T> detectionDataBeanList) {
-                this.detectionDataBeanList = detectionDataBeanList;
+            public void setBeanList(List<T> beanList) {
+                this.beanList = beanList;
                 notifyDataSetChanged();
             }
 
@@ -10681,14 +11934,13 @@ public class GT {
              * @param adapter
              * @return
              */
-            public LinearLayoutManager setLinearLayoutManager_H(RecyclerView rv, RecyclerView.Adapter adapter) {
+            public LinearLayoutManager setLinearLayoutManager_H(RecyclerView rv) {
                 LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false);
-                rv.setAdapter(adapter);
+                rv.setAdapter(this);
                 rv.setLayoutManager(llm);
                 return llm;
             }
 
-            @NonNull
             @Override
             public BaseAdapter.BaseHolder onCreateViewHolder(ViewGroup parent, int viewType) {
                 BaseHolder baseHolder = new BaseHolder(LayoutInflater.from(context).inflate(loadLayout(), parent, false));
@@ -10696,20 +11948,33 @@ public class GT {
             }
 
             protected int loadLayout() {
-                return 0;
+                return layout;
             }
 
-            protected abstract void initView(BaseAdapter.BaseHolder holder, int position, T t);
+            protected void initView(BaseAdapter.BaseHolder holder, int position, T t) {
+            }
+
+            ;
+
+            protected void initView(View itemView, int position, T t) {
+            }
+
+            ;
+
+            protected void loadData(View itemView, int position, T t) {
+            }
 
             @Override
             public void onBindViewHolder(BaseAdapter.BaseHolder holder, int position) {
-                T t = detectionDataBeanList.get(position);
+                T t = beanList.get(position);
                 initView(holder, position, t);
+                initView(holder.itemView, position, t);
+                loadData(holder.itemView, position, t);
             }
 
             @Override
             public int getItemCount() {
-                return detectionDataBeanList == null ? 0 : detectionDataBeanList.size();
+                return beanList == null ? 0 : beanList.size();
             }
 
             protected static class BaseHolder extends RecyclerView.ViewHolder {
@@ -10720,6 +11985,34 @@ public class GT {
 
         }
 
+        public static abstract class AnnotationAdapter<T> extends BaseAdapter<T> {
+
+            //布局ID
+            private int resLayout;
+
+            public void setLayout(int resLayout) {
+                this.resLayout = resLayout;
+            }
+
+            public AnnotationAdapter(Context context) {
+                super(context);
+            }
+
+            public AnnotationAdapter(Context context, List<T> detectionDataBeanList) {
+                super(context, detectionDataBeanList);
+            }
+
+            public AnnotationAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
+                super(context, rv, beanList, layout_V_OR_H, layout);
+            }
+
+            @Override
+            protected int loadLayout() {
+                return resLayout;
+            }
+
+
+        }
 
     }
 
@@ -12240,43 +13533,6 @@ public class GT {
 
         }
 
-
-    }
-
-    /**
-     * 设置触摸放大
-     */
-    public static class ViewTouchMagnify {
-        private int viewWidth;        //保存按钮宽度
-        private int viewHeight;        //保存按钮高度
-
-        /**
-         * 为按钮设置触摸事件
-         *
-         * @param view
-         */
-        public void touchZoomInView(final View view) {
-            //设置按钮触摸事件
-            view.setOnTouchListener(new View.OnTouchListener() {
-                public boolean onTouch(View arg0, MotionEvent arg1) {
-                    ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-                    if (arg1.getAction() == MotionEvent.ACTION_DOWN) {//如果用户手指触摸屏幕
-                        viewWidth = view.getWidth();        //保存按钮的宽度
-                        viewHeight = view.getHeight();        //保存按钮的高度
-                        //                        view.setTextSize(18);								//设置按钮放大时字体大小
-                        layoutParams.width = viewWidth + 20;                //设置按钮放大时的宽度
-                        layoutParams.height = viewHeight + 10;            //设置按钮放大时的高度
-                    } else if (arg1.getAction() == MotionEvent.ACTION_UP) {//如果用户手指离开屏幕
-                        //                        button.setTextSize(15);							//设置按钮为原来字体大小
-                        layoutParams.width = viewWidth;                //设置按钮为原来的宽度
-                        layoutParams.height = viewHeight;                //设置按钮为原来的高度
-                    }
-                    view.setLayoutParams(layoutParams);    //提交事务
-                    return false; //设置为未完成消耗掉的时间   如果将此返回为     true  那么按钮的  单击事件将会被屏蔽掉
-                }
-            });
-
-        }
 
     }
 
@@ -14197,16 +15453,10 @@ public class GT {
             // 定义 Activity
             protected Activity activity;
 
-            // 获取 GT 实例
-            public GT getGT() {
-                return getGT();
-            }
-
             // 如果重写该方法了的话就需要自己写 接收 Activity
             @Override
             public void onAttach(Context context) {
                 super.onAttach(context);
-
                 // 使用官方推荐的方法持有 Activity
                 activity = (Activity) context;
 
@@ -14232,7 +15482,7 @@ public class GT {
              * @param view
              * @param savedInstanceState
              */
-            protected abstract void initView(@NonNull View view, @Nullable Bundle savedInstanceState);
+            protected abstract void initView(View view, @Nullable Bundle savedInstanceState);
 
             /**
              * 用户在初始化布局前设置必要的参数 当前方法可不重写
@@ -14517,7 +15767,7 @@ public class GT {
 
             protected GT_Fragment gt_fragment;
 
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
                 View view = inflater.inflate(loadLayout(), container, false);
                 createView(view);
                 return view;
@@ -14530,7 +15780,7 @@ public class GT {
             }
 
             @Override
-            public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+            public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
 
                 //防止点击穿透
@@ -14606,17 +15856,6 @@ public class GT {
 
             }
 
-
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            protected void build(Object object, View view) {
-                GT.getGT().build(object, view);
-            }
-
             /**
              * 返回 true 则劫持返回事件
              *
@@ -14658,26 +15897,16 @@ public class GT {
             }
 
             @Override
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                build(this);// 注解赋值布局ID值
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+                getGT().build(this);// 注解赋值布局ID值
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
             }
 
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            private void build(Object object) {
-                GT.getGT().build(object, null);
-            }
-
             @Override
             protected void initView(View view, Bundle savedInstanceState) {
-                build(this, view);
+                getGT().build(this);
 
             }
         }
@@ -14991,7 +16220,7 @@ public class GT {
             protected GT_Fragment gt_fragment;
 
             @Override
-            public void onAttach(@NonNull Context context) {
+            public void onAttach(Context context) {
                 super.onAttach(context);
                 activity = (Activity) context;
             }
@@ -15011,7 +16240,7 @@ public class GT {
              * @param view
              * @param savedInstanceState
              */
-            protected abstract void initView(@NonNull View view, @Nullable Bundle savedInstanceState);
+            protected abstract void initView(View view, @Nullable Bundle savedInstanceState);
 
             /**
              * 主要实现的功能
@@ -15268,7 +16497,7 @@ public class GT {
 
             @Nullable
             @Override
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
                 View view = inflater.inflate(loadLayout(), container, false);
                 createView(view);
                 return view;
@@ -15402,7 +16631,7 @@ public class GT {
             }
 
             @Override
-            public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+            public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
                 initView(view, savedInstanceState);// 主要方法
                 loadData();
@@ -15475,17 +16704,6 @@ public class GT {
                 return false;
             }
 
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            protected void build(Object object, View view) {
-                GT.getGT().build(object, view);
-            }
-
-
         }
 
         /**
@@ -15500,26 +16718,17 @@ public class GT {
             }
 
             @Override
-            public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                build(this);// 注解赋值布局ID值
+            public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+                getGT().build(this);// 注解赋值布局ID值
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
             }
 
-            /**
-             * 构建 GT 工具包
-             *
-             * @param object
-             * @param view
-             */
-            private void build(Object object) {
-                GT.getGT().build(object, null);
-            }
 
             @Override
-            protected void initView(@NonNull View view, @Nullable Bundle savedInstanceState) {
-                build(this, view);
+            protected void initView(View view, @Nullable Bundle savedInstanceState) {
+                getGT().build(this);
             }
         }
 
@@ -16044,7 +17253,7 @@ public class GT {
 
             @Override
             public void onCreate() {
-                GT.getGT().build(this, null);
+                getGT().build(this);
                 View view = LayoutInflater.from(this).inflate(resLayout, null);
                 setView(view);
                 super.onCreate();
@@ -16052,7 +17261,7 @@ public class GT {
 
             @Override
             protected void initView(View view) {
-                GT.getGT().build(this, view);
+                getGT().build(this);
             }
 
         }
@@ -16063,7 +17272,9 @@ public class GT {
     //自定义组工具集合
     public static class ViewUtils {
 
-        //跑马灯
+        /**
+         * 跑马灯
+         */
         public static class MarqueeTextView extends TextView {
 
             public MarqueeTextView(Context context) {
@@ -16905,6 +18116,31 @@ public class GT {
                     }
                 });
 
+            }
+
+        }
+
+        /**
+         * 嵌套滑动
+         */
+        public class NestScrollView extends ScrollView {
+            public NestScrollView(Context context) {
+                this(context, null);
+            }
+
+            public NestScrollView(Context context, AttributeSet attrs) {
+                this(context, attrs, 0);
+            }
+
+            public NestScrollView(Context context, AttributeSet attrs, int defStyleAttr) {
+                super(context, attrs, defStyleAttr);
+            }
+
+            @Override
+            public boolean onInterceptTouchEvent(MotionEvent ev) {
+                //关键点在这
+                getParent().requestDisallowInterceptTouchEvent(true);//不要拦截父事件
+                return super.onInterceptTouchEvent(ev);
             }
 
         }
@@ -17994,6 +19230,12 @@ public class GT {
             int value();
         }
 
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_AnnotationAdapter {
+            int value();
+        }
+
         /**
          * 为给 View 组件标的注解
          * 用法如下：
@@ -18338,92 +19580,54 @@ public class GT {
     public static class AnnotationAssist {
 
         //================================   下面是 初始化 注解内容   ==============================
-
-        //主要用于注解 非 Activity 以外的
-        public static void initAll(Object object, View view) {
-
-            if (object == null) {
-                return;
+        //主要用于注解 Activity 与 Fragment 共有的
+        public static void initAll(Object object) {
+            if (getGT().activity == null) {
+                getGT().activity = getGT().getActivity();
             }
 
             // SQL 注解
-            initSQL(object, object.getClass());                      //为加载 List SQL 成员变量初始化
+            initSQL(object);                         //为加载 List SQL 成员变量初始化
+
+            //注解加载布局
+            initAnnotationActivity(object);          //为加载 Activity 布局初始化
+            initAnnotationFragment(object);          // 为加载 AnnotationFragment 布局初始化
+            initGT_AnnotationDialogFragment(object); // 为加载 DialogFragment 布局初始化
+            initGT_AnnotationAdapter(object);       // 为加载 Adapter 布局初始化
+
+            //框架注解
+            initGT_Fragment(object);                 //为加载 Fragment 框架
+            initGT_SharedPreferences(object);        //SP框架注解
+            initSerialPortUtils(object);             //串口框架注解
+            initTCP(object);                         //TCP框架注解
+
+            //为加载 组件 初始化
+            initView(object);
+
+            //注解单击事件
+            initClick(object);
 
             //注解悬浮窗
-//            initAnnotationGT_Window(object, object.getClass());
-
-            //注解悬浮窗
-            initAnnotationWindow(object, object.getClass());
-
-            // Fragment 、注解
-            initAnnotationFragment(object, object.getClass());             // 为加载 AnnotationFragment 布局初始化
-            initGT_AnnotationDialogFragment(object, object.getClass());    // 为加载 DialogFragment 布局初始化
-            initGT_Fragment(object, object.getClass());                    //为加载 Fragment 成员变量初始化
+            initAnnotationWindow(object);
 
             // Java 注解部分
-            initObject(object, object.getClass());                    //为加载 Object 成员变量初始化
-            initList(object, object.getClass());                      //为加载 List 成员变量初始化
-            initMap(object, object.getClass());                       //为加载 Map 成员变量初始化
-            initSet(object, object.getClass());                       //为加载 Set 成员变量初始化
-
-            if (view == null) {
-                return;
-            }
-
-            // 组件、事件 注解
-            initView(object, object.getClass(), view);                 //为加载 组件 初始化
-            initClick(object, object.getClass(), view);                //为加载 组件单击 初始化
+            initObject(object);                    //为加载 Object 成员变量初始化
+            initList(object);                      //为加载 List 成员变量初始化
+            initMap(object);                       //为加载 Map 成员变量初始化
+            initSet(object);                       //为加载 Set 成员变量初始化
 
             //资源 注解
-            initAnimation(object, object.getClass(), view);            //为加载 Animation 资源初始化
-            initDimen(object, object.getClass(), view);                //为加载 Dimen 资源初始化
-            initDrawable(object, object.getClass(), view);             //为加载 Style 资源初始化
-            initColor(object, object.getClass(), view);                //为加载 Color 资源初始化
-            initString(object, object.getClass(), view);               //为加载 String 资源初始化
-            initIntArray(object, object.getClass(), view);             //为加载 IntArray 资源初始化
-            initStringArray(object, object.getClass(), view);          //为加载 StringArray 资源初始化
-            initLayout(object, object.getClass(), view);               //为加载 Layout 资源初始化
+            initAnimation(object);            //为加载 Animation 资源初始化
+            initDimen(object);                //为加载 Dimen 资源初始化
+            initDrawable(object);             //为加载 Style 资源初始化
+            initColor(object);                //为加载 Color 资源初始化
+            initString(object);               //为加载 String 资源初始化
+            initIntArray(object);             //为加载 IntArray 资源初始化
+            initStringArray(object);          //为加载 StringArray 资源初始化
+            initLayout(object);               //为加载 Layout 资源初始化
+
 
         }
-
-        //主要用于注解 Activity
-        private static void initAll(Activity activity) {
-
-            if (activity == null) return;
-
-            Class<? extends Activity> mClass = activity.getClass();
-
-            // SQL 注解
-            initSQL(activity, mClass);                      //为加载 List SQL 成员变量初始化
-
-            // Fragment 、注解
-            initAnnotationFragment(activity, mClass);             // 为加载 AnnotationFragment 布局初始化
-            initGT_AnnotationDialogFragment(activity, mClass);    // 为加载 DialogFragment 布局初始化
-            initGT_Fragment(activity, mClass);                    //为加载 Fragment 成员变量初始化
-
-            // Java 注解
-            initObject(activity, mClass);               //为加载 Object 成员变量初始化
-            initList(activity, mClass);                 //为加载 List 成员变量初始化
-            initMap(activity, mClass);                  //为加载 Map 成员变量初始化
-            initSet(activity, mClass);                  //为加载 Set 成员变量初始化
-
-            // Activity、组件、事件 注解
-            initAnnotationActivity(activity, mClass);             //为加载 Activity 布局初始化
-            initView(activity, mClass);                 //为加载 组件 初始化
-            initClick(activity, mClass);                //为加载 组件单击 初始化
-
-            //资源 注解
-            initAnimation(activity, mClass);            //为加载 Animation 资源初始化
-            initDimen(activity, mClass);                //为加载 Dimen 资源初始化
-            initDrawable(activity, mClass);             //为加载 Style 资源初始化
-            initColor(activity, mClass);                //为加载 Color 资源初始化
-            initString(activity, mClass);               //为加载 String 资源初始化
-            initIntArray(activity, mClass);             //为加载 IntArray 资源初始化
-            initStringArray(activity, mClass);          //为加载 StringArray 资源初始化
-            initLayout(activity, mClass);               //为加载 Layout 资源初始化
-
-        }
-
 
         //================================   下面是 SQL 的注解内容   ==============================
 
@@ -18434,8 +19638,8 @@ public class GT {
          */
         private static Object classObject = null;//最终注入的值
 
-        private static void initSQL(Object object, Class<? extends Object> mClass) {
-            Field[] fields = mClass.getDeclaredFields();//获致当前 Activity 所有成员变更
+        private static void initSQL(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
             for (Field field : fields) {
 
                 //获取识别注解
@@ -18522,8 +19726,8 @@ public class GT {
          *
          * @param object
          */
-        private static void initObject(Object object, Class<? extends Object> mClass) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initObject(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Object initView = field.getAnnotation(Annotations.GT_Object.class);
                 if (initView != null) {
@@ -18589,9 +19793,9 @@ public class GT {
         /**
          * 注入 List 资源字符串
          **/
-        private static void initList(Object object, Class<? extends Object> mClass) {
+        private static void initList(Object object) {
 
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Collection.GT_List initView = field.getAnnotation(Annotations.GT_Collection.GT_List.class);
                 if (initView != null) {
@@ -18689,9 +19893,9 @@ public class GT {
         /**
          * 注入 Map 资源字符串
          **/
-        private static void initMap(Object object, Class<? extends Object> mClass) {
+        private static void initMap(Object object) {
 
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Collection.GT_Map initView = field.getAnnotation(Annotations.GT_Collection.GT_Map.class);
                 if (initView != null) {
@@ -18798,9 +20002,9 @@ public class GT {
         /**
          * 注入 Set 资源字符串
          **/
-        private static void initSet(Object object, Class<? extends Object> mClass) {
+        private static void initSet(Object object) {
 
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Collection.GT_Set initView = field.getAnnotation(Annotations.GT_Collection.GT_Set.class);
                 if (initView != null) {
@@ -18898,24 +20102,27 @@ public class GT {
 
         //================================   下面是 通用 的注解内容   ==========================
 
-
-        /**
-         * 注入控件
-         *
-         * @param object
-         * @param mClass
-         * @param view
-         */
-        private static void initView(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initView(Object obj) {
+            Class<?> clazz = obj.getClass();//获取该类信息
+            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_View initView = field.getAnnotation(Annotations.GT_View.class);
                 if (initView != null) {
                     int viewId = initView.value();
                     try {
-                        View viewById = view.findViewById(viewId);
                         field.setAccessible(true);
-                        field.set(object, viewById);
+                        if (obj instanceof Activity) {
+                            Activity activity = (Activity) obj;
+                            field.set(obj, activity.findViewById(viewId));
+                        } else if (obj instanceof Fragment) {
+                            Fragment fragment = (Fragment) obj;
+                            View view = fragment.getView();
+                            if (view != null)
+                                field.set(obj, view.findViewById(viewId));
+                        } else {
+                            View view = (View) obj;
+                            field.set(obj, view.findViewById(viewId));
+                        }
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
@@ -18926,8 +20133,8 @@ public class GT {
         /**
          * 注入点击事件
          */
-        private static void initClick(Object object, Class<? extends Object> mClass, View view) {
-            Method[] methods = mClass.getMethods();//获取所有声明为公有的方法
+        private static void initClick(Object obj) {
+            Method[] methods = obj.getClass().getMethods();//获取所有声明为公有的方法
             for (Method method : methods) {//遍历所有公有方法
                 Annotation[] annotations = method.getAnnotations();//获取该公有方法的所有注解
                 for (Annotation annotation : annotations) {//遍历所有注解
@@ -18940,13 +20147,35 @@ public class GT {
                             Class<?> listenerType = onClickEvent.listenerType();//获取接口类型
                             String listenerSetter = onClickEvent.listenerSetter();//获取set方法
                             String methodName = onClickEvent.methodName();//获取接口需要实现的方法
-                            MyInvocationHandler handler = new MyInvocationHandler(object);//自己实现的代码，负责调用
+                            MyInvocationHandler handler = new MyInvocationHandler(obj);//自己实现的代码，负责调用
                             handler.setMethodMap(methodName, method);//设置方法及设置方法
                             Object object2 = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[]{listenerType}, handler);//创建动态代理对象类
-                            for (int viewId : viewIds) {//遍历要设置监听的控件
-                                View view2 = view.findViewById(viewId);//获取该控件
-                                Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                m.invoke(view2, object2);//调用方法
+
+                            if (obj instanceof Activity) {
+                                Activity activity = (Activity) obj;
+                                for (int viewId : viewIds) {//遍历要设置监听的控件
+                                    View view2 = activity.findViewById(viewId);//获取该控件
+                                    Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                    m.invoke(view2, object2);//调用方法
+                                }
+                            } else if (obj instanceof Fragment) {
+                                Fragment fragment = (Fragment) obj;
+                                View view = fragment.getView();
+                                if (view != null) {
+                                    for (int viewId : viewIds) {//遍历要设置监听的控件
+                                        View view2 = view.findViewById(viewId);//获取该控件
+                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                        m.invoke(view2, object2);//调用方法
+                                    }
+                                }
+
+                            } else {
+                                View view = (View) obj;
+                                for (int viewId : viewIds) {//遍历要设置监听的控件
+                                    View view2 = view.findViewById(viewId);//获取该控件
+                                    Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                    m.invoke(view2, object2);//调用方法
+                                }
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -18959,14 +20188,13 @@ public class GT {
         /**
          * 注入 Animation 资源字符串
          **/
-        private static void initAnimation(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
+        private static void initAnimation(Object object) {
+            for (Field field : object.getClass().getDeclaredFields()) {
                 Annotations.GT_Res.GT_Animation initView = field.getAnnotation(Annotations.GT_Res.GT_Animation.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Context context = view.getContext();
+                        Context context = getGT().activity;
                         if (context != null) {
                             Animation animation = AnimationUtils.loadAnimation(context, viewRes);
                             field.setAccessible(true);
@@ -18982,14 +20210,14 @@ public class GT {
         /**
          * 注入 Dimen 资源字符串
          **/
-        private static void initDimen(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initDimen(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Dimen initView = field.getAnnotation(Annotations.GT_Res.GT_Dimen.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        float dimension = view.getResources().getDimension(viewRes);
+                        float dimension = getGT().activity.getResources().getDimension(viewRes);
                         field.setAccessible(true);
                         field.set(object, dimension);
                     } catch (Exception e) {
@@ -19002,14 +20230,14 @@ public class GT {
         /**
          * 注入 Drawable 资源字符串
          **/
-        private static void initDrawable(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initDrawable(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Drawable initView = field.getAnnotation(Annotations.GT_Res.GT_Drawable.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Drawable drawable = view.getResources().getDrawable(viewRes);
+                        Drawable drawable = getGT().activity.getResources().getDrawable(viewRes);
                         field.setAccessible(true);
                         field.set(object, drawable);
                     } catch (Exception e) {
@@ -19022,14 +20250,14 @@ public class GT {
         /**
          * 注入 Color 资源字符串
          **/
-        private static void initColor(Object object, Class<? extends Object> mClass, View view) {
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initColor(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Color initView = field.getAnnotation(Annotations.GT_Res.GT_Color.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        int color = view.getResources().getColor(viewRes);
+                        int color = getGT().activity.getResources().getColor(viewRes);
                         field.setAccessible(true);
                         field.set(object, color);
                     } catch (Exception e) {
@@ -19042,15 +20270,14 @@ public class GT {
         /**
          * 注入 String 资源字符串
          **/
-        private static void initString(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initString(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_String initView = field.getAnnotation(Annotations.GT_Res.GT_String.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        String string = view.getResources().getString(viewRes);
+                        String string = getGT().activity.getResources().getString(viewRes);
                         field.setAccessible(true);
                         field.set(object, string);
                     } catch (Exception e) {
@@ -19064,15 +20291,14 @@ public class GT {
         /**
          * 注入 Int 资源字符串数组
          **/
-        private static void initIntArray(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initIntArray(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_IntArray initView = field.getAnnotation(Annotations.GT_Res.GT_IntArray.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        int[] intArray = view.getResources().getIntArray(viewRes);
+                        int[] intArray = getGT().activity.getResources().getIntArray(viewRes);
                         field.setAccessible(true);
                         field.set(object, intArray);
                     } catch (Exception e) {
@@ -19086,15 +20312,14 @@ public class GT {
         /**
          * 注入 String 资源字符串数组
          **/
-        private static void initStringArray(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initStringArray(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_StringArray initView = field.getAnnotation(Annotations.GT_Res.GT_StringArray.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        String[] stringArray = view.getResources().getStringArray(viewRes);
+                        String[] stringArray = getGT().activity.getResources().getStringArray(viewRes);
                         field.setAccessible(true);
                         field.set(object, stringArray);
                     } catch (Exception e) {
@@ -19108,15 +20333,14 @@ public class GT {
         /**
          * 解析 Layout 资源文件成 View
          **/
-        private static void initLayout(Object object, Class<? extends Object> mClass, View view) {
-
-            Field[] fields = mClass.getDeclaredFields();//获致所有成员变更
+        private static void initLayout(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
                 Annotations.GT_Res.GT_Layout initView = field.getAnnotation(Annotations.GT_Res.GT_Layout.class);
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Context context = view.getContext();
+                        Context context = getGT().activity;
                         if (context != null) {
                             View viewLayout = LayoutInflater.from(context).inflate(viewRes, null);
                             field.setAccessible(true);
@@ -19138,26 +20362,14 @@ public class GT {
          *
          * @param activity
          */
-        private static void initAnnotationActivity(Activity activity, Class<? extends Activity> mClass) {
-            Annotations.GT_AnnotationActivity contentView = mClass.getAnnotation(Annotations.GT_AnnotationActivity.class);//获取该类 ContextView 的注解类
+        private static void initAnnotationActivity(Object obj) {
+            Annotations.GT_AnnotationActivity contentView = obj.getClass().getAnnotation(Annotations.GT_AnnotationActivity.class);//获取该类 ContextView 的注解类
             //如果有注解
             if (contentView != null) {
-                int viewId = contentView.value();//获取注解类参数
-                Method method = null;//获取该方法的信息
-                try {
-                    method = mClass.getMethod("setContentView", int.class);
-                } catch (NoSuchMethodException e) {
-                    e.printStackTrace();
-                }
-                method.setAccessible(true);//获取该方法的访问权限
-                try {
-                    method.invoke(activity, viewId);//TODO 该的方法会产生无用日志 调用该方法的，并设置该方法参数
-                } catch (IllegalAccessException e) {
-//                    e.printStackTrace();
-                    GT.err("e1:" + e);
-                } catch (InvocationTargetException e) {
-//                    e.printStackTrace();
-                    GT.err("e2:" + e);
+                if (obj instanceof Activity) {
+                    Activity activity = (Activity) obj;
+                    int viewId = contentView.value();//获取注解类参数
+                    activity.setContentView(viewId);
                 }
             }
         }
@@ -19168,13 +20380,13 @@ public class GT {
          * @param object
          * @param mClass
          */
-        private static void initAnnotationFragment(Object object, Class<? extends Object> mClass) {
-            Annotations.GT_AnnotationFragment contentView = mClass.getAnnotation(Annotations.GT_AnnotationFragment.class);// 获取该类 ContextView 的注解类
+        private static void initAnnotationFragment(Object object) {
+            Annotations.GT_AnnotationFragment contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationFragment.class);// 获取该类 ContextView 的注解类
             // 如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();// 获取注解类参数
                 try {
-                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
                     method.setAccessible(true);// 获取该方法的访问权限
                     method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
                 } catch (NoSuchMethodException e) {
@@ -19196,13 +20408,41 @@ public class GT {
          * @param object
          * @param mClass
          */
-        private static void initGT_AnnotationDialogFragment(Object object, Class<? extends Object> mClass) {
-            Annotations.GT_AnnotationDialogFragment contentView = mClass.getAnnotation(Annotations.GT_AnnotationDialogFragment.class);// 获取该类 ContextView 的注解类
+        private static void initGT_AnnotationDialogFragment(Object object) {
+            Annotations.GT_AnnotationDialogFragment contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationDialogFragment.class);// 获取该类 ContextView 的注解类
             // 如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();// 获取注解类参数
                 try {
-                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
+                    method.setAccessible(true);// 获取该方法的访问权限
+                    method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
+                } catch (NoSuchMethodException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (IllegalAccessException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                } catch (InvocationTargetException e) {
+//					e.printStackTrace();
+                    GT.errs("e:" + e);
+                }
+            }
+        }
+
+        /**
+         * 注解 Fragment
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initGT_AnnotationAdapter(Object object) {
+            Annotations.GT_AnnotationAdapter contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationAdapter.class);// 获取该类 ContextView 的注解类
+            // 如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();// 获取注解类参数
+                try {
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
                     method.setAccessible(true);// 获取该方法的访问权限
                     method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
                 } catch (NoSuchMethodException e) {
@@ -19224,8 +20464,8 @@ public class GT {
          * @param object
          * @param mClass
          */
-        private static void initGT_Fragment(Object object, Class<? extends Object> mClass) {
-            Field[] fields = mClass.getDeclaredFields();//获致当前 Activity 所有成员变更
+        private static void initGT_Fragment(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
             for (Field field : fields) {
                 Object classObject = null;//最终注入的值
 
@@ -19283,18 +20523,138 @@ public class GT {
         }
 
         /**
+         * 注解 GT_SharedPreferences
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initGT_SharedPreferences(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
+            for (Field field : fields) {
+                Object classObject = null;//最终注入的值
+
+                //带参数的
+                GT_SharedPreferences.Build initView_GT_SharedPreferences = field.getAnnotation(GT_SharedPreferences.Build.class);
+
+                //GT_Fragment 注解不为null
+                if (initView_GT_SharedPreferences != null) {
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = (Activity) getGT().getActivity();
+                    GT_SharedPreferences gt_sharedPreferences = null;
+                    if (activity != null) {
+                        //获取注解的值
+                        String spName = initView_GT_SharedPreferences.setSpName();
+                        boolean iSCommit = initView_GT_SharedPreferences.setISCommit();
+                        gt_sharedPreferences = new GT_SharedPreferences(getGT().activity, spName, iSCommit);
+                    }
+                    //实例注入
+                    try {
+                        field.setAccessible(true);
+                        field.set(object, gt_sharedPreferences);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+            }
+        }
+
+        /**
+         * 注解 SerialPortUtils
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initSerialPortUtils(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
+            for (Field field : fields) {
+                Object classObject = null;//最终注入的值
+
+                //带参数的
+                SerialPortUtils.Build initBuild = field.getAnnotation(SerialPortUtils.Build.class);
+
+                //GT_Fragment 注解不为null
+                if (initBuild != null) {
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = (Activity) getGT().getActivity();
+                    GT.SerialPortUtils serialPortUtils = null;
+                    if (activity != null) {
+                        //获取注解的值
+                        String comAll = initBuild.setComAll();
+                        int baudRate = initBuild.setBaudRate();
+                        boolean iSLog = initBuild.setISLog();
+                        serialPortUtils = new GT.SerialPortUtils(getGT().activity, comAll, baudRate);
+                    }
+                    //实例注入
+                    try {
+                        field.setAccessible(true);
+                        field.set(object, serialPortUtils);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+            }
+        }
+
+
+        /**
+         * 注解 TCP
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initTCP(Object object) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致当前 Activity 所有成员变更
+            for (Field field : fields) {
+                Object classObject = null;//最终注入的值
+
+                //带参数的
+                GT.GT_Socket.TCP.Build initBuild = field.getAnnotation(GT.GT_Socket.TCP.Build.class);
+
+                //GT_Fragment 注解不为null
+                if (initBuild != null) {
+                    //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
+                    Activity activity = (Activity) getGT().getActivity();
+                    GT.GT_Socket.TCP tcp = null;
+                    if (activity != null) {
+                        //获取注解的值
+                        String iP = initBuild.setIP();
+                        int port = initBuild.setPort();
+                        if (iP == null || "null".equals(iP)) {
+                            tcp = new GT.GT_Socket.TCP(port);
+                        } else {
+                            tcp = new GT.GT_Socket.TCP(iP, port);
+                        }
+                    }
+                    //实例注入
+                    try {
+                        field.setAccessible(true);
+                        field.set(object, tcp);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+
+                }
+
+            }
+        }
+
+        /**
          * 注入 悬浮窗
          *
          * @param object
          * @param mClass
          */
-        private static void initAnnotationWindow(Object object, Class<? extends Object> mClass) {
-            Annotations.GT_AnnotationFloatingWindow contentView = mClass.getAnnotation(Annotations.GT_AnnotationFloatingWindow.class);// 获取该类 ContextView 的注解类
+        private static void initAnnotationWindow(Object object) {
+            Annotations.GT_AnnotationFloatingWindow contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationFloatingWindow.class);// 获取该类 ContextView 的注解类
             // 如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();// 获取注解类参数
                 try {
-                    Method method = mClass.getMethod("setLayout", int.class);// 获取该方法的信息
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
                     method.setAccessible(true);// 获取该方法的访问权限
                     method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
                 } catch (NoSuchMethodException e) {
@@ -19308,174 +20668,6 @@ public class GT {
                     GT.errs("e:" + e);
                 }
             }
-        }
-
-
-        /**
-         * 解析 Layout 资源文件成 View
-         **/
-        private static void initLayout(Activity activity, Class<? extends Activity> clazz) {
-
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Layout initView = field.getAnnotation(Annotations.GT_Res.GT_Layout.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        View view = LayoutInflater.from(activity).inflate(viewRes, null);
-                        field.setAccessible(true);
-                        field.set(activity, view);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
-        }
-
-        /**
-         * 注入 Int 资源字符串数组
-         **/
-        private static void initIntArray(Activity activity, Class<? extends Activity> clazz) {
-
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_IntArray initView = field.getAnnotation(Annotations.GT_Res.GT_IntArray.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        int[] intArray = activity.getResources().getIntArray(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, intArray);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
-        }
-
-        /**
-         * 注入 String 资源字符串数组
-         **/
-        private static void initStringArray(Activity activity, Class<? extends Activity> clazz) {
-
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_StringArray initView = field.getAnnotation(Annotations.GT_Res.GT_StringArray.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        String[] stringArray = activity.getResources().getStringArray(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, stringArray);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
-        }
-
-        /**
-         * 注入 Animation 资源字符串
-         **/
-        private static void initAnimation(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Animation initView = field.getAnnotation(Annotations.GT_Res.GT_Animation.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        Animation animation = AnimationUtils.loadAnimation(activity, viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, animation);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 Dimen 资源字符串
-         **/
-        private static void initDimen(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Dimen initView = field.getAnnotation(Annotations.GT_Res.GT_Dimen.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        float dimension = activity.getResources().getDimension(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, dimension);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 Drawable 资源字符串
-         **/
-        private static void initDrawable(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Drawable initView = field.getAnnotation(Annotations.GT_Res.GT_Drawable.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        Drawable drawable = activity.getResources().getDrawable(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, drawable);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 Color 资源字符串
-         **/
-        private static void initColor(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_Color initView = field.getAnnotation(Annotations.GT_Res.GT_Color.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        int color = activity.getResources().getColor(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, color);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入 String 资源字符串
-         **/
-        private static void initString(Activity activity, Class<? extends Activity> clazz) {
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_Res.GT_String initView = field.getAnnotation(Annotations.GT_Res.GT_String.class);
-                if (initView != null) {
-                    int viewRes = initView.value();
-                    try {
-                        String string = activity.getResources().getString(viewRes);
-                        field.setAccessible(true);
-                        field.set(activity, string);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
         }
 
         /**
@@ -19706,69 +20898,6 @@ public class GT {
 
         }
 
-        /**
-         * 注入控件
-         *
-         * @param activity
-         */
-        private static void initView(Activity activity, Class<? extends Activity> mClass) {
-
-            if (activity == null || mClass == null) return;
-
-            Class<? extends Activity> clazz = activity.getClass();//获取该类信息
-            Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
-            for (Field field : fields) {
-                Annotations.GT_View initView = field.getAnnotation(Annotations.GT_View.class);
-                if (initView != null) {
-                    int viewId = initView.value();
-                    try {
-                        Method method = clazz.getMethod("findViewById", int.class);
-                        method.setAccessible(true);
-                        field.setAccessible(true);
-                        Object object = method.invoke(activity, viewId);
-                        field.set(activity, object);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * 注入点击事件
-         *
-         * @param activity
-         */
-        private static void initClick(Activity activity, Class<? extends Activity> mClass) {
-            Method[] methods = mClass.getMethods();//获取所有声明为公有的方法
-            for (Method method : methods) {//遍历所有公有方法
-                Annotation[] annotations = method.getAnnotations();//获取该公有方法的所有注解
-                for (Annotation annotation : annotations) {//遍历所有注解
-                    Class<? extends Annotation> annotationType = annotation.annotationType();//获取具体的注解类
-                    Annotations.OnClickEvent onClickEvent = annotationType.getAnnotation(Annotations.OnClickEvent.class);//取出注解的onClickEvent注解
-                    if (onClickEvent != null) {//如果不为空
-                        try {
-                            Method valueMethod = annotationType.getDeclaredMethod("value");//获取注解InjectOnClick的value方法
-                            int[] viewIds = (int[]) valueMethod.invoke(annotation, (Object[]) null);//获取控件值
-                            Class<?> listenerType = onClickEvent.listenerType();//获取接口类型
-                            String listenerSetter = onClickEvent.listenerSetter();//获取set方法
-                            String methodName = onClickEvent.methodName();//获取接口需要实现的方法
-                            MyInvocationHandler handler = new MyInvocationHandler(activity);//自己实现的代码，负责调用
-                            handler.setMethodMap(methodName, method);//设置方法及设置方法
-                            Object object = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[]{listenerType}, handler);//创建动态代理对象类
-                            for (int viewId : viewIds) {//遍历要设置监听的控件
-                                View view = activity.findViewById(viewId);//获取该控件
-                                Method m = view.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                m.invoke(view, object);//调用方法
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-            }
-        }
-
 
         /**
          * 初始化注解帮助类
@@ -19871,8 +21000,6 @@ public class GT {
          * @param runnable
          */
         public static void runAndroid(Runnable runnable) {
-
-
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 runnable.run();
             } else {
@@ -21195,7 +22322,7 @@ public class GT {
                                                         @Override
                                                         public void run() {
                                                             //更新数据
-                                                            utilsGTApp.getLogAdapter().setDetectionDataBeanList(logBeans2);
+                                                            utilsGTApp.getLogAdapter().setBeanList(logBeans2);
                                                         }
                                                     });
 
@@ -21231,7 +22358,7 @@ public class GT {
                                                             }
                                                         }
                                                     }
-                                                    utilsGTApp.getSqlAdapter().setDetectionDataBeanList(sqlValues);
+                                                    utilsGTApp.getSqlAdapter().setBeanList(sqlValues);
                                                     break;
                                                 case 2:
 //                                        GT.log("表过滤:" + keyValue);
@@ -21249,7 +22376,7 @@ public class GT {
                                                             }
                                                         }
                                                     }
-                                                    utilsGTApp.getTableAdapter().setDetectionDataBeanList(sqlValues);
+                                                    utilsGTApp.getTableAdapter().setBeanList(sqlValues);
                                                     break;
 
                                             }
@@ -21353,7 +22480,7 @@ public class GT {
                             if (intent != null) {
                                 String logAllData = intent.getStringExtra("logAllData");
                                 logBeans.add(new LogBean(logAllData));
-                                logAdapter.setDetectionDataBeanList(logBeans);//刷新数据
+                                logAdapter.setBeanList(logBeans);//刷新数据
                                 if (cb_dynamicRefresh.isChecked()) {
                                     linearLayoutManager_log.scrollToPosition(logBeans.size() - 1);//每次滑动最底部
                                 }
@@ -21485,7 +22612,7 @@ public class GT {
                         }
 
                         //刷新数据
-                        sqlAdapter.setDetectionDataBeanList(sqlValues);
+                        sqlAdapter.setBeanList(sqlValues);
                         hierarchyNumber = 1;
                         return frame_sqlAll;
                     }
@@ -21518,7 +22645,7 @@ public class GT {
                             }
 
                             //刷新数据
-                            tableAdapter.setDetectionDataBeanList(sqlValues);
+                            tableAdapter.setBeanList(sqlValues);
                             utils.setDoubleClickFullScreen(frame_sql);//设置双击全屏
                             fl_main.addView(frame_sql);
                             hierarchyNumber = 2;
@@ -21609,7 +22736,7 @@ public class GT {
                                         GT.Thread.runAndroid(new Runnable() {
                                             @Override
                                             public void run() {
-                                                tableDataAdapter.setDetectionDataBeanList(tableVaues);
+                                                tableDataAdapter.setBeanList(tableVaues);
                                             }
                                         });
 
