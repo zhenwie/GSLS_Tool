@@ -3,13 +3,12 @@
 [![Github](https://travis-ci.org/YoKeyword/Fragmentation.svg?branch=master)](https://github.com/1079374315)
 [![](https://jitpack.io/v/1079374315/GSLS_Tool.svg)](https://jitpack.io/#1079374315/GSLS_Tool)
 
-<a href="https://blog.csdn.net/qq_39799899"><img src="https://profile.csdnimg.cn/7/5/9/3_qq_39799899"  width="60px"></a>
 <img src="https://csdnimg.cn/medal/linkedin@240.png"  width="40px"><img src="https://csdnimg.cn/medal/github@240.png"  width="40px"><img src="https://csdnimg.cn/medal/maimai@240.png"  width="40px"><img src="https://csdnimg.cn/medal/qiandao10@240.png"  width="40px"><img src="https://csdnimg.cn/medal/yuedu3@240.png"  width="40px"><img src="https://csdnimg.cn/medal/chizhiyiheng@240.png"  width="40px"><img src="https://csdnimg.cn/medal/1024@240.png"  width="40px"><img src="https://csdnimg.cn/medal/qixiebiaobing4@240.png"  width="40px"><img src="https://csdnimg.cn/medal/yuanli_xuexili@240.png"  width="40px"><img src="https://csdnimg.cn/medal/yuanli_xinren@240.png"  width="40px"><img src="https://csdnimg.cn/medal/yuanli_tansuoS@240.png"  width="40px"><img src="https://csdnimg.cn/medal/fenxiangjingying@240.png"  width="40px">
+
+# <a href="https://blog.csdn.net/qq_39799899"><img src="https://profile.csdnimg.cn/7/5/9/3_qq_39799899"  width="60px"></a>[GT库源码](https://github.com/1079374315/GSLS_Tool) 
 
 ![libsodium](https://raw.github.com/jedisct1/libsodium/master/logo.png)
 ============
-
-# [GT库源码](https://github.com/1079374315/GSLS_Tool) 
 
 # 最新版本: 1.3.0.6
 发布时间：2021.7.28
