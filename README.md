@@ -10,8 +10,8 @@
 ![libsodium](https://raw.github.com/jedisct1/libsodium/master/logo.png)
 ============
 
-# 最新版本: 1.3.0.6
-发布时间：2021.7.28
+# 最新版本: 1.3.1
+发布时间：2021.8.26
 
 # 此次版本更新：
 ````
@@ -24,7 +24,7 @@
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/119696907
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.0.7 版本）
+ * 更新内容：（1.3.1 版本）
  * 内容如下：
  * 1.优化了 log显示
  * 2.增加了国际化工具包
