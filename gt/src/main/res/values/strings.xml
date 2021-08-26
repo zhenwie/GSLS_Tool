@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GT Library</string>
+    <string name="AccessibleServiceDescribe">推荐开启该应用的无障碍服务，让应用更好的服务您。</string>
 </resources>

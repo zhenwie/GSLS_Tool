@@ -1,6 +1,10 @@
 package com.gsls.gt;
 
+import static android.content.Context.POWER_SERVICE;
+
 import android.Manifest;
+import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
@@ -31,14 +35,17 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -74,6 +81,7 @@ import android.text.Html;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Base64;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
@@ -86,6 +94,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
@@ -107,6 +117,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.ActionBar;
@@ -114,6 +125,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.Fragment;
@@ -134,6 +146,8 @@ import org.json.JSONStringer;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -171,6 +185,7 @@ import java.net.SocketException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidParameterException;
 import java.security.MessageDigest;
 import java.sql.Time;
 import java.sql.Timestamp;
@@ -220,72 +235,24 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
-import static android.content.Context.POWER_SERVICE;
-
 /**
  * 工具类说明：
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.7.28
+ * 更新时间:2021.8.26
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.0.6 版本）
- * 超级重磅更新！！！
+ * 更新内容：（1.3.0.7 版本）
  * 内容如下：
- * 1.Hibernate 类的更新
- * 1).Hibernate 数据库支持映射 “数组参数”、“多重继承关系”
- * 2).新增初始化 Hibernate 的方式，可在Application中进行初始化操作：new GT.Hibernate().initialize(); 与 new GT.Hibernate().getHibernate(); （注意，这两个方法均是有创建的效果）
- * 3).新增聚合函数：count(求次数)、sum(求总和)、max(求最大值)、min(求最小值)、average(求平均数)，后续待添加新的...
- * 4).修改了增删查改的方式，优化增删查改的效率，增加了 saveAll() 保存数据方法，当前测试效率：存储10万条数据，09:07:53.199——09:07:59.646 耗时6秒多，具体详情还请参考方法说明
- * 5).正式支持事务操作具体教程请参考官网:saveAll();保存全部方法默认使用事务
- * 6).支持 分库映射 若您创建了两个或两个以上的数据库，那么可以在实体类的标识上指定映射的数据库名称，
- * 实例：不指定的话，默认给所有的数据库映射表，指定单个数据库：@GT.Hibernate.GT_Entity(setSqlName = "MySQL") OR 指定多个数据库：@GT.Hibernate.GT_Entity(setSqlName = {"MySQL","DemoSQL"})
- * 7).将表字段属性设置更名为 “GT_Property”,
- * GT_Property目前支持以下功能：
- * 1).修改字段名：setOldTableValue    释：修改字段名后，数据依旧在
- * 2).设置不为空: setNotNull          释：如果操作数据为null就会操作失败
- * 3).设置限定值：setCheckValues      释：sex = 男 or 女 or 其他
- * 4).设置字段长度：setLength         释：userName varchar(100)
- * 5).设置最大值：setMax              释：设置数字的最大值
- * 6).设置最小值：setMin              释：设置数字的最小值
- * 7).设置不被持久化：setNotInit       释：将不被持久化的字段当做普通的 Java字段
- * 8).设置默认值：setDefaultValue     释：设置默认值，用法有两种，如果是多个默认值，数据库会随机选择一个默认值
- * 第一种：setDefaultValue = "默认值",
- * 第二种：setDefaultValue = {"默认值1"，"默认值2"，"默认值3"....}
- * GT_Key,主键标识目前只支持：设置自增长、设置字段长度、设置限定值、设置最大值、设置最小值
- * 8).优化了 数据库 创建时的性能，增加创建方式：可在线程中创建数据库
- * 9).支持动态创建表的操作：createTable(DemoBean.class);
- * 10).
- * 11).
- * 2.新增悬浮窗封装类 GT_FloatingWindow 用法与 GT_Fragment 类似，具体使用教程请参考官网,(新增 GT_Floating 工具类，还在优化中)
- * 3.增加可嵌套的滑动组件 ScrollView
- * 4.新增 串口类 SerialPortUtils
- * 5.新增 GT_Socket TCP 类
- * <p>
- * <p>
- * 3.新增 GT.GT_Adapters.BaseAdapter 基类
- * 4.新增 DataSendReception 数据传输类，用于传输数据目前可支持：跨类、跨进程、跨APP传输数据
- * 5.新增 适配器 AnnotationAdapter 注解基类
- * n.新版本的优化
- * <p>
- * (1).去掉所有基类自带的 log() toast() err() 类似等方法(不方便维护，故此版本去掉)
- * (2).去掉 GT_Fragment 与 DialogFragment类中内置的广播，改用 DataSendReception 方式进行传输数据，具体可参考官网教程
- * 注意：在使用 Dialog 方式切换时，会默认将Fragment加入回退栈
- * (3).修复 Fragment 与 DialogFragment 当焦点在EditText 时无法监听到返回事件
- * (4).将 DialogFragment 与 GT_AlertDialog 移植到 GT_Dialog类进行统一管理,新增了弹出DialogFragment隐藏虚拟按钮的方法
- * <p>
- * bug优化
- * 1.Hibernate 在映射表时，父表与子表有相同的属性时，出现的映射问题（当前版本默认使用子表的属性映射）
- * 2.Hibernate 在查询的时候，出现List<String> 赋值为null的情况下，查询出来会报异常日志（已优化）
- * 3.Hibernate 在多数据库创建时出现的问题
- * 4.优化了 Hibernate 的 保存所有 与 查询所有 的效率
- * 5.优化 GT_Fragment 有几率点击穿透的问题
- * 6.优化了所有注解的核心方法
- *
- *
- *
+ * 1.优化了 log显示
+ * 2.增加了国际化工具包
+ * 3.更新了简易对话框
+ * 4.新增 Permission 权限动态申请框架
+ * 5.新增无障碍服务基类， AccessibilityServiceBase 使用起来非常简单
+ * 6.新增 GT_View 专门用来解决局部View特别复杂时会让 Avtibity 或 Fragment 变复杂的问题
+ * 7.
  * <p>
  * <p>
  * <p>
@@ -301,7 +268,7 @@ public class GT {
     //================================== 所有属于 GT 类的属性 =======================================
     private static GT gtAndroid = null;          //定义 GT 对象
     private static Toast toast;                  //吐司缓冲
-    public Context activity;                     //设置 当前动态的 上下文对象
+    public static Context activity;              //设置 当前动态的 上下文对象
     //================================== 提供访问 GT 属性的接口======================================
 
     private GT() {
@@ -328,7 +295,7 @@ public class GT {
      *
      * @return
      */
-    public Context getActivity() {
+    public static Context getActivity() {
         if (activity == null) {
             activity = GT_Activity.getApplicationByReflect();
         }
@@ -341,15 +308,19 @@ public class GT {
      * @param activity
      * @Activity 为外部提供访问 GT Context 接口
      */
-    public void build(Object obj) {
+    public static void build(Object obj) {
         if (obj instanceof Activity) {
             activity = (Context) obj;
         } else if (obj instanceof Fragment) {
             Fragment fragment = (Fragment) obj;
             activity = fragment.getContext();
-        } else {
+        } else if (obj instanceof View) {
             View view = (View) obj;
             activity = view.getContext();
+        } else if (obj instanceof GT_FloatingWindow.BaseFloatingWindow) {
+
+        } else {
+
         }
         if (activity == null) {
             activity = getActivity();
@@ -393,8 +364,8 @@ public class GT {
      */
     public static void log(Object msg) {
         if (LOG.LOG_TF) {
-            LOG.setLogData("------- " + msg);
-            Log.i(LOG.LOG_TAG + "i", "------- " + msg);
+            LOG.setLogData(String.valueOf(msg));
+            Log.i(LOG.LOG_TAG + "i", String.valueOf(msg));
         }
     }
 
@@ -407,7 +378,7 @@ public class GT {
             String prefix = "";
             prefix = LOG.getPrefix(LOG.lineInfoIndex);
             LOG.setLogData(prefix + mg);
-            log(prefix + mg);
+            Log.i("GT_i", prefix + mg);
             if (LOG.LOG_FILE_TF) {// 打印到sd卡
                 if (TextUtils.isEmpty(prefix)) {
                     prefix = LOG.getPrefix(LOG.lineInfoIndex);
@@ -430,8 +401,8 @@ public class GT {
             if (strMsg.length() > LOG.logMaxLength) {
                 while (true) {
                     String substring = strMsg.substring(0, LOG.logMaxLength);
-                    LOG.setLogData("------- " + substring);
-                    Log.i(LOG.LOG_TAG + "i", "------- " + substring);
+                    LOG.setLogData("--- " + substring);
+                    Log.i(LOG.LOG_TAG + "i", "--- " + substring);
                     strMsg = strMsg.substring(LOG.logMaxLength);
                     if (strMsg.length() <= LOG.logMaxLength) {
                         LOG.setLogData(strMsg);
@@ -440,8 +411,8 @@ public class GT {
                     }
                 }
             } else {
-                LOG.setLogData("------- " + msg);
-                Log.i(LOG.LOG_TAG + "i", "------- " + msg);
+                LOG.setLogData(String.valueOf(msg));
+                Log.i(LOG.LOG_TAG + "i", String.valueOf(msg));
             }
         }
     }
@@ -453,8 +424,8 @@ public class GT {
      */
     public static void err(Object msg) {
         if (LOG.LOG_TF) {
-            Log.e(LOG.LOG_TAG + "e", "------- " + msg);
-            LOG.setLogData("------- " + msg);
+            Log.e(LOG.LOG_TAG + "e", String.valueOf(msg));
+            LOG.setLogData(String.valueOf(msg));
         }
     }
 
@@ -466,7 +437,7 @@ public class GT {
         if (LOG.LOG_TF) {
             String prefix = "";
             prefix = LOG.getPrefix(LOG.lineInfoIndex);
-            err(prefix + mg);
+            Log.e("GT_i", prefix + mg);
             LOG.setLogData(prefix + mg);
             if (LOG.LOG_FILE_TF) {// 打印到sd卡
                 if (TextUtils.isEmpty(prefix)) {
@@ -489,8 +460,8 @@ public class GT {
             if (strMsg.length() > LOG.logMaxLength) {
                 while (true) {
                     String substring = strMsg.substring(0, LOG.logMaxLength);
-                    LOG.setLogData("------- " + substring);
-                    Log.e(LOG.LOG_TAG + "i", "------- " + substring);
+                    LOG.setLogData("--- " + substring);
+                    Log.e(LOG.LOG_TAG + "i", "--- " + substring);
                     strMsg = strMsg.substring(LOG.logMaxLength);
                     if (strMsg.length() <= LOG.logMaxLength) {
                         LOG.setLogData(strMsg);
@@ -499,8 +470,8 @@ public class GT {
                     }
                 }
             } else {
-                LOG.setLogData("------- " + msg);
-                Log.e(LOG.LOG_TAG + "i", "------- " + msg);
+                LOG.setLogData(String.valueOf(msg));
+                Log.e(LOG.LOG_TAG + "i", String.valueOf(msg));
             }
         }
     }
@@ -514,17 +485,17 @@ public class GT {
     public static void log(Object title, Object msg) {
         if (LOG.LOG_TF) {
 
-            LOG.setLogData("------- Run" +
+            LOG.setLogData("--- Run" +
                     "\n\n---------------------" + title + "------------------------\n" +
-                    "                   " + msg + "\n" +
-                    "---------------------" + title + "-----------------------\n\n" +
-                    "------- Close");
+                    "" + msg + "\n" +
+                    "---------------------" + title + "------------------------\n\n" +
+                    "--- Close");
             Log.i(LOG.LOG_TAG + "i",
-                    "------- Run" +
+                    "--- Run" +
                             "\n\n---------------------" + title + "------------------------\n" +
-                            "                   " + msg + "\n" +
-                            "---------------------" + title + "-----------------------\n\n" +
-                            "------- Close"
+                            "" + msg + "\n" +
+                            "---------------------" + title + "------------------------\n\n" +
+                            "--- Close"
             );
         }
 
@@ -537,14 +508,14 @@ public class GT {
      */
     public static void logAll(Object title, Object msg) {
         if (LOG.LOG_TF) {
-            LOG.setLogData("Run --------- " + title + " ---------");
-            Log.i(LOG.LOG_TAG + "i", "Run --------- " + title + " ---------");
+            LOG.setLogData("Run ----- " + title + " ---------");
+            Log.i(LOG.LOG_TAG + "i", "Run ----- " + title + " ---------");
             String strMsg = msg.toString();
             if (strMsg.length() > LOG.logMaxLength) {
                 while (true) {
                     String substring = strMsg.substring(0, LOG.logMaxLength);
-                    LOG.setLogData("------- " + substring);
-                    Log.i(LOG.LOG_TAG + "i", "------- " + substring);
+                    LOG.setLogData("--- " + substring);
+                    Log.i(LOG.LOG_TAG + "i", "--- " + substring);
                     strMsg = strMsg.substring(LOG.logMaxLength);
                     if (strMsg.length() <= LOG.logMaxLength) {
                         LOG.setLogData(strMsg);
@@ -553,12 +524,12 @@ public class GT {
                     }
                 }
             } else {
-                LOG.setLogData("------- " + msg);
-                Log.i(LOG.LOG_TAG + "i", "------- " + msg);
+                LOG.setLogData(String.valueOf(msg));
+                Log.i(LOG.LOG_TAG + "i", String.valueOf(msg));
             }
 
-            LOG.setLogData("--------- " + title + " --------- Close");
-            Log.i(LOG.LOG_TAG + "i", "--------- " + title + " --------- Close");
+            LOG.setLogData("----- " + title + " ----- Close");
+            Log.i(LOG.LOG_TAG + "i", "----- " + title + " ----- Close");
 
         }
     }
@@ -571,17 +542,17 @@ public class GT {
      */
     public static void err(Object title, Object msg) {
         if (LOG.LOG_TF) {
-            LOG.setLogData("------- Run" +
+            LOG.setLogData("--- Run" +
                     "\n\n---------------------" + title + "------------------------\n" +
-                    "                   " + msg + "\n" +
-                    "---------------------" + title + "-----------------------\n\n" +
-                    "------- Close");
+                    "" + msg + "\n" +
+                    "---------------------" + title + "------------------------\n\n" +
+                    "--- Close");
             Log.e(LOG.LOG_TAG + "e",
-                    "------- Run" +
+                    "--- Run" +
                             "\n\n---------------------" + title + "------------------------\n" +
-                            "                   " + msg + "\n" +
-                            "---------------------" + title + "-----------------------\n\n" +
-                            "------- Close"
+                            "" + msg + "\n" +
+                            "---------------------" + title + "------------------------\n\n" +
+                            "--- Close"
             );
         }
 
@@ -594,13 +565,13 @@ public class GT {
      */
     public static void errAll(Object title, Object msg) {
         if (LOG.LOG_TF) {
-            LOG.setLogData("Run --------- " + title + " ---------");
-            Log.e(LOG.LOG_TAG + "i", "Run --------- " + title + " ---------");
+            LOG.setLogData("Run ----- " + title + " ---------");
+            Log.e(LOG.LOG_TAG + "i", "Run ----- " + title + " ---------");
             String strMsg = msg.toString();
             if (strMsg.length() > LOG.logMaxLength) {
                 while (true) {
                     String substring = strMsg.substring(0, LOG.logMaxLength);
-                    Log.e(LOG.LOG_TAG + "i", "------- " + substring);
+                    Log.e(LOG.LOG_TAG + "i", "--- " + substring);
                     strMsg = strMsg.substring(LOG.logMaxLength);
                     if (strMsg.length() <= LOG.logMaxLength) {
                         Log.e(LOG.LOG_TAG + "i", strMsg);
@@ -608,40 +579,13 @@ public class GT {
                     }
                 }
             } else {
-                LOG.setLogData("------- " + msg);
-                Log.e(LOG.LOG_TAG + "i", "------- " + msg);
+                LOG.setLogData(String.valueOf(msg));
+                Log.e(LOG.LOG_TAG + "i", String.valueOf(msg));
             }
 
-            LOG.setLogData("--------- " + title + " --------- Close");
-            Log.e(LOG.LOG_TAG + "i", "--------- " + title + " --------- Close");
+            LOG.setLogData("----- " + title + " ----- Close");
+            Log.e(LOG.LOG_TAG + "i", "----- " + title + " ----- Close");
 
-        }
-    }
-
-    /**
-     * @param obj
-     * @异常打印方法
-     */
-    public static void exception(Object tag) {
-        try {
-            throw new Exception(tag.toString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * 抛异常，第几层
-     *
-     * @param tag
-     * @param number
-     */
-    public static void exception(Object tag, int number) {
-        try {
-            throw new Exception(tag.toString());
-        } catch (Exception e) {
-            e.printStackTrace();
-            GT.log(getLineInfo(number), "e:" + e);
         }
     }
 
@@ -772,11 +716,10 @@ public class GT {
             if (number < 0) {
                 return "log Hierarchy error ";
             }
-            prefix = "<Line:%d>[%s] %s(): ";//初始化
             try {
                 StackTraceElement caller = java.lang.Thread.currentThread().getStackTrace()[number];// new Throwable().getStackTrace()[number];
-                String className = caller.getClassName();
-                prefix = String.format(prefix, caller.getLineNumber(), className, caller.getMethodName()); // 替换
+                prefix = "(" + caller.getFileName() + ":%d)[%s] %s(): ";//初始化
+                prefix = String.format(prefix, caller.getLineNumber(), caller.getClassName(), caller.getMethodName()); // 替换
             } catch (Exception e) {
 //                errs("获取日志层级出现错误e:" + e);
                 getPrefix(--number);
@@ -863,7 +806,7 @@ public class GT {
             Intent intent = new Intent();
 //            intent.setAction(DarknessMagic.GT_FloatingWindow.GT_Floating.UtilsGTApp.class.getName());
             intent.putExtra("logAllData", value + "\n");
-            getGT().getActivity().sendBroadcast(intent);*/
+            getActivity().sendBroadcast(intent);*/
         }
 
     }
@@ -970,7 +913,6 @@ public class GT {
     }
 
     //============================================= 吐司类 =====================================
-
 
     /**
      * @吐司类
@@ -1191,9 +1133,9 @@ public class GT {
      * @标准Toast
      */
     public static void toast(Object content) {
-        if (getGT().getActivity() != null) {
+        if (getActivity() != null) {
             if (toast == null) {
-                toast = Toast.makeText(getGT().getActivity(), content.toString(), Toast.LENGTH_SHORT);
+                toast = Toast.makeText(getActivity(), content.toString(), Toast.LENGTH_SHORT);
             } else {
                 toast.setText(content.toString());
             }
@@ -1232,7 +1174,7 @@ public class GT {
          * @param data
          */
         public static void sendUpdateUiBroadcast(Object broadcastName, Object data) {
-            Context context = getGT().getActivity();
+            Context context = getActivity();
             if (context != null && broadcastName != null) {
 
                 //判断是否为class
@@ -1291,7 +1233,7 @@ public class GT {
          * @param registerMessage
          */
         public static void registerUpdateUiBroadcast(Object registerMessage) {
-            Context context = getGT().getActivity();
+            Context context = getActivity();
             if (context == null || registerMessage == null) {
                 errs("注册参数为空，注册监听数据失败！");
                 return;
@@ -1318,7 +1260,7 @@ public class GT {
          * @param onReceptionData 监听数据反馈接口
          */
         public static void registerUpdateUiBroadcast(Object broadcastName, OnReceptionDataListener onReceptionDataListener) {
-            Context context = getGT().getActivity();
+            Context context = getActivity();
             if (context == null || broadcastName == null || onReceptionDataListener == null) {
                 errs("注册参数为空，注册监听数据失败！");
                 return;
@@ -1399,7 +1341,7 @@ public class GT {
          * @param broadcastName 要关闭广播的名字
          */
         public static void close(Object broadcastName) {
-            Context context = getGT().getActivity();
+            Context context = getActivity();
             if (context != null && broadcastName != null) {
                 //判断是否为class
                 if (broadcastName instanceof Class) {
@@ -2171,11 +2113,44 @@ public class GT {
         }
 
         /**
-         * 获取U盘名称
+         * getUsb路径
          *
          * @return
          */
-        public static String getUsbName() {
+        public static List<String> getUsbPath() {
+            List<String> usbData = getUsbData();
+            if (usbData == null || usbData.size() == 0) return null;
+            List<String> usbPath = new ArrayList<>();
+            for (String userData : usbData) {
+                userData = userData.substring(userData.lastIndexOf("/") + 1);
+                usbPath.add("/storage/" + userData + "/");
+            }
+            return usbPath;
+        }
+
+        /**
+         * getUsb路径
+         *
+         * @return
+         */
+        public static List<String> getUsbName() {
+            List<String> usbData = getUsbData();
+            if (usbData == null || usbData.size() == 0) return null;
+            List<String> usbName = new ArrayList<>();
+            for (String userData : usbData) {
+                userData = userData.substring(userData.lastIndexOf("/") + 1);
+                usbName.add(userData);
+            }
+            return usbName;
+        }
+
+
+        /**
+         * 获取USB信息
+         *
+         * @return
+         */
+        public static List<String> getUsbData() {
             String filePath = "/proc/mounts";
             File file = new File(filePath);
             List<String> lineList = new ArrayList<>();
@@ -2206,12 +2181,14 @@ public class GT {
                 }
             }
             if (lineList.size() == 0) return null;
-            String editPath = lineList.get(lineList.size() - 1);
-            int start = editPath.indexOf("/mnt");
-            int end = editPath.indexOf(" vfat");
-            String path = editPath.substring(start, end);
-
-            return path;
+            List<String> usbPaths = new ArrayList<>();
+            for (int i = 0; i < lineList.size(); i++) {
+                String editPath = lineList.get(i);
+                int start = editPath.indexOf("/mnt");
+                int end = editPath.indexOf(" vfat");
+                usbPaths.add(editPath.substring(start, end));
+            }
+            return usbPaths;
         }
 
         /**
@@ -2390,7 +2367,7 @@ public class GT {
     public static class Hibernate implements SaveObject.SaveBean {
 
         public Hibernate() {
-            Context context = getGT().getActivity();
+            Context context = getActivity();
             if (context != null) {
                 this.context = context;
             } else {
@@ -2411,14 +2388,12 @@ public class GT {
          * @param scanTable   数据库映射类
          * @return
          */
-        public Hibernate initialize(String SQLName, int sqlVersions, Object scanTable) {
+        public Hibernate initialize(String sQLName, int sqlVersions, String passWord, Object scanTable) {
             if (hibernate == null) {
                 synchronized (Hibernate.class) {
                     if (hibernate == null) {
                         hibernate = this;
-                        init_1_SqlName(SQLName)            //设置SQL名称
-                                .init_2_SqlVersion(sqlVersions)     //设置数据库版本
-                                .init_3_Sql(scanTable);                      //数据库操作执行
+                        initSQL(sQLName, sqlVersions, passWord, scanTable); //数据库操作执行
                     }
                 }
             }
@@ -2430,9 +2405,7 @@ public class GT {
                 synchronized (Hibernate.class) {
                     if (hibernate == null) {
                         hibernate = this;
-                        init_1_SqlName(null)            //设置SQL名称
-                                .init_2_SqlVersion(-1)          //设置数据库版本
-                                .init_3_Sql(null);                  //数据库操作执行
+                        initSQL(null, -1, null, null);//数据库操作执行
                     }
                 }
             }
@@ -2456,13 +2429,8 @@ public class GT {
             Class<?>[] setSqlTables() default {};//数据库默认加载的数据库,如果设置了映射的表那就不再扫描bean与entity标注的类
 
             boolean setIsThread() default false;//是否使用线程创建数据库：TODO 注意，如果在线程中创建数据库就不能直接创建就引用数据库对象，需要触发使用
-        }
 
-        //设置映射标识
-        @Target(ElementType.TYPE)
-        @Retention(RetentionPolicy.RUNTIME)
-        public @interface GT_Entity {
-            String[] setSqlNames() default {};//设置属于那个数据库的表,默认是空
+            String setPassWord() default "123456";//默认的数据库加密密码
         }
 
         //设置映射标识
@@ -2470,7 +2438,16 @@ public class GT {
         @Retention(RetentionPolicy.RUNTIME)
         public @interface GT_Bean {
             String[] setSqlNames() default {};//设置属于那个数据库的表,默认是空
+//            boolean setIsEncryption() default false;//默认不进行加密
         }
+
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_Entity {
+            String[] setSqlNames() default {};//设置属于那个数据库的表,默认是空
+//            boolean setIsEncryption() default false;//默认不进行加密
+        }
+
 
         //设置主键注解
         @Target({ElementType.FIELD})
@@ -2508,6 +2485,8 @@ public class GT {
             boolean setNotInit() default false;         //设置是否需要持久化,默认是持久化
 
             String[] setDefaultValue() default {};      //设置默认值，请规范使用
+
+            boolean setIsEncryption() default false;   //是否加密,默认不加密
 
         }
 
@@ -3486,6 +3465,9 @@ public class GT {
         private String limitStr = null;             //限量
         private boolean isLast = false;             //是否查询到最后一条 默认从第一条查询
         private boolean saveAddUpdateKey = false;   //保存与修改主键是否已被创建
+        //        private boolean isEncryption;//是否加密
+        private String passWord = "";//数据加密密码
+
 
         //初始化数据库参数
         private void initSqlParameter() {
@@ -3845,7 +3827,7 @@ public class GT {
 
                 } catch (IllegalArgumentException | IllegalAccessException e) {
                     e.printStackTrace();
-                    exception(getLineInfo(LOG.lineInfoIndex) + "数据出现问题");
+                    errs(getLineInfo(LOG.lineInfoIndex) + "数据出现问题");
                     status = false;
                     return;
                 }
@@ -3862,8 +3844,13 @@ public class GT {
          * @param <T>
          */
         private <T> void saveAddUpdateOperation(T bean, ContentValues contentValues) {
-
             Class<?> class1 = bean.getClass();//当前类
+
+           /* GT_Bean gt_bean = class1.getAnnotation(GT_Bean.class);//获取该类 GT_Bean 的注解类
+            if (gt_bean != null) {
+                isEncryption = gt_bean.setIsEncryption();
+            }*/
+
             //获取所有成员变量
             Field[] fields = class1.getDeclaredFields();
             //解析并设置保存的数据
@@ -3903,22 +3890,31 @@ public class GT {
                         }
                     }
 
-
                     //插入普通字段
                     if (String.class == type) {
                         if (defaultOneValue && val == null) continue;
-                        contentValues.put(name, (String) val);
+                        //加密数据
 
+                        if (gt_Property != null && gt_Property.setIsEncryption()) {
+                            val = GT.Encryption.DES.encryptPassword(val, passWord);
+                        }
+
+                        /*if (isEncryption) {
+                            if(gt_Property == null){
+                                val = GT.Encryption.DES.encryptPassword(val, passWord);
+                            }else if(gt_Property.setIsEncryption()){
+                                val = GT.Encryption.DES.encryptPassword(val, passWord);
+                            }
+                        }*/
+                        contentValues.put(name, (String) val);
                     } else if (short.class == type || Short.class == type) {
                         short value = Short.parseShort(val.toString());
                         if (defaultOneValue && value == 0) continue;
                         contentValues.put(name, value);
-
                     } else if (int.class == type || Integer.class == type) {
                         int value = Integer.parseInt(val.toString());
                         if (defaultOneValue && value == 0) continue;
                         contentValues.put(name, value);
-
                     } else if (long.class == type || Long.class == type) {
                         long value = Long.parseLong(val.toString());
                         if (defaultOneValue && value == 0) continue;
@@ -3950,7 +3946,6 @@ public class GT {
                     } else if (byte[].class.equals(type)) {
                         if (val == null) continue;
                         contentValues.put(name, (byte[]) val);
-
                     }
 
 
@@ -4039,7 +4034,7 @@ public class GT {
 
                 } catch (IllegalArgumentException | IllegalAccessException e) {
                     e.printStackTrace();
-                    exception(getLineInfo(LOG.lineInfoIndex) + "数据出现问题");
+                    errs(getLineInfo(LOG.lineInfoIndex) + "数据出现问题");
                     status = false;
                     return;
                 }
@@ -4067,6 +4062,10 @@ public class GT {
 
             Field[] fields = superclass.getDeclaredFields();
             for (Field field : fields) {
+
+                //用于解密
+                GT_Property gt_Property = field.getAnnotation(GT_Property.class);
+
                 String valueName = field.getName();
                 Class<?> type = field.getType();
                 field.setAccessible(true);
@@ -4075,6 +4074,10 @@ public class GT {
                     if (str.equals(valueName)) {
                         if (String.class == type) {
                             String value = cursor.getString(cursor.getColumnIndex(valueName));
+                            //解密
+                            if (gt_Property != null && gt_Property.setIsEncryption()) {
+                                value = GT.Encryption.DES.decryptPassword(value, passWord);
+                            }
                             obj = value;
                         } else if (int.class == type || Integer.class == type) {
                             int value = cursor.getInt(cursor.getColumnIndex(valueName));
@@ -4313,7 +4316,6 @@ public class GT {
 
         //查询核心方法
         private <T> List<T> queryCoreAlgorithm(Class<T> tableNameClass, boolean isQueryAll) {
-
             String tableName = tableNameClass.getSimpleName();//获取表名称
 
             //判断这个表是否存在
@@ -4367,6 +4369,10 @@ public class GT {
 
                     Field[] fields = bean.getClass().getDeclaredFields();
                     for (Field field : fields) {
+
+                        //用于解密
+                        GT_Property gt_Property = field.getAnnotation(GT_Property.class);//如果是不被初始化的那就进行跳过解析
+
                         String valueName = field.getName();
                         Class<?> type = field.getType();
                         field.setAccessible(true);
@@ -4376,6 +4382,10 @@ public class GT {
                                 if (str.equals(valueName)) {
                                     if (String.class == type) {
                                         String value = cursor.getString(cursor.getColumnIndex(valueName));
+//                                      //解密
+                                        if (gt_Property != null && gt_Property.setIsEncryption()) {
+                                            value = GT.Encryption.DES.decryptPassword(value, passWord);
+                                        }
                                         obj = value;
                                     } else if (int.class == type || Integer.class == type) {
                                         int value = cursor.getInt(cursor.getColumnIndex(valueName));
@@ -5479,36 +5489,7 @@ public class GT {
          * ======================================================== Hibernate 创建数据库 代码 ========================================
          */
 
-
-        //====================================== 第一步：设置数据库名称 ======================================
-
-        /**
-         * @param sqlName
-         * @return
-         * @初始化数据库名称
-         */
-        public Hibernate init_1_SqlName(String sqlName) {
-            if (sqlName != null) {
-                DATABASE_NAME = sqlName + ".db";
-            }
-            return this;
-        }
-
-        //====================================== 第二步：设置数据库版本 ======================================
-
-        /**
-         * @param sqlVersion
-         * @return
-         * @初始化数据库版本号
-         */
-        public Hibernate init_2_SqlVersion(int sqlVersion) {
-            if (sqlVersion > 0) {
-                DATABASE_VERSION = sqlVersion;
-            }
-            return this;
-        }
-
-        //====================================== 第三步：设置扫描表路径 ======================================
+        //====================================== 设置扫描表路径 ======================================
 
         /**
          * @param scanTablePath (使用详情请参考官网)
@@ -5879,7 +5860,23 @@ public class GT {
         //====================================== 第四步：创建数据库对象 ======================================
         public boolean isCreateTable = true;//是否创建数据库
 
-        public Hibernate init_3_Sql(Object scanTable) {
+        private Hibernate initSQL(String sqlName, int sqlVersion, String passWord, Object scanTable) {
+
+            //初始化数据库名称
+            if (sqlName != null) {
+                DATABASE_NAME = sqlName + ".db";
+            }
+
+            //初始化数据库版本号
+            if (sqlVersion > 0) {
+                DATABASE_VERSION = sqlVersion;
+            }
+
+            //初始化数据库加密密码
+            if (passWord != null) {
+                this.passWord = passWord;
+            }
+
             if (isCreateTable) {//是否执行创建数据库代码
                 SCAN_TABLE = scanTable;//映射表的方式赋值
                 isDeleteNullTable = false;
@@ -5896,10 +5893,7 @@ public class GT {
                 } catch (RuntimeException e) {
                     errs(getLineInfo() + " 数据库报错:" + e);
                 }
-
             }
-
-
             return this;
         }
 
@@ -5949,18 +5943,17 @@ public class GT {
                     }
 
                     //过滤掉未被注解过的类
-                    GT_Entity bean_Entity = clazz1.getAnnotation(GT_Entity.class);//获取该类 ContextView 的注解类
                     GT_Bean bean_Bean = clazz1.getAnnotation(GT_Bean.class);//获取该类 ContextView 的注解类
+                    GT_Entity bean_Entity = clazz1.getAnnotation(GT_Entity.class);//获取该类 ContextView 的注解类
 
-                    if (bean_Entity != null || bean_Bean != null) {
+                    if (bean_Bean != null || bean_Entity != null) {
 
                         //分库映射(如果实体类中指定了被映射的数据库，那就根据数据库名称来判断该表是否映射)
                         String[] userSqlName = new String[0];
+                        userSqlName = null;
                         if (bean_Bean != null) {
-                            userSqlName = null;
                             userSqlName = bean_Bean.setSqlNames();//获取用户指定的数据库名称
                         } else if (bean_Entity != null) {
-                            userSqlName = null;
                             userSqlName = bean_Entity.setSqlNames();//获取用户指定的数据库名称
                         }
 
@@ -7080,6 +7073,64 @@ public class GT {
             }
         }
 
+
+    }
+
+    /**
+     * 语言框架
+     */
+    public static class LanguageUtils {
+
+        private static Context context;
+
+        @SuppressLint("NewApi")
+        public static void updateLanguage(Locale locale) {
+            //获取想要切换的语言类型
+            Resources resources = context.getResources();//获得res资源对象
+            Configuration configuration = resources.getConfiguration();//获得设置对象
+            configuration.setLocale(locale);//设置语言
+            DisplayMetrics dm = resources.getDisplayMetrics();//获得屏幕参数：主要是分辨率，像素等。
+            resources.updateConfiguration(configuration, dm);//更新语言
+        }
+
+
+        public static String getString(int stringID) {
+            return context.getResources().getString(stringID);
+        }
+
+/**
+
+ 国家/地区	语言代码	国家/地区	语言代码
+ 简体中文(中国)	zh-rCN	繁体中文(台湾地区)	zh-rTW
+ 繁体中文(香港)	zh-rHK	英语(香港)	en-rHK
+ 英语(美国)	en-rUS	英语(英国)	en-rQB
+ 英语(全球)	en-rWW	英语(加拿大)	en-rCA
+ 英语(澳大利亚)	en-rAU	英语(爱尔兰)	en-rIE
+ 英语(芬兰)	en-rFI	芬兰语(芬兰)	fi-rFI
+ 英语(丹麦)	en-rDK	丹麦语(丹麦)	da-rDK
+ 英语(以色列)	en-rIL	希伯来语(以色列)	he-rIL
+ 英语(南非)	en-rZA	英语(印度)	en-rIN
+ 英语(挪威)	en-rNO	英语(新加坡)	en-rSG
+ 英语(新西兰)	en-rNZ	英语(印度尼西亚)	en-rID
+ 英语(菲律宾)	en-rPH	英语(泰国)	en-rTH
+ 英语(马来西亚)	en-rMY	英语(阿拉伯)	en-rXA
+ 韩文(韩国)	ko-rKR	日语(日本)	ja-rJP
+ 荷兰语(荷兰)	nl-rNL	荷兰语(比利时)	nl-rBE
+ 葡萄牙语(葡萄牙)	pt-rPT	葡萄牙语(巴西)	pt-rBR
+ 法语(法国)	fr-rFR	法语(卢森堡)	fr-rLU
+ 法语(瑞士)	fr-rCH	法语(比利时)	fr-rBE
+ 法语(加拿大)	fr-rCA	西班牙语(拉丁美洲)	es-rLA
+ 西班牙语(西班牙)	es-rES	西班牙语(阿根廷)	es-rAR
+ 西班牙语(美国)	es-rUS	西班牙语(墨西哥)	es-rMX
+ 西班牙语(哥伦比亚)	es-rCO	西班牙语(波多黎各)	es-rPR
+ 德语(德国)	de-rDE	德语(奥地利)	de-rAT
+ 德语(瑞士)	de-rCH	俄语(俄罗斯)	ru-rRU
+ 意大利语(意大利)	it-rIT	希腊语(希腊)	el-rGR
+ 挪威语(挪威)	no-rNO	匈牙利语(匈牙利)	hu-rHU
+ 土耳其语(土耳其)	tr-rTR	捷克语(捷克共和国)	cs-rCZ
+ 斯洛文尼亚语	sl-rSL	波兰语(波兰)	pl-rPl
+ 瑞典语(瑞典)	sv-rSE	西班牙语 (智利)	es-rCL 1
+ **/
 
     }
 
@@ -9064,6 +9115,14 @@ public class GT {
 
         public static boolean isLog = false;//是否打开日志
 
+        public interface OnStateListener {
+            void start(Object obj);
+
+            void loading(int progress);
+
+            void close(Object obj);
+        }
+
         public static class TCP {
 
             //构建 GT_SharedPreferences
@@ -9072,13 +9131,21 @@ public class GT {
             public @interface Build {
                 String setIP() default "null";      //默认IP地址
 
-                int setPort();              //默认的端口号
+                int setPort();                      //默认的端口号
+
+                boolean isLog() default false;      //是否使用日志
             }
 
             private ServerSocket serverSocket;//服务器套接字
             private Socket socket;//服务器、客户端套接字
+
+            //文字
             private PrintStream printStream;//输出
             private BufferedReader bufferedReader;//输入
+            //图片
+            private DataOutputStream dataOutputStream;//输出
+            private DataInputStream dataInputStream;//输入
+
             private int port = -1;//端口号：必须大于1023 0~1023为系统保留端口
 
             /**
@@ -9098,8 +9165,13 @@ public class GT {
                             socket = serverSocket.accept();//开始等待客户端连接
                             if (isLog)
                                 GT.log("服务器：有客户端连接");
+                            //文字
                             printStream = new PrintStream(socket.getOutputStream());//输出
                             bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));//输入
+                            //图片
+                            dataOutputStream = new DataOutputStream(socket.getOutputStream());//输出
+                            dataInputStream = new DataInputStream(socket.getInputStream());//输入
+
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -9123,8 +9195,12 @@ public class GT {
                             socket = new Socket(ip, port);//连接服务器
                             if (isLog)
                                 GT.log("客户端：连接服务器成功！");
+                            //文字
                             printStream = new PrintStream(socket.getOutputStream());//输出
                             bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));//输入
+                            //图片
+                            dataOutputStream = new DataOutputStream(socket.getOutputStream());//输出
+                            dataInputStream = new DataInputStream(socket.getInputStream());//输入
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -9133,16 +9209,32 @@ public class GT {
             }
 
             /**
-             * 读取数据
+             * 发送文本数据
+             *
+             * @param data
+             * @return
+             */
+            public TCP sendText(Object data) {
+                if (printStream == null) return this;
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        printStream.println(String.valueOf(data));
+                    }
+                });
+                return this;
+            }
+
+            /**
+             * 读取文本数据
              *
              * @return
              */
-            public String readData() {
+            public String readText() {
+                if (bufferedReader == null) return null;
                 String data = null;
                 try {
-                    if (bufferedReader != null) {
-                        data = bufferedReader.readLine();
-                    }
+                    data = bufferedReader.readLine();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -9150,17 +9242,110 @@ public class GT {
             }
 
             /**
-             * 发送数据
+             * 发送图片
              *
-             * @param data
+             * @param bitmap 将你的图片资源转为 Bitmap
              * @return
              */
-            public TCP sendData(Object data) {
+            public TCP sendImg(Bitmap bitmap) {
+                if (dataOutputStream == null) return this;
                 GT.Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
-                        if (printStream != null) {
-                            printStream.println(String.valueOf(data));
+                        try {
+                            GT.log("bitmap:" + bitmap);
+                            ByteArrayOutputStream bout = new ByteArrayOutputStream();
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, bout);
+                            int len = bout.size();           //写入字节的长度，再写入图片的字节
+                            dataOutputStream.writeInt(len);  //这里打印一下发送的长度
+                            dataOutputStream.write(bout.toByteArray());
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+                return this;
+            }
+
+            /***
+             * 读取图片带进度的
+             * @param onReadData
+             * @return
+             */
+            public Bitmap readImg(OnStateListener stateListener) {
+                if (dataInputStream == null) return null;
+                Bitmap bmp = null;
+                int size = 0;
+                try {
+                    size = dataInputStream.readInt();
+                    byte[] data = new byte[size];
+                    int len = 0;
+                    stateListener.start(size);
+                    while (len < size) {
+                        len += dataInputStream.read(data, len, size - len);
+                        int mProgress = (int) (((float) len / size) * 100);
+                        stateListener.loading(mProgress);
+                    }
+                    ByteArrayOutputStream output = new ByteArrayOutputStream();
+                    bmp = BitmapFactory.decodeByteArray(data, 0, data.length);
+                    bmp.compress(Bitmap.CompressFormat.PNG, 100, output);
+                    stateListener.close(bmp);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return bmp;
+            }
+
+            /**
+             * 读取图片
+             *
+             * @return
+             */
+            public Bitmap readImg() {
+                if (dataInputStream == null) return null;
+                Bitmap bmp = null;
+                int size = 0;
+                try {
+                    size = dataInputStream.readInt();
+                    byte[] data = new byte[size];
+                    int len = 0;
+                    while (len < size) {
+                        len += dataInputStream.read(data, len, size - len);
+                    }
+                    ByteArrayOutputStream output = new ByteArrayOutputStream();
+                    bmp = BitmapFactory.decodeByteArray(data, 0, data.length);
+                    bmp.compress(Bitmap.CompressFormat.PNG, 100, output);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return bmp;
+            }
+
+            /**
+             * 发送图片
+             *
+             * @param imgPath
+             * @return
+             */
+            public TCP sendImg(String imgFilePath) {
+                if (dataOutputStream == null) return this;
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        FileInputStream fis = null;
+                        try {
+                            fis = new FileInputStream(imgFilePath);
+                            int size = fis.available();
+                            byte[] data = new byte[size];
+                            fis.read(data);
+                            dataOutputStream.writeInt(size);
+                            dataOutputStream.write(data);
+                            dataOutputStream.flush();
+                            fis.close();
+                        } catch (FileNotFoundException e) {
+                            e.printStackTrace();
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
                     }
                 });
@@ -9168,10 +9353,130 @@ public class GT {
             }
 
             /**
+             * 读取图片
+             *
+             * @param saveFilePath 保存读取到的图片文件路径
+             * @return
+             */
+            public boolean readImg(String saveFilePath) {
+                if (dataInputStream == null) return false;
+                int len = 0;
+                try {
+                    len = dataInputStream.readInt();
+                    byte[] bytes = new byte[(int) len];  //然后在读这个长度的字节到字节数组
+                    dataInputStream.readFully(bytes);  //将独到的内容保存为文件到本地
+                    File file = new File(saveFilePath);
+                    if (!file.exists()) {
+                        file.mkdirs();
+                    }
+                    FileOutputStream fileOutputStream = new FileOutputStream(file);
+                    fileOutputStream.write(bytes);
+                    return true;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return false;
+            }
+
+            /**
+             * 发送文件
+             *
+             * @param path            文件路径
+             * @param fileName        文件名称
+             * @param onStateListener 状态接口
+             * @return
+             */
+            public boolean sendFile(String path, String fileName, OnStateListener onStateListener) {
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        onStateListener.start(fileName);
+                        printStream.println(fileName);//发送文件名
+                        OutputStream outputData = null;
+                        try {
+                            outputData = socket.getOutputStream();
+                            FileInputStream fileInput = new FileInputStream(path + fileName);
+                            int size = -1;
+                            byte[] buffer = new byte[1024];
+                            GT.log("开始读取...");
+                            while (true) {
+                                GT.log("开始read");
+                                int i = size = fileInput.read(buffer, 0, 1024);
+                                GT.log("结束read：" + i);
+                                if (i == -1) {
+                                    GT.log("跳出循环...");
+                                    break;
+                                }
+                                GT.log("读取中...");
+                                onStateListener.loading(size);
+                                GT.log("开始写入...");
+                                outputData.write(buffer, 0, size);
+                                GT.log("写入完毕...");
+                            }
+                            GT.log("结束读取...");
+                            onStateListener.close("ok");
+                            outputData.close();
+                            fileInput.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+
+                return false;
+            }
+
+            /**
+             * 读取文件
+             *
+             * @param saveFilePath 保存文件的路径
+             */
+            public String readFile(String saveFile, OnStateListener onStateListener) {
+                if (saveFile == null) return null;
+                String fileName = "";
+                try {
+                    fileName = bufferedReader.readLine();
+                    onStateListener.start(fileName);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                //获取文件路径
+                String filePath = saveFile.substring(0, saveFile.lastIndexOf("/") + 1);
+                // 创建文件的存储路径
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    file.mkdirs();
+                }
+
+                //将文件存储到本地
+                InputStream dataStream = null;
+                try {
+                    dataStream = socket.getInputStream();
+                    FileOutputStream fileOutputStream = new FileOutputStream(saveFile, false);
+                    byte[] buffer = new byte[1024];
+                    int size = -1;
+                    while ((size = dataStream.read(buffer)) != -1) {
+                        fileOutputStream.write(buffer, 0, size);
+                        onStateListener.loading(size);
+                    }
+                    fileOutputStream.close();
+                    dataStream.close();
+                    onStateListener.close(saveFile);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    return null;
+                }
+
+
+                return saveFile;
+            }
+
+
+            /**
              * 释放资源
              */
             public void close() {
-
                 //关闭输入输出流
                 if (socket != null) {
                     try {
@@ -9181,7 +9486,6 @@ public class GT {
                         e.printStackTrace();
                     }
                 }
-
 
                 if (bufferedReader != null) {
                     try {
@@ -9197,6 +9501,24 @@ public class GT {
                     printStream = null;
                 }
 
+                if (dataOutputStream != null) {
+                    try {
+                        dataOutputStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    dataOutputStream = null;
+                }
+
+                if (dataInputStream != null) {
+                    try {
+                        dataInputStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    dataInputStream = null;
+                }
+
                 if (socket != null) {
                     try {
                         socket.close();
@@ -9208,7 +9530,6 @@ public class GT {
 
 
             }
-
 
         }
 
@@ -11356,7 +11677,6 @@ public class GT {
              * @param listener
              */
             public static void downloadApp(final String appUrl, final String appSavePath, final String appSaveFileName, final OnDownloadListener listener) {
-
                 GT.Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
@@ -11394,8 +11714,6 @@ public class GT {
                         }
                     }
                 });
-
-
             }
 
             public interface OnDownloadListener {
@@ -11789,10 +12107,10 @@ public class GT {
     /**
      * GT 适配器
      */
-    public static class GT_Adapters {
+    public static class Adapters {
 
         /**
-         * 用于继承的 适配器基类
+         * 用于旧版继承的 适配器基类
          *
          * @param <T>
          */
@@ -11946,12 +12264,9 @@ public class GT {
             protected void initView(BaseAdapter.BaseHolder holder, int position, T t) {
             }
 
-            ;
-
             protected void initView(View itemView, int position, T t) {
-            }
 
-            ;
+            }
 
             protected void loadData(View itemView, int position, T t) {
             }
@@ -11988,6 +12303,7 @@ public class GT {
 
             public AnnotationAdapter(Context context) {
                 super(context);
+                GT.build(this);
             }
 
             public AnnotationAdapter(Context context, List<T> detectionDataBeanList) {
@@ -12070,7 +12386,25 @@ public class GT {
          */
         public static class DES {
 
-            private static String paw = "☯✪☭☮♞";
+            private static String paw =
+                    "         4&(\n" +
+                            "       ` ~&&\\yM#1\n" +
+                            "        ,_'Q!!NMW&\n" +
+                            "        WCb 7N✪4D Q%,,\n" +
+                            "        PM'*MDk#M0p,\n" +
+                            "            ]@J0&e~~4r' ,+bQEQ\n" +
+                            "             F8I&#'   _&B$$✪W#&$\n" +
+                            "              &0A1   L#DE&E~!Q&Q,\n" +
+                            " _=,        ,#0RN1  _T@0$'   ZN$Q.   grNq5\n" +
+                            " ^✪'d     ,0K0pK^  g*Q0g'    #Q4p&,/g9X*&#,_/✪(q\n" +
+                            "  TA1   ,sDQWh4^  x&NM0` _   #FQ#K#fA#   `*K#XWP~-\n" +
+                            "   ^&p,wNMM0qD: /HE#EN' ..#g)~ '@NG0Qx,    `=X*\n" +
+                            "  '  '43$'hE✪##m0D04f_g  ~^ ~   `-00**0\n" +
+                            "           =0#ONq2W0BF^#, _           ✪p,,\n" +
+                            "             `  ^''~   ✪~b''        **R3`\n" +
+                            "                      ow,F         +#F~'\n" +
+                            "                      /-9!          ` \\\n" +
+                            "                       R";
 
             /**
              * 加密
@@ -12182,6 +12516,243 @@ public class GT {
             }
 
         }
+
+    }
+
+    /**
+     * 权限申请类
+     */
+    public static class Permission {
+
+        private static final String TAG_PERMISSION = "TAG_PERMISSION";
+        private static final String TAG_EACH_PERMISSION = "TAG_EACH_PERMISSION";
+        private static Permission Permission = null;
+        private static FragmentManager fragmentManager;
+        private static PermissionFragment fragment;
+        private Permission.PermissionDescription permissionDescription;
+
+        public static Permission init(FragmentActivity context) {
+            if (Permission == null) {
+                synchronized (GT.class) {
+                    if (Permission == null) {
+                        Permission = new Permission();
+                    }
+                }
+            }
+            fragmentManager = context.getSupportFragmentManager();
+            fragment = (PermissionFragment) context.getSupportFragmentManager().findFragmentByTag(TAG_EACH_PERMISSION);
+
+            return Permission;
+        }
+
+        public Permission permissions(String[] permission, OnPermissionListener onPermissionListener) {
+
+            if (permissionDescription != null) {
+                permissionDescription.invalidClose();
+            }
+
+            permissionDescription = new Permission.PermissionDescription();
+
+            if (fragment == null) {
+                fragment = PermissionFragment.newInstance(permission, onPermissionListener, Permission, permissionDescription);
+            }
+            if (fragmentManager != null) {
+                fragmentManager
+                        .beginTransaction()
+                        .add(fragment, TAG_PERMISSION)
+                        .commitAllowingStateLoss();
+                fragmentManager.executePendingTransactions();
+            }
+            return Permission;
+        }
+
+
+        //权限接口
+        public interface OnPermissionListener {
+            //申请权限说明
+            void onExplainRequestReason(PermissionDescription onPDListener);
+
+            /**
+             * 转到设置
+             *
+             * @return true:继续申请权限，false:不在进行权限申请
+             */
+            boolean onForwardToSettings();
+
+            //开始申请
+            void request(boolean allGranted, String[] grantedList, String[] deniedList, String message);
+        }
+
+        //权限申请说明
+        public static class PermissionDescription {
+
+            private boolean acceptAdvice = false;
+            private boolean closeAcceptAdvice = false;
+            private boolean isValidClose = true;//默认是有效关闭
+            private int waitingTime = 0;//设置等待用户授权时间,毫秒
+
+            public boolean isValidClose() {
+                return isValidClose;
+            }
+
+            public void setCloseAcceptAdvice(boolean closeAcceptAdvice) {
+                this.closeAcceptAdvice = closeAcceptAdvice;
+            }
+
+            public int getWaitingTime() {
+                return waitingTime;
+            }
+
+            /**
+             * 设置权限申请等待时间，如果时间过了还未申请，表示拒绝权限，如果未-1代表一直等待
+             *
+             * @param waitingTime（毫秒）
+             */
+            public void setWaitingTime(int waitingTime) {
+                this.waitingTime = waitingTime;
+            }
+
+            public boolean isCloseAcceptAdvice() {
+                return closeAcceptAdvice;
+            }
+
+            public boolean isAcceptAdvice() {
+                return acceptAdvice;
+            }
+
+            /**
+             * 设置是否接受请求意见
+             *
+             * @param acceptAdvice
+             */
+            public void setAcceptAdvice(boolean acceptAdvice) {
+                this.acceptAdvice = acceptAdvice;
+                closeAcceptAdvice = true;
+            }
+
+            /**
+             * 结束本次授权申明
+             */
+            public void invalidClose() {
+                closeAcceptAdvice = true;
+                isValidClose = false;//设置无效关闭
+            }
+
+            public void close() {
+                closeAcceptAdvice = true;
+            }
+
+
+        }
+
+        /**
+         * 申请权限的 Fragment
+         */
+        public static class PermissionFragment extends Fragment {
+            private String[] permission;
+            private Permission.OnPermissionListener onPermissionListener;
+            private Permission Permission;
+            private Permission.PermissionDescription permissionDescription;
+            private List<String> grantedList = new ArrayList<>();//已通过
+            private List<String> deniedList = new ArrayList<>();//未通过
+
+            public PermissionFragment(String[] permission, Permission.OnPermissionListener onPermissionListener, Permission Permission, Permission.PermissionDescription permissionDescription) {
+                this.permission = permission;
+                this.onPermissionListener = onPermissionListener;
+                this.Permission = Permission;
+                this.permissionDescription = permissionDescription;
+            }
+
+            public static PermissionFragment newInstance(String[] permission, Permission.OnPermissionListener onPermissionListener, Permission Permission, Permission.PermissionDescription permissionDescription) {
+                return new PermissionFragment(permission, onPermissionListener, Permission, permissionDescription);
+            }
+
+            private FragmentActivity mActivity;
+
+            @Override
+            public void onAttach(@NonNull Context context) {
+                super.onAttach(context);
+                mActivity = getActivity();
+            }
+
+            @Override
+            public void onDestroy() {
+                super.onDestroy();
+                permissionDescription.invalidClose();
+            }
+
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+                super.onCreate(savedInstanceState);
+                setRetainInstance(true);
+
+                onPermissionListener.onExplainRequestReason(permissionDescription);
+
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+
+                        int i = 0;
+                        //等待结束申请说明
+                        while (!permissionDescription.isCloseAcceptAdvice()) {
+                            GT.Thread.sleep(300);
+                        }
+
+                        if (permissionDescription.isValidClose()) {//判断是否有效关闭
+                            if (permissionDescription.isAcceptAdvice()) {//判断用户是否同意授权
+                                if (permission != null && permission.length != 0) {
+                                    if (onPermissionListener.onForwardToSettings()) {//是否继续进行权限申请
+                                        requestPermissions(permission, 1);//开始授权
+                                    } else {
+                                        onPermissionListener.request(false, new String[]{}, permission, "Stop the authorization");
+                                    }
+                                }
+                            } else {
+                                onPermissionListener.request(false, new String[]{}, permission, "The user rejected the authorization");
+                            }
+                        }
+                    }
+                });
+
+            }
+
+
+            @Override
+            public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                if (deniedList.size() != 0 || grantedList.size() != 0) {
+                    deniedList.clear();
+                    grantedList.clear();
+                }
+                for (int i = 0; i < permissions.length; i++) {
+                    int code = ContextCompat.checkSelfPermission(mActivity, permissions[i]);
+                    if (code == -1) {
+                        deniedList.add(permissions[i]);//获取为同意的权限
+                    } else if (code == 0) {
+                        grantedList.add(permissions[i]);//获取同意的权限
+                    }
+                }
+
+                String[] grantedArray = new String[grantedList.size()];
+                for (int i = 0; i < grantedList.size(); i++) {
+                    grantedArray[i] = grantedList.get(i);
+                }
+
+                String[] deniedArray = new String[deniedList.size()];
+                for (int i = 0; i < deniedList.size(); i++) {
+                    deniedArray[i] = deniedList.get(i);
+                }
+
+                if (deniedList.size() == 0) {
+                    onPermissionListener.request(true, grantedArray, deniedArray, "All permissions approved");
+                } else {
+                    onPermissionListener.request(false, grantedArray, deniedArray, "All permissions are not approved");
+                }
+
+
+            }
+        }
+
 
     }
 
@@ -13332,14 +13903,39 @@ public class GT {
          * @param activity
          */
         public static void Close_virtualButton(Activity activity) {
-            if (Build.VERSION.SDK_INT > 11 && Build.VERSION.SDK_INT < 19) {
-                View v = activity.getWindow().getDecorView();
-                v.setSystemUiVisibility(View.GONE);
-            } else {
-                View decorView = activity.getWindow().getDecorView();
-                int uiOptions = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN;
-                decorView.setSystemUiVisibility(uiOptions);
-            }
+            View decorView = activity.getWindow().getDecorView();
+            int uiOptions = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN;
+            decorView.setSystemUiVisibility(uiOptions);
+
+            activity.getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(new View.OnSystemUiVisibilityChangeListener() {
+                @Override
+                public void onSystemUiVisibilityChange(int visibility) {
+                    int uiOptions = View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                            //布局位于状态栏下方
+                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                            //全屏
+                            View.SYSTEM_UI_FLAG_FULLSCREEN |
+                            //隐藏导航栏
+                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+                    if (Build.VERSION.SDK_INT >= 19) {
+                        uiOptions |= 0x00001000;
+                    } else {
+                        uiOptions |= View.SYSTEM_UI_FLAG_LOW_PROFILE;
+                    }
+                    activity.getWindow().getDecorView().setSystemUiVisibility(uiOptions);
+                }
+            });
+
+            View v = activity.getWindow().getDecorView();
+            v.setSystemUiVisibility(View.GONE);
+
+            Window _window = activity.getWindow();
+            WindowManager.LayoutParams params = _window.getAttributes();
+            params.systemUiVisibility = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE;
+            _window.setAttributes(params);
+
         }
 
         /**
@@ -13599,20 +14195,11 @@ public class GT {
                 super.onCreate(savedInstanceState);
                 gt_fragment = GT_Fragment.gt_fragment;
                 int loadLayout = loadLayout();
-                if (loadLayout != 0) {
+                if (loadLayout != 0 && loadLayout != -1) {
                     initDrawView();// 设置绘制前的数据
                     setContentView(loadLayout);// 加载布局
                     initView(savedInstanceState);// 初始化 UI
                     loadData();// 功能方法
-                }
-
-                //注册广播
-                if (isRegisterBroadcastAction()) {
-                    uiReceiver = new UiReceiver();
-                    //实例化过滤器并设置要过滤的广播
-                    IntentFilter intentFilter = new IntentFilter();
-                    intentFilter.addAction(getClass().getName());
-                    registerReceiver(uiReceiver, intentFilter); //注册广播
                 }
 
             }
@@ -13660,7 +14247,7 @@ public class GT {
              */
             protected void startActivity(Class activityClass) {
 
-                Context activity = getGT().getActivity();
+                Context activity = getActivity();
                 if (activity == null) return;
                 activity.startActivity(new Intent(activity, activityClass));
 
@@ -13864,7 +14451,6 @@ public class GT {
 
             }
 
-
             @Override
             public void finish() {
                 super.finish();
@@ -13888,55 +14474,6 @@ public class GT {
                 }
 
 
-            }
-
-
-            //更新UI广播
-            private UiReceiver uiReceiver;//定义一个刷新UI的广播
-
-            //是否注册广播
-            protected boolean isRegisterBroadcastAction() {
-                return false;//默认是注册的
-            }
-
-            /**
-             * 发送更新UI广播
-             *
-             * @param intent
-             * @param classKey 将数据发收到那个类进行更新
-             */
-            protected void sendUpdateUiBroadcast(Class classKey, Intent intent) {
-                if (intent == null && classKey != null) {
-                    return;
-                }
-                intent.setAction(classKey.getName());
-                sendBroadcast(intent);
-            }
-
-            /**
-             * 通过广播更新UI
-             *
-             * @param context
-             * @param intent
-             */
-            protected void updateUi(Context context, Intent intent) {
-            }
-
-            /**
-             * 定义一个接收到消息后刷新UI的内部类广播
-             */
-            private class UiReceiver extends BroadcastReceiver {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    updateUi(context, intent);//刷新UI
-                }
-            }
-
-            @Override
-            public void onDestroy() {
-                if (uiReceiver != null)
-                    unregisterReceiver(uiReceiver); //注销广播
-                super.onDestroy();
             }
 
         }
@@ -14617,7 +15154,7 @@ public class GT {
                     String fragmentName = fragmentData[2].substring(0, fragmentData[2].length() - 1);//fragment名称
                     fragmentBeanList.add(new BackStackFragmentBean(Integer.parseInt(stackIndex), hashCode, fragmentName));
                 } catch (Exception e) {
-                    exception(getLineInfo() + "报错:" + e);
+                    errs(getLineInfo() + "报错:" + e);
                 }
             }
 
@@ -14642,7 +15179,7 @@ public class GT {
                     String fragmentName = fragmentDataArray[2].substring(0, fragmentDataArray[2].length() - 1);//fragment名称
                     fragmentNames.add(fragmentName);
                 } catch (Exception e) {
-                    exception(getLineInfo() + "报错:" + e);
+                    errs(getLineInfo() + "报错:" + e);
                 }
             }
 
@@ -14677,7 +15214,7 @@ public class GT {
                     fragmentNames.add(name);
 
                 } catch (Exception e) {
-                    exception(getLineInfo() + "报错:" + e);
+                    errs(getLineInfo() + "报错:" + e);
                 }
             }
             return fragmentNames;
@@ -15801,7 +16338,13 @@ public class GT {
                 });
 
                 //给EditText 组件设置返回事件
-                setViewBackListener(view);
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        setViewBackListener(view);
+                        setEditTextRequestFocus(view);
+                    }
+                });
 
             }
 
@@ -15846,6 +16389,35 @@ public class GT {
                     }
                 }
 
+            }
+
+            /**
+             * 设置最顶端的EditText为获取焦点
+             *
+             * @param viewLayout
+             */
+            protected boolean setEditTextRequestFocus(View viewLayout) {
+                ViewGroup viewGroup = null;
+                //如果是Edit类型的那就监听返回事件
+                if (viewLayout instanceof EditText) {
+                    viewLayout.requestFocus();
+                    return true;
+                } else if (viewLayout instanceof ViewGroup) {
+                    try {
+                        viewGroup = (ViewGroup) viewLayout;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                    int childCount = viewGroup.getChildCount();
+                    if (childCount == 0) return false;
+                    for (int i = 0; i < childCount; i++) {
+                        View childAt = viewGroup.getChildAt(i);
+                        if (setEditTextRequestFocus(childAt)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
             }
 
             /**
@@ -15956,6 +16528,11 @@ public class GT {
                 super(context);
             }
 
+
+            public interface OnGetDataListener {
+                void getData(Object data);
+            }
+
             /**
              * 设置按钮的对话框
              *
@@ -15975,6 +16552,28 @@ public class GT {
             }
 
             /**
+             * 两个按钮对话框
+             *
+             * @param img              图标
+             * @param title            标题
+             * @param message          内容
+             * @param buttonName1      左边按钮名称
+             * @param onClickListener1 左边按钮单击事件
+             * @param buttonName2      右边按钮名称
+             * @param onClickListener2 右边按钮单击事件
+             * @return
+             */
+            public AlertDialog.Builder dialogTwoButton(int img, String title, String message, boolean isCancelable, String buttonName1, DialogInterface.OnClickListener onClickListener1, String buttonName2, DialogInterface.OnClickListener onClickListener2) {
+                setIcon(img);
+                setTitle(title);
+                setMessage(message);
+                setCancelable(isCancelable);
+                setPositiveButton(buttonName1, onClickListener1).
+                        setNegativeButton(buttonName2, onClickListener2);
+                return this;
+            }
+
+            /**
              * 设置列表选项对话框
              * @param img       图标
              * @param title     标题
@@ -15988,8 +16587,10 @@ public class GT {
              * @param onClickListener 单击事件
              * @return
              */
-            public AlertDialog.Builder dialogList(int img, String title, final String[] items, DialogInterface.OnClickListener onClickListener) {
-                setIcon(img).setTitle(title);
+            public AlertDialog.Builder dialogList(int img, String title, boolean isCancelable, final String[] items, DialogInterface.OnClickListener onClickListener) {
+                setIcon(img);
+                setTitle(title);
+                setCancelable(isCancelable);
                 if (items != null && onClickListener != null)
                     setItems(items, onClickListener); //添加列表项
                 return this;
@@ -16004,10 +16605,25 @@ public class GT {
              * @param onClickListener 单击事件
              * @return 返回对话框对象
              */
-            public AlertDialog.Builder dialogSingleChoiceList(int img, String title, String[] item, DialogInterface.OnClickListener onClickListener) {
-                setIcon(img).setTitle(title);
-                if (item != null && onClickListener != null)
-                    setSingleChoiceItems(item, 0, onClickListener);//设置按钮
+            private int checkedItemIndex = 0;
+
+            public AlertDialog.Builder dialogSingleChoiceList(int img, String title, boolean isCancelable, String[] items, int checkedItem, String buttonName, OnGetDataListener onGetDataListener) {
+                setIcon(img);
+                setTitle(title);
+                setCancelable(isCancelable);
+                checkedItemIndex = checkedItem;
+                setSingleChoiceItems(items, checkedItem,
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                checkedItemIndex = which;
+                            }
+                        }).setPositiveButton(buttonName, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        onGetDataListener.getData(items[checkedItemIndex]);
+                    }
+                });
                 return this;
             }
 
@@ -16020,18 +16636,170 @@ public class GT {
              * @param onClickListener 单击事件
              * @return 返回对话框对象
              */
-            public AlertDialog.Builder dialogMultiChoice(int img, String title, final String[] items, DialogInterface.OnMultiChoiceClickListener onClickListener) {
+            private List<String> selectItemList;
 
-                final boolean[] checkedItems = new boolean[items.length];   //初始化选中状态
-
-                for (int i = 0; i < checkedItems.length; i++) {
-                    checkedItems[i] = false;   //初始化默认选项
+            public AlertDialog.Builder dialogMultiChoice(int img, String title, boolean isCancelable, String[] items, boolean[] initChoiceSets, String buttonName, OnGetDataListener onGetDataListener) {
+                if (selectItemList == null) {
+                    selectItemList = new ArrayList<>();
+                } else {
+                    selectItemList.clear();
                 }
-                setIcon(img).setTitle(title);//设置 图标、标题
-                if (checkedItems != null && items != null && onClickListener != null)
-                    setMultiChoiceItems(items, checkedItems, onClickListener);
+                // 设置默认选中的选项，全为false默认均未选中
+                setIcon(img);
+                setTitle(title);
+                setCancelable(isCancelable);
+                setMultiChoiceItems(items, initChoiceSets,
+                        new DialogInterface.OnMultiChoiceClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which, boolean isChecked) {
+                                if (which != -1) {
+                                    if (isChecked) {
+                                        selectItemList.add(items[which]);
+                                    } else {
+                                        selectItemList.remove(items[which]);
+                                    }
+                                }
+                            }
+                        });
+                setPositiveButton(buttonName, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        onGetDataListener.getData(selectItemList);
+                    }
+                });
                 return this;
             }
+
+            /**
+             * 加载对话框
+             *
+             * @param title        加载对话框标题
+             * @param message      加载对话框内容
+             * @param isCancelable 单击是否可取消
+             */
+            public ProgressDialog progressDialog(int img, String title, String message, boolean isCancelable) {
+                ProgressDialog waitingDialog = new ProgressDialog(getContext());
+                waitingDialog.setIcon(img);
+                waitingDialog.setTitle(title);
+                waitingDialog.setMessage(message);
+                waitingDialog.setIndeterminate(true);
+                waitingDialog.setCancelable(isCancelable);
+                return waitingDialog;
+            }
+
+            /**
+             * 进度条加载框对话框
+             *
+             * @param title                 标题
+             * @param messgae               内容
+             * @param maxValue              最大值
+             * @param progress              当前值/初始值
+             * @param loadingSpeed          加载速度
+             * @param isCancelable          中途是否可取消
+             * @param onProgressBarListener 监听进度接口
+             * @return
+             */
+            public ProgressDialog progressBarDialog(int img, String title, String messgae, int maxValue, int progress, int loadingSpeed, boolean isCancelable, OnProgressBarListener onProgressBarListener) {
+                ProgressDialog progressDialog = new ProgressDialog(getContext());
+                progressDialog.setIcon(img);
+                progressDialog.setTitle(title);
+                progressDialog.setMessage(messgae);
+                progressDialog.setMax(maxValue);
+                progressDialog.setProgress(progress);
+                progressDialog.setCancelable(isCancelable);
+                progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        boolean isStart = false;        //是否开始加载
+                        int record = 0;
+                        long startTime = 0;
+                        long endTime = 0;
+                        while (true) {
+                            //开始加载
+                            if (progressDialog.getProgress() != progress && !isStart) {
+                                startTime = System.currentTimeMillis();
+                                isStart = true;
+                                onProgressBarListener.startLoad(progressDialog.getProgress(), progressDialog.getMax(), loadingSpeed);
+                            }
+                            //加载中
+                            if (isStart && record != progressDialog.getProgress()) {
+                                record = progressDialog.getProgress();
+                                onProgressBarListener.underwayLoad(progressDialog.getProgress());
+                            }
+                            //结束加载
+                            if (progressDialog.getProgress() >= progressDialog.getMax()) {
+                                endTime = System.currentTimeMillis();
+                                onProgressBarListener.closeLoad(endTime - startTime);
+                                break;
+                            }
+                            Thread.sleep(loadingSpeed);
+                        }
+
+                    }
+                });
+
+
+                return progressDialog;
+            }
+
+            /**
+             * 进度条对话框进度监听接口
+             */
+            public interface OnProgressBarListener {
+                /**
+                 * 开始加载
+                 *
+                 * @param progress     当前初始值
+                 * @param maxValue     目标最大值
+                 * @param loadingSpeed 加载速度
+                 */
+                void startLoad(int progress, int maxValue, int loadingSpeed);
+
+                /**
+                 * 加载中
+                 *
+                 * @param progress 当前进度值
+                 */
+                void underwayLoad(int progress);
+
+                /**
+                 * 加载完毕
+                 *
+                 * @param totalElapsedTime 加载总耗时间 (ms)
+                 */
+                void closeLoad(long totalElapsedTime);
+            }
+
+
+            /**
+             * 输入对话框
+             *
+             * @param title                 标题
+             * @param message               内容
+             * @param isCancelable          是否可取消
+             * @param buttonName            按钮名称
+             * @param onGetEditTextListener 获取输入框的内容接口
+             * @return
+             */
+            public AlertDialog.Builder inputDialog(int img, String title, String message, boolean isCancelable, String buttonName, OnGetDataListener onGetDataListener) {
+                EditText editText = new EditText(getContext());
+                setIcon(img);
+                setTitle(title);
+                setMessage(message);
+                setCancelable(isCancelable);
+                setView(editText);
+                setPositiveButton(buttonName,
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                onGetDataListener.getData(editText.getText().toString());
+                            }
+                        });
+                return this;
+            }
+
 
             /**
              * 加载自定义的 对话框 自带去掉边框
@@ -16199,7 +16967,6 @@ public class GT {
                 }
 
             }
-
 
         }
 
@@ -16641,9 +17408,16 @@ public class GT {
                 this.gt_fragment = GT_Fragment.gt_fragment;
 
                 //给EditText 组件设置返回事件
-                setViewBackListener(view);
+                GT.Thread.runJava(new Runnable() {
+                    @Override
+                    public void run() {
+                        setViewBackListener(view);
+                        setEditTextRequestFocus(view);
+                    }
+                });
 
             }
+
 
             /**
              * 给EditText 组件设置返回事件
@@ -16686,6 +17460,36 @@ public class GT {
                 }
 
             }
+
+            /**
+             * 设置最顶端的EditText为获取焦点
+             *
+             * @param viewLayout
+             */
+            protected boolean setEditTextRequestFocus(View viewLayout) {
+                ViewGroup viewGroup = null;
+                //如果是Edit类型的那就监听返回事件
+                if (viewLayout instanceof EditText) {
+                    viewLayout.requestFocus();
+                    return true;
+                } else if (viewLayout instanceof ViewGroup) {
+                    try {
+                        viewGroup = (ViewGroup) viewLayout;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                    int childCount = viewGroup.getChildCount();
+                    if (childCount == 0) return false;
+                    for (int i = 0; i < childCount; i++) {
+                        View childAt = viewGroup.getChildAt(i);
+                        if (setEditTextRequestFocus(childAt)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
 
             /**
              * 返回 true 则劫持返回事件
@@ -16757,7 +17561,7 @@ public class GT {
         /**
          * 悬浮窗基类
          */
-        public abstract static class FloatingWindowBase extends Service {
+        public abstract static class BaseFloatingWindow extends Service {
 
             protected Context context;                           //上下活动
             private WindowManager windowManager;
@@ -16832,7 +17636,7 @@ public class GT {
              * @param isShow
              */
             public static void setIsShow(boolean isShow) {
-                FloatingWindowBase.isShow = isShow;
+                BaseFloatingWindow.isShow = isShow;
             }
 
             public static double getScreenSizeCoefficient() {
@@ -16845,7 +17649,7 @@ public class GT {
              * @param screenSizeCoefficient
              */
             public static void setScreenSizeCoefficient(double screenSizeCoefficient) {
-                FloatingWindowBase.screenSizeCoefficient = screenSizeCoefficient;
+                BaseFloatingWindow.screenSizeCoefficient = screenSizeCoefficient;
             }
 
             public static int getType_screenType() {
@@ -16863,7 +17667,7 @@ public class GT {
              * @param type_screenType 创建屏幕类型
              */
             public static void setType_screenType(int type_screenType) {
-                FloatingWindowBase.type_screenType = type_screenType;
+                BaseFloatingWindow.type_screenType = type_screenType;
             }
 
 
@@ -17234,7 +18038,7 @@ public class GT {
         /**
          * 悬浮窗注解类
          */
-        public abstract static class AnnotationFloatingWindowBase extends FloatingWindowBase {
+        public abstract static class AnnotationFloatingWindow extends BaseFloatingWindow {
 
             //布局ID
             protected int resLayout;
@@ -17259,6 +18063,52 @@ public class GT {
         }
 
 
+    }
+
+    /**
+     * 封装 GT_View
+     */
+    public static class GT_View implements SaveObject.SaveBean {
+
+        public static abstract class BaseView {
+
+            protected View view;
+            protected Context activity;
+
+            public BaseView(View view) {
+                if (view != null) {
+                    Context context = view.getContext();
+                    if (context != null) {
+                        activity = context;
+                    }
+                }
+                this.view = view;
+                loadLayout(view);
+                loadData(view);
+            }
+
+            protected abstract void loadLayout(View view);
+
+            protected void loadData(View view) {
+            }
+
+
+        }
+
+        public static abstract class AnnotationView extends BaseView {
+            public AnnotationView(View view) {
+                super(view);
+            }
+
+            @Override
+            protected void loadLayout(View view) {
+                initView(view);
+            }
+
+            protected void initView(View view) {
+                GT.build(this);
+            }
+        }
     }
 
     //自定义组工具集合
@@ -18138,7 +18988,6 @@ public class GT {
         }
 
     }
-
 
 //============================================= 设备监听类 ======================================
 
@@ -19180,7 +20029,6 @@ public class GT {
 
 //======================================= Run GT 的内部注解 =====================================
 
-
     /**
      * 注解类
      */
@@ -19575,7 +20423,7 @@ public class GT {
         //主要用于注解 Activity 与 Fragment 共有的
         public static void initAll(Object object) {
             if (getGT().activity == null) {
-                getGT().activity = getGT().getActivity();
+                getGT().activity = getActivity();
             }
 
             // SQL 注解
@@ -19593,14 +20441,11 @@ public class GT {
             initSerialPortUtils(object);             //串口框架注解
             initTCP(object);                         //TCP框架注解
 
-            //为加载 组件 初始化
-            initView(object);
+            //这两个需要重点照顾需要
+            initView(object);                        //为加载 组件 初始化
+            initClick(object);                       //注解单击事件
 
-            //注解单击事件
-            initClick(object);
-
-            //注解悬浮窗
-            initAnnotationWindow(object);
+            initAnnotationWindow(object);           //注解悬浮窗
 
             // Java 注解部分
             initObject(object);                    //为加载 Object 成员变量初始化
@@ -19644,8 +20489,9 @@ public class GT {
                     int sqlVersion = initView_Hibernate.setSqlVersion();//数据库版本号
                     Class<?>[] classes = initView_Hibernate.setSqlTables();//数据库映射的表
                     boolean IsThread = initView_Hibernate.setIsThread();//是否使用线程创建数据库
+                    String passWord = initView_Hibernate.setPassWord();//获取加密密码
 
-                    if (getGT().getActivity() == null) {
+                    if (getActivity() == null) {
                         err(getLineInfo(LOG.lineInfoIndex), "注入数据库失败！请在 Activity 中绑定GT注解");
                         return;
                     }
@@ -19659,15 +20505,11 @@ public class GT {
 
                                 //如果用户没有自己设置映射的表那就扫描标注Bean,Entity的类做表
                                 if (classes.length == 0) {
-                                    classObject = new Hibernate()
-                                            .init_1_SqlName(sqlName)            //设置SQL名称
-                                            .init_2_SqlVersion(sqlVersion)     //设置数据库版本
-                                            .init_3_Sql(ApplicationUtils.getPackageName(getGT().getActivity()));
+                                    classObject = new Hibernate().
+                                            initSQL(sqlName, sqlVersion, passWord, ApplicationUtils.getPackageName(getActivity()));
                                 } else {
-                                    classObject = new Hibernate()
-                                            .init_1_SqlName(sqlName)            //设置SQL名称
-                                            .init_2_SqlVersion(sqlVersion)     //设置数据库版本
-                                            .init_3_Sql(classes);
+                                    classObject = new Hibernate().
+                                            initSQL(sqlName, sqlVersion, passWord, classes);
                                 }
 
                                 //实例注入
@@ -19686,15 +20528,11 @@ public class GT {
 
                         //如果用户没有自己设置映射的表那就扫描标注Bean,Entity的类做表
                         if (classes.length == 0) {
-                            classObject = new Hibernate()
-                                    .init_1_SqlName(sqlName)            //设置SQL名称
-                                    .init_2_SqlVersion(sqlVersion)     //设置数据库版本
-                                    .init_3_Sql(ApplicationUtils.getPackageName(getGT().getActivity()));
+                            classObject = new Hibernate().
+                                    initSQL(sqlName, sqlVersion, null, ApplicationUtils.getPackageName(getActivity()));
                         } else {
-                            classObject = new Hibernate()
-                                    .init_1_SqlName(sqlName)            //设置SQL名称
-                                    .init_2_SqlVersion(sqlVersion)     //设置数据库版本
-                                    .init_3_Sql(classes);
+                            classObject = new Hibernate().
+                                    initSQL(sqlName, sqlVersion, null, classes);
                         }
                         //实例注入
                         try {
@@ -20095,6 +20933,7 @@ public class GT {
         //================================   下面是 通用 的注解内容   ==========================
 
         private static void initView(Object obj) {
+            if (obj == null) return;
             Class<?> clazz = obj.getClass();//获取该类信息
             Field[] fields = clazz.getDeclaredFields();//获致所有成员变更
             for (Field field : fields) {
@@ -20111,9 +20950,23 @@ public class GT {
                             View view = fragment.getView();
                             if (view != null)
                                 field.set(obj, view.findViewById(viewId));
-                        } else {
+                        } else if (obj instanceof View) {
                             View view = (View) obj;
-                            field.set(obj, view.findViewById(viewId));
+                            if (view != null)
+                                field.set(obj, view.findViewById(viewId));
+                        } else if (obj instanceof GT_FloatingWindow.BaseFloatingWindow) {
+                            GT_FloatingWindow.BaseFloatingWindow fwb = (GT_FloatingWindow.BaseFloatingWindow) obj;
+                            View view = fwb.getView();
+                            if (view != null)
+                                field.set(obj, view.findViewById(viewId));
+                        } else if (obj instanceof GT_View.BaseView) {
+                            GT_View.BaseView baseView = (GT_View.BaseView) obj;
+                            View view = baseView.view;
+                            if (view != null)
+                                field.set(obj, view.findViewById(viewId));
+                        } else {
+                            GT.err("暂不支持该类型的注解：" + obj);
+                            //完蛋蛋
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -20161,13 +21014,34 @@ public class GT {
                                     }
                                 }
 
-                            } else {
+                            } else if (obj instanceof View) {
                                 View view = (View) obj;
-                                for (int viewId : viewIds) {//遍历要设置监听的控件
-                                    View view2 = view.findViewById(viewId);//获取该控件
-                                    Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                    m.invoke(view2, object2);//调用方法
-                                }
+                                if (view != null)
+                                    for (int viewId : viewIds) {//遍历要设置监听的控件
+                                        View view2 = view.findViewById(viewId);//获取该控件
+                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                        m.invoke(view2, object2);//调用方法
+                                    }
+                            } else if (obj instanceof GT_FloatingWindow.BaseFloatingWindow) {
+                                GT_FloatingWindow.BaseFloatingWindow fwb = (GT_FloatingWindow.BaseFloatingWindow) obj;
+                                View view = fwb.getView();
+                                if (view != null)
+                                    for (int viewId : viewIds) {//遍历要设置监听的控件
+                                        View view2 = view.findViewById(viewId);//获取该控件
+                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                        m.invoke(view2, object2);//调用方法
+                                    }
+                            } else if (obj instanceof GT_View.BaseView) {
+                                GT_View.BaseView baseView = (GT_View.BaseView) obj;
+                                View view = baseView.view;
+                                if (view != null)
+                                    for (int viewId : viewIds) {//遍历要设置监听的控件
+                                        View view2 = view.findViewById(viewId);//获取该控件
+                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                        m.invoke(view2, object2);//调用方法
+                                    }
+                            } else {
+                                GT.err("暂不支持该组件注解：" + obj);
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -20467,7 +21341,7 @@ public class GT {
                 //GT_Fragment 注解不为null
                 if (initView_GT_Fragments != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = (Activity) getGT().getActivity();
+                    Activity activity = (Activity) getActivity();
                     if (activity != null) {
                         //获取注解的值
                         int layoutHome = initView_GT_Fragments.setLayoutHome();
@@ -20531,7 +21405,7 @@ public class GT {
                 //GT_Fragment 注解不为null
                 if (initView_GT_SharedPreferences != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = (Activity) getGT().getActivity();
+                    Activity activity = (Activity) getActivity();
                     GT_SharedPreferences gt_sharedPreferences = null;
                     if (activity != null) {
                         //获取注解的值
@@ -20569,14 +21443,14 @@ public class GT {
                 //GT_Fragment 注解不为null
                 if (initBuild != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = (Activity) getGT().getActivity();
+                    Activity activity = (Activity) getActivity();
                     GT.SerialPortUtils serialPortUtils = null;
                     if (activity != null) {
                         //获取注解的值
                         String comAll = initBuild.setComAll();
                         int baudRate = initBuild.setBaudRate();
                         boolean iSLog = initBuild.setISLog();
-                        serialPortUtils = new GT.SerialPortUtils(getGT().activity, comAll, baudRate);
+                        serialPortUtils = new GT.SerialPortUtils(getGT().activity, comAll, baudRate, iSLog);
                     }
                     //实例注入
                     try {
@@ -20609,12 +21483,13 @@ public class GT {
                 //GT_Fragment 注解不为null
                 if (initBuild != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
-                    Activity activity = (Activity) getGT().getActivity();
+                    Activity activity = (Activity) getActivity();
                     GT.GT_Socket.TCP tcp = null;
                     if (activity != null) {
                         //获取注解的值
                         String iP = initBuild.setIP();
                         int port = initBuild.setPort();
+                        GT.GT_Socket.isLog = initBuild.isLog();
                         if (iP == null || "null".equals(iP)) {
                             tcp = new GT.GT_Socket.TCP(port);
                         } else {
@@ -20650,14 +21525,11 @@ public class GT {
                     method.setAccessible(true);// 获取该方法的访问权限
                     method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
                 } catch (NoSuchMethodException e) {
-//					e.printStackTrace();
-                    GT.errs("e:" + e);
+                    GT.errs("e:" + e);//e.printStackTrace();
                 } catch (IllegalAccessException e) {
-//					e.printStackTrace();
-                    GT.errs("e:" + e);
+                    GT.errs("e:" + e);//e.printStackTrace();
                 } catch (InvocationTargetException e) {
-//					e.printStackTrace();
-                    GT.errs("e:" + e);
+                    GT.errs("e:" + e);//e.printStackTrace();
                 }
             }
         }
@@ -21005,8 +21877,8 @@ public class GT {
          * @param runnable
          */
         public static void runAndroidAct(Runnable runnable) {
-            if (getGT().getActivity() != null) {
-                Activity activity = (Activity) getGT().getActivity();
+            if (getActivity() != null) {
+                Activity activity = (Activity) getActivity();
                 activity.runOnUiThread(runnable);
             } else {
                 log(getLineInfo(), "当前未绑定 Activity 无法使用该方法创建 UI 线程");
@@ -21281,1685 +22153,806 @@ public class GT {
     public static class DarknessMagic {
         //空白...无障碍..
 
-        /**
-         * GT悬浮窗
-         * 需要的权限：
-         * <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-         * <p>
-         * <service
-         * android:name=".util.GT$DarknessMagic$GT_FloatingWindow$GT_Floating"
-         * android:exported="true"
-         * />
-         * <p>
-         * //动态申请
-         * if (Build.VERSION.SDK_INT >= 23) {
-         * if (!Settings.canDrawOverlays(this)) {
-         * Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
-         * startActivityForResult(intent, 0);
-         * } else {
-         * startService(new Intent(this, toFragment));
-         * }
-         * } else {
-         * startService(new Intent(this, toFragment));
-         * }
-         * <p>
-         * <p>
-         * <p>
-         * bug说明：
-         * 1.隐藏到后台许久后无法再次召唤出来
-         * 2.点击一些系统应用时会被杀死
-         */
-        /*public static class GT_FloatingWindow {
-
-            public static boolean isOpenLog = false;//有日志时判断是否发送广播
-
-            @GT.Annotations.GT_AnnotationFloatingWindow(R.layout.floating_main)
-            public static class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindowBase implements View.OnClickListener {
-
-                //组件加载
-                @GT.Annotations.GT_View(R.id.tv_shutdown)
-                protected TextView tv_shutdown;//开关机提示
-                @GT.Annotations.GT_View(R.id.cl_close)
-                private View cl_close;//开关机整体页面
-                @GT.Annotations.GT_View(R.id.cb_expansion)
-                protected CheckBox cb_expansion;//放大缩小按钮
-                @GT.Annotations.GT_View(R.id.cl_title)
-                private View cl_title;//缩小状态栏
-                @GT.Annotations.GT_View(R.id.ll_bottom)
-                private View ll_bottom;//下面按钮
-                @GT.Annotations.GT_View(R.id.ll_StatusBar_titleAll)
-                private View ll_StatusBar_titleAll;//展开状态栏
-                @GT.Annotations.GT_View(R.id.sv_StatusBar_titleData)
-                private ScrollView sv_StatusBar_titleData;//状态栏最顶端容器
-                @GT.Annotations.GT_View(R.id.ll_statusBar_set)
-                private View ll_statusBar_set;//状态栏内装功能的容器
-                @GT.Annotations.GT_View(R.id.view_bg_floating_title)
-                private View view_bg_floating_title;//展开状态栏后显示的背景黑色
-                @GT.Annotations.GT_View(R.id.tv_statusBar_message)
-                private TextView tv_statusBar_message;//状态栏内的消息提示
-                @GT.Annotations.GT_View(R.id.sb_diaphaneity)
-                private SeekBar sb_diaphaneity;//状态栏内的透明度调节拖动条
-                @GT.Annotations.GT_View(R.id.sb_width)
-                private SeekBar sb_width;//宽度拖动条
-                @GT.Annotations.GT_View(R.id.sb_height)
-                private SeekBar sb_height;//高度拖动条
-                @GT.Annotations.GT_View(R.id.flowLayout)
-                private GT.ViewUtils.FlowLayout flowLayout;//装APP容器
-                @GT.Annotations.GT_View(R.id.sv)
-                private View sv;//APP图标滑动组件
-                @GT.Annotations.GT_View(R.id.sv_find)
-                private SearchView sv_find;//搜索组件
-                @GT.Annotations.GT_View(R.id.fl_main)
-                private ViewGroup fl_main; //界面容器
-                @GT.Annotations.GT_View(R.id.iv_fillTop)
-                private ImageView iv_fillTop;//全屏最顶部
-
-                //创建内置APP工具
-                private UtilsGTApp utilsGTApp = new UtilsGTApp();
-                //创建工具
-                private Utils utils = new Utils();
-                //创建动画库
-                public final GT.GT_Animation animation = new GT.GT_Animation();
-                //内置APP
-                private final String[] GTApp = {
-                        "LOG", "SQL", "F栈",
-                };
-                //用于存储本次加载的APP
-                private final Map<String, View> viewMap = new HashMap<>();
-                //记录原始的宽高,用于重置初始化
-                private int originalWidth = 0;
-                private int originalHeight = 0;
-
-
-                @Override
-                protected void initView(View view) {
-                    super.initView(view);
-                    setDrag(true);//设置可拖动
-                    utils.loadApp();//加载安装系统内部APP
-                    //记录原始宽高
-                    originalWidth = getLayoutParams().width;
-                    originalHeight = getLayoutParams().height;
-                }
-
-                @SuppressLint({"NewApi", "UseCompatLoadingForDrawables"})
-                @Override
-                protected void loadData(Context context, Intent intent, View view) {
-                    super.loadData(context, intent, view);
-                    registerReceiver(utils.mBroadcastReceiver, new IntentFilter(Utils.ACTION));//单击事件 注册广播
-                    utils.setTitleListener(sv_find); //设置状态栏事件
-                    animation.translateY_T(0, -getHeight(), 1, 0, false, ll_StatusBar_titleAll);//状态栏默认收起来
-                    utils.setStatusBarShrinkListener(tv_statusBar_message, true);//设置状态栏内部上滑收缩事件
-                    utils.setStatusBarShrinkListener(sv_StatusBar_titleData, false);//设置状态栏内部上滑收缩事件
-                    utils.setStatusBarDiaphaneityDrag(sb_diaphaneity);//设置透明度拖动事件
-
-                    //创建屏幕拖动条参数
-                    sb_width.setMax(getWidth());//设置宽度拖动最大值
-                    sb_width.setProgress(getLayoutParams().width);//设置宽度拖动当前值
-                    sb_height.setMax(getHeight());//设置高度拖动最大值
-                    sb_height.setProgress(getLayoutParams().height);//设置高度拖动当前值
-                    utils.setStatusBarWidthDrag(sb_width);//设置状态栏宽度拖动事件
-                    utils.setStatusBarHeightDrag(sb_height);//设置状态栏高度拖动事件
-
-                    cl_close.setOnTouchListener(new FloatingOnTouchListener_Close());//开关机界面可拖动界面
-                    utils.setSearchEvent(sv_find);//设置搜索框事件
-                    flowLayout.removeAllViews();//清空所有组件
-                    fl_main.removeAllViews();//清空所有组件
-
-                    //APP单击
-                    for (int i = 0; i < GTApp.length; i++) {
-                        View item_app_ico = LayoutInflater.from(this).inflate(R.layout.item_app_ico, null);
-                        TextView tv_appName = item_app_ico.findViewById(R.id.tv_appName);
-                        ImageView iv_icon = item_app_ico.findViewById(R.id.iv_icon);
-                        iv_icon.setImageDrawable(getDrawable(R.mipmap.gt_logo));
-                        tv_appName.setText(GTApp[i]);
-                        flowLayout.addView(item_app_ico);//添加APP
-                        item_app_ico.setOnClickListener(this);
-                        //将APP存储到容器中
-                        viewMap.put(tv_appName.getText().toString(), item_app_ico);
-                    }
-
-                    //初始化页面
-                    isOpenLog = false;
-
-                }
-
-                //内置APP功能
-                @Override
-                public void onClick(View v) {
-                    TextView tv_appName = v.findViewById(R.id.tv_appName);
-                    String appName = tv_appName.getText().toString();
-//        GT.log("单击了:" + appName);
-                    switch (appName) {
-                        case "LOG":
-                            View view = utilsGTApp.initLog();
-                            utils.setDoubleClickFullScreen(view);//设置双击全屏
-                            fl_main.addView(view);
-                            break;
-                        case "SQL":
-                            view = utilsGTApp.initSQL();
-                            utils.setDoubleClickFullScreen(view);//设置双击全屏
-                            fl_main.addView(view);
-                            break;
-                        case "F栈":
-                            view = utilsGTApp.initFStack();
-                            utils.setDoubleClickFullScreen(view);//设置双击全屏
-                            fl_main.addView(view);
-                            break;
-                        default:
-
-                            break;
-                    }
-
-                }
-
-                //小手机事件
-                @SuppressLint("ResourceType")
-                @GT.Annotations.GT_Click({
-                        R.id.tv_hide, R.id.cb_expansion, R.id.tv_close, R.id.cl_title, //上面
-
-                        R.id.tv_statusBar_message, R.id.iv_cut, R.id.iv_reset, R.id.iv_fill, R.id.iv_fillTop, //状态栏内的
-
-                        R.id.tv_back, R.id.tv_home, R.id.tv_task,       //下面
-                })
-                public void onClickView(View view) {
-                    switch (view.getId()) {
-                        //上面
-                        case R.id.cl_title://状态栏
-                            if (utils.operationType == 2) return;//屏蔽掉长按事件的冲突
-                            utils.isUnfold = true;
-                            utils.setStatusBarBgHide(true);
-                            animation.translateY_T(-getHeight(), 0, 500, 0, false, ll_StatusBar_titleAll);
-//                GT.log("单击 状态栏");
-                            break;
-                        case R.id.tv_hide://隐藏按钮
-                            utils.sendCustomViewNotification();//发送通知
-                            hide();//隐藏GT小白
-                            break;
-                        case R.id.cb_expansion://切换屏幕大小
-                            utils.changeSize();
-                            break;
-                        case R.id.tv_close://关机
-                            utils.shutdown(false, 100);//关机且设置持续时间
-                            break;
-
-
-                        //状态栏内
-                        case R.id.tv_statusBar_message://状态栏内的消息提示
-                            animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
-                            utils.setStatusBarBgHide(false);
-                            utils.isUnfold = false;
-                            tv_statusBar_message.setText("暂无通知");
-//                GT.log("单击 暂无通知");
-                            break;
-                        case R.id.iv_cut://切换竖屏横屏
-//                GT.log("切换");
-                            int tmp_w = getLayoutParams().width;
-                            int tmp_h = getLayoutParams().height;
-                            getLayoutParams().width = tmp_h;
-                            getLayoutParams().height = tmp_w;
-                            updateView();
-                            break;
-                        case R.id.iv_reset://重置窗体属性
-                            sb_diaphaneity.setProgress(0);
-                            sb_width.setProgress(originalWidth);
-                            sb_height.setProgress(originalHeight);
-                            view.setAlpha(1);
-                            getLayoutParams().width = originalWidth;
-                            getLayoutParams().height = originalHeight;
-                            updateView();
-                            break;
-                        case R.id.iv_fill://充满全屏
-                        case R.id.iv_fillTop:
-                            //执行双击全屏操作
-                            utils.isFullScreen = !utils.isFullScreen;
-                            utils.setIsFullScreen(utils.isFullScreen);
-                            break;
-
-
-                        //下面三个按钮
-                        case R.id.tv_back:
-//                GT.log("返回上级");
-                            GT.toast(context, "返回上级");
-                            if (utils.isUnfold) {
-//                    GT.log("进入返回上级");
-                                utils.isUnfold = false;
-                                utils.setStatusBarBgHide(false);
-                                animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
-                                return;
-                            }
-
-                            if (utilsGTApp.hierarchyNumber > 0) {
-                                utilsGTApp.hierarchyNumber--;
-                            }
-
-                            //退出栈顶界面
-                            onBackPressed();
-                            break;
-                        case R.id.tv_home:
-//                GT.log("返回桌面");
-//                GT.toast(context, "返回桌面");
-                            utils.backAllFrame();//退出所有内置APP
-                            break;
-                        case R.id.tv_task:
-//                GT.log("浏览任务");
-//                GT.toast(context, "浏览任务");
-                            for (int i = 0; i < fl_main.getChildCount(); i++) {
-                                View childAt = fl_main.getChildAt(i);
-//                    GT.log("TAG:" + childAt);
-                            }
-                            break;
-
-
-                    }
-                }
-
-                *//**
-         * 设置开关机界面的窗体拖动事件
-         *//*
-                public class FloatingOnTouchListener_Close implements View.OnTouchListener {
-                    private int x;
-                    private int y;
-
-                    @Override
-                    public boolean onTouch(View view, MotionEvent event) {
-                        switch (event.getAction()) {
-                            case MotionEvent.ACTION_DOWN:
-                                x = (int) event.getRawX();
-                                y = (int) event.getRawY();
-                                break;
-                            case MotionEvent.ACTION_MOVE:
-                                int nowX = (int) event.getRawX();
-                                int nowY = (int) event.getRawY();
-                                int movedX = nowX - x;
-                                int movedY = nowY - y;
-                                x = nowX;
-                                y = nowY;
-                                getLayoutParams().x = getLayoutParams().x + movedX;
-                                getLayoutParams().y = getLayoutParams().y + movedY;
-                                updateView();
-                                break;
-                            default:
-                                break;
-                        }
-                        return true;
-                    }
-                }
-
-                *//**
-         * 工具类
-         *//*
-                class Utils {
-
-                    //记录旧的宽高
-                    protected int oldWidth;
-                    protected int oldHeight;
-                    //发送通知栏
-                    public static final String ACTION = "召唤";    //动作1
-                    public static final int NOTIFICATION_ID = 0x1079;    //通知ID
-                    //状态栏下滑展开
-                    private float x, oldX;  //记录位置X
-                    private float y, oldY;  //记录位置Y
-                    private final int slidingRate = 50;//所有手势滑动的速率
-                    private int operationType = -1;//默认(无事件)：-1、滑动：0、下拉状态栏：1、长按事件：2
-                    private float pullY = 0;//下拉Y位置
-                    private float alphaBG = 0.00f;//下拉时具体显示渐变色
-                    private boolean isUnfold = false;//状态栏是否展开
-                    private float topMax = 0;//拉到底部后的最大值
-                    private float bgTransparencyValue = 0.8f;//状态栏背景透明度
-                    //状态栏中下拉与上提的返回类型
-                    private boolean returnType = false;//如果按下位置与抬起位置是一致的，那就判定为单击返回 false,否则返回 true 滑动事件
-                    private boolean isFullScreen = false;//是否全屏
-                    //实现双击功能的参数
-                    private long DOUBLE_TIME = 300;
-                    private long lastClickTime = 0;
-                    //下面三个按钮是否需要触发
-                    public boolean isBottom = false;//默认是需要去触发的，如果设置喂true,那就说明是触摸消耗了事件
-
-                    public Utils() {
-                    }
-
-                    *//**
-         * 提示吐司
-         *
-         * @param msg
-         *//*
-                    public void toast(Object msg) {
-                        GT.Thread.runAndroid(new Runnable() {
-                            @Override
-                            public void run() {
-                                GT.toast(context, String.valueOf(msg));
-                            }
-                        });
-                    }
-
-                    *//**
-         * 切换屏幕大小
-         *//*
-                    private void changeSize() {
-                        if (cb_expansion.isChecked()) {
-                            //记录原始大小
-                            oldWidth = getLayoutParams().width;
-                            oldHeight = getLayoutParams().height;
-                            //设置界面最大
-                            getLayoutParams().width = getWidth();
-                            getLayoutParams().height = getHeight();
-                        } else {
-                            //还原原始大小
-                            getLayoutParams().width = oldWidth;
-                            getLayoutParams().height = oldHeight;
-                        }
-                        updateView();//更新界面
-                    }
-
-                    *//**
-         * 开关机
-         *
-         * @param startOrClose 是否开关机
-         * @param time         设置关机等待时间
-         *//*
-                    private void shutdown(boolean startOrClose, int time) {
-                        GT.Thread.runJava(new Runnable() {
-                            @Override
-                            public void run() {
-                                GT.Thread.runAndroid(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        cl_close.setVisibility(View.VISIBLE);//显示开关机组件
-                                        if (startOrClose) {
-                                            tv_shutdown.setText("开机");
-                                        } else {
-                                            tv_shutdown.setText("关机");
-
-                                        }
-                                    }
-                                });
-                                GT.Thread.sleep(time);
-                                GT.Thread.runAndroid(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        if (startOrClose) {
-                                            cl_close.setVisibility(View.GONE);//隐藏开关机组件
-                                        } else {
-                                            finish();
-                                        }
-
-                                    }
-                                });
-
-                            }
-                        });
-                    }
-
-                    *//**
-         * 发送通知栏
-         *//*
-                    private NotificationManagerCompat notificationManagerCompat;
-
-                    public void sendCustomViewNotification() {
-
-                        //加载自定义布局
-                        RemoteViews remoteViews = new RemoteViews(getPackageName(), R.layout.item_notification);//普通 normal_notification 用到的视图
-
-                        //直接更新 通知栏上的 UI 组件方法 ，但并不能进行监听
-//        remoteViews.setTextViewText(R.id.tv_data, "点击召唤小白");//更新 textView 的内容
-//        remoteViews.setImageViewResource(R.id.iv_head, R.mipmap.gt_logo);
-
-                        //这下面则是发送通知的
-                        String channelId = createNotificationChannel(getApplicationContext());//创建Notification Channel
-                        final NotificationCompat.Builder builder = new NotificationCompat.Builder(context, channelId);//创建Notification并与Channel关联
-
-                        builder.setSmallIcon(R.mipmap.gt_logo);
-                        builder.setTicker("GT-小白");
-                        builder.setOngoing(true);
-                        builder.setAutoCancel(true);//跳转后消失
-                        builder.setContent(remoteViews);//设置普通notification视图 将自定义布局设置为 通知栏的布局
-                        builder.setCustomBigContentView(remoteViews);//设置显示bigView的notification视图
-                        builder.setPriority(NotificationCompat.PRIORITY_MAX);//设置最大优先级
-
-
-                        //单击后跳转回 主页面
-//            Intent intent = new Intent(context, MainActivity.class);
-//            PendingIntent pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-//            builder.setContentIntent(pi);//设置通知栏 点击跳转
-
-                        //设置单击后发布的广播
-                        Intent intent_music_left = new Intent("召唤");
-                        PendingIntent pendingIntent_music_left = PendingIntent.getBroadcast(context, 0, intent_music_left, PendingIntent.FLAG_UPDATE_CURRENT);
-                        remoteViews.setOnClickPendingIntent(R.id.tv_data, pendingIntent_music_left);
-                        remoteViews.setOnClickPendingIntent(R.id.iv_head, pendingIntent_music_left);
-
-                        //创建一个启动详细页面的 Intent 对象
-//            Intent[] intent = new Intent[]{new Intent(GT_Floating.this, MainActivity.class)};
-//            PendingIntent pi = PendingIntent.getActivities(context,0,intent,0);
-//            builder.setContentIntent(pi);//设置通知栏 点击跳转
-
-                        //发布通知
-                        notificationManagerCompat = NotificationManagerCompat.from(getApplicationContext());
-                        notificationManagerCompat.notify(NOTIFICATION_ID, builder.build());
-
-                    }
-
-                    private String createNotificationChannel(Context context) {
-                        // O (API 26)及以上版本的通知需要NotificationChannels。
-                        if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            // 初始化NotificationChannel。
-                            NotificationChannel notificationChannel = new NotificationChannel("com.gsls.king", "GT-应用", NotificationManager.IMPORTANCE_DEFAULT);
-                            notificationChannel.setDescription("GT 小白等待您的召唤");
-                            // 向系统添加 NotificationChannel。试图创建现有通知
-                            // 通道的初始值不执行任何操作，因此可以安全地执行
-                            // 启动顺序
-                            NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-                            notificationManager.createNotificationChannel(notificationChannel);
-                            return "com.gsls.king";
-                        } else {
-                            return null; // 为pre-O(26)设备返回 null
-                        }
-                    }
-
-                    // 声明一个广播用于接受单击状态栏
-                    public BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
-                        @Override
-                        public void onReceive(Context context, Intent intent) {
-                            if (intent.getAction().equals(ACTION)) { //弹出广播
-                                show();//显示GT小白
-                                notificationManagerCompat.cancel(NOTIFICATION_ID);//清除当前 id 为 NOTIFICATION_ID 的通知
-                            }
-                        }
-                    };
-
-
-                    *//**
-         * 设置状态栏下滑展开
-         *
-         * @param cl_view
-         *//*
-                    @RequiresApi(api = Build.VERSION_CODES.N)
-                    @SuppressLint("ClickableViewAccessibility")
-                    public void setTitleListener(View cl_view) {
-
-                        cl_view.setOnLongClickListener(new View.OnLongClickListener() {
-                            @Override
-                            public boolean onLongClick(View v) {
-//                    GT.log("开始锁定事件");
-                                if (operationType == 0) return false;//如果是正在拖动，那就拦截长按锁定功能
-                                if (isDrag()) {
-                                    utils.toast("已锁定");
-                                    setDrag(false);
-                                } else {
-                                    utils.toast("已解锁");
-                                    setDrag(true);
-                                }
-                                operationType = 2;//赋值为长按事件
-                                return false;
-                            }
-                        });
-
-                        //设置状态栏下拉、上滑、左滑、右滑事件
-                        cl_view.setOnTouchListener((v, event) -> {
-                            switch (event.getAction()) {
-                                case MotionEvent.ACTION_DOWN://按下
-                                    //如果展开状态没有显示那就显示
-                                    if (ll_StatusBar_titleAll.getVisibility() != View.VISIBLE) {
-                                        ll_StatusBar_titleAll.setVisibility(View.VISIBLE);//显示状态栏
-                                    }
-                                    if (view_bg_floating_title.getVisibility() != View.VISIBLE) {
-                                        view_bg_floating_title.setVisibility(View.VISIBLE);//显示状态栏渐变色
-                                    }
-                                    oldX = (int) event.getRawX();
-                                    oldY = (int) event.getRawY();
-                                    //初始化
-                                    alphaBG = 0f;
-                                    operationType = -1;
-                                    topMax = -1;
-//                        GT.log("按下 X:" + oldX + " Y:" + oldY);
-                                    break;
-                                case MotionEvent.ACTION_UP://抬起
-                                    x = (int) event.getRawX();
-                                    y = (int) event.getRawY();
-
-                                    if (oldX == x && oldY == y) {
-                                        returnType = false;
-                                        cl_title.performClick();//多加一个点击事件
-                                    } else {
-                                        returnType = true;
-                                    }
-//                        GT.log("抬起1:" + returnType + " X:" + x + " Y:" + y);
-
-                                    //如果之前做的是下拉动作
-                                    if (operationType == 1) {
-//                            GT.log("ll_StatusBar_titleAll.getY():" + ll_StatusBar_titleAll.getY());
-                                        if (ll_StatusBar_titleAll.getY() == topMax) {//下拉到顶了
-                                            isUnfold = true;
-                                        } else if (event.getY() >= (getLayoutParams().height / 4)) {//下拉到展开状态，进行展开操作
-                                            animation.translateY_T(pullY, 0, 500, 0, false, ll_StatusBar_titleAll);
-                                            isUnfold = true;
-                                        } else {//未下拉到展开状态，进行收缩回去
-                                            animation.translateY_T(pullY, -getHeight() - pullY, 500, 0, false, ll_StatusBar_titleAll);
-                                            isUnfold = false;
-                                            setStatusBarBgHide(false);
-                                        }
-                                    }
-
-                                    break;
-                                case MotionEvent.ACTION_MOVE://移动
-                                    int nowX = (int) event.getRawX();
-                                    int nowY = (int) event.getRawY();
-                                    int movedX = (int) (nowX - x);
-                                    int movedY = (int) (nowY - y);
-                                    x = nowX;
-                                    y = nowY;
-//                            GT.log("滑动X:" + movedX + " Y:" + movedY);
-                                    if ((x - oldX >= slidingRate || x - oldX <= Math.negateExact(slidingRate)) && (operationType == -1 || operationType == 0) && isDrag()) {
-                                        getLayoutParams().x = getLayoutParams().x + movedX;
-                                        getLayoutParams().y = getLayoutParams().y + movedY;
-                                        updateView();
-                                        operationType = 0;//赋值为滑动
-                                    } else {
-                                        if (y - oldY >= slidingRate && (operationType == -1 || operationType == 1)) {
-                                            //下拉状态栏逻辑
-                                            if (event.getY() <= (getLayoutParams().height / 2) - (slidingRate / 2)) {//设置下拉限度
-                                                pullY = event.getY() - (getLayoutParams().height / 2);
-                                                animation.translateY_T(pullY, pullY, 10, 0, false, ll_StatusBar_titleAll);
-                                                //下拉渐变色
-                                                alphaBG += movedY * 0.005;
-                                                if (alphaBG > bgTransparencyValue) {//状态栏背景色显示限制
-                                                    alphaBG = bgTransparencyValue;
-                                                }
-                                                view_bg_floating_title.setAlpha(alphaBG);
-                                            } else {//拉到顶了
-                                                topMax = ll_StatusBar_titleAll.getY();
-                                                animation.translateY_T(pullY, 0, 0, 0, false, ll_StatusBar_titleAll);
-                                                view_bg_floating_title.setAlpha(bgTransparencyValue);
-                                            }
-                                            operationType = 1;
-                                        } else if (y - oldY <= Math.negateExact(slidingRate) && (operationType == -1 || operationType == 0) && isDrag()) {
-                                            getLayoutParams().x = getLayoutParams().x + movedX;
-                                            getLayoutParams().y = getLayoutParams().y + movedY;
-                                            updateView();
-                                            operationType = 0;//赋值为滑动
-                                        }
-                                    }
-                                    break;
-                                default:
-                                    break;
-                            }
-//                GT.log("抬起1返回:" + returnType);
-                            return returnType;
-                        });
-                    }
-
-                    *//**
-         * 设置点击无法穿透
-         *
-         * @param view
-         *//*
-                    public View setNotClickPenetrate(View view) {
-                        view.setOnTouchListener(new View.OnTouchListener() {
-
-                            @Override
-                            public boolean onTouch(View v, MotionEvent event) {
-                                return true;
-                            }
-                        });
-                        return view;
-                    }
-
-                    *//**
-         * 隐藏状态栏背景
-         *//*
-                    public void setStatusBarBgHide(boolean tf) {
-
-                        view_bg_floating_title.setVisibility(View.VISIBLE);
-
-                        GT.Thread.runJava(new Runnable() {
-                            @Override
-                            public void run() {
-
-                                if (!tf) {
-                                    float value = bgTransparencyValue;
-                                    while (true) {
-                                        value -= 0.03;
-                                        if (value <= 0) break;
-                                        float finalValue = value;
-                                        GT.Thread.runAndroid(new Runnable() {
-                                            @Override
-                                            public void run() {
-                                                view_bg_floating_title.setAlpha(finalValue);
-                                            }
-                                        });
-                                        GT.Thread.sleep(10);
-                                    }
-                                    GT.Thread.runAndroid(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            view_bg_floating_title.setVisibility(View.GONE);
-                                        }
-                                    });
-                                } else {
-                                    float value = 0f;
-                                    while (true) {
-                                        value += 0.03;
-                                        if (value >= bgTransparencyValue) break;
-                                        float finalValue = value;
-                                        GT.Thread.runAndroid(new Runnable() {
-                                            @Override
-                                            public void run() {
-                                                view_bg_floating_title.setAlpha(finalValue);
-                                            }
-                                        });
-                                        GT.Thread.sleep(10);
-                                    }
-                                }
-
-
-                            }
-                        });
-
-                    }
-
-                    *//**
-         * 设置状态栏内部的收缩事件
-         *
-         * @param view
-         *//*
-                    @SuppressLint("ClickableViewAccessibility")
-                    public void setStatusBarShrinkListener(View view, boolean isClick) {
-                        //设置状态栏上滑事件
-                        view.setOnTouchListener((v, event) -> {
-                            switch (event.getAction()) {
-                                case MotionEvent.ACTION_DOWN://按下
-                                    oldX = (int) event.getRawX();
-                                    oldY = (int) event.getRawY();
-//                        GT.log("按下 X:" + oldX + " Y:" + oldY);
-                                    break;
-                                case MotionEvent.ACTION_UP://抬起
-                                    x = (int) event.getRawX();
-                                    y = (int) event.getRawY();
-                                    if (oldX == x && oldY == y) {
-                                        returnType = false;
-                                        if (isClick)
-                                            tv_statusBar_message.performClick();//多加一个点击事件
-                                    } else {
-                                        returnType = true;
-                                    }
-//                        GT.log("抬起2:" + returnType + " X:" + x + " Y:" + y);
-                                    break;
-                                case MotionEvent.ACTION_MOVE://移动
-                                    int nowY = (int) event.getRawY();
-                                    y = nowY;
-                                    if (oldY - nowY >= slidingRate) {
-                                        //直接划掉
-                                        isUnfold = false;
-                                        animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
-                                        setStatusBarBgHide(false);
-                                        tv_statusBar_message.setText("暂无通知");
-                                    }
-                                    break;
-                                default:
-                                    break;
-                            }
-//                GT.log("抬起2返回:" + returnType);
-                            return returnType;
-                        });
-                    }
-
-                    *//**
-         * 设置状态栏中的 透明度拖动条
-         *
-         * @param seekBar
-         *//*
-                    public void setStatusBarDiaphaneityDrag(SeekBar seekBar) {
-                        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                            @Override
-                            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-//                    GT.log("当前进度:" + progress);
-                                tv_statusBar_message.setText("透明度:" + progress + "%");
-                                float v = (float) ((seekBar.getMax() - progress) * 0.01);
-                                getView().setAlpha(v);
-                            }
-
-                            @Override
-                            public void onStartTrackingTouch(SeekBar seekBar) {
-//                    GT.log("开始进度:" + seekBar.getProgress());
-                            }
-
-                            @Override
-                            public void onStopTrackingTouch(SeekBar seekBar) {
-//                    GT.log("进度:" + seekBar.getProgress());
-                            }
-                        });
-                    }
-
-                    *//**
-         * 设置状态栏中宽度拖动条事件
-         *
-         * @param seekBar
-         *//*
-                    public void setStatusBarWidthDrag(SeekBar seekBar) {
-                        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                            @Override
-                            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                                tv_statusBar_message.setText("宽度:" + progress + "px");
-                            }
-
-                            @Override
-                            public void onStartTrackingTouch(SeekBar seekBar) {
-//                    GT.log("开始进度:" + seekBar.getProgress());
-                            }
-
-                            @Override
-                            public void onStopTrackingTouch(SeekBar seekBar) {
-//                    GT.log("进度:" + seekBar.getProgress());
-                                getLayoutParams().width = seekBar.getProgress();
-                                updateView();
-                            }
-                        });
-                    }
-
-                    *//**
-         * 设置状态栏中高度拖动条事件
-         *
-         * @param seekBar
-         *//*
-                    public void setStatusBarHeightDrag(SeekBar seekBar) {
-                        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                            @Override
-                            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                                tv_statusBar_message.setText("高度:" + progress + "px");
-
-                            }
-
-                            @Override
-                            public void onStartTrackingTouch(SeekBar seekBar) {
-//                    GT.log("开始进度:" + seekBar.getProgress());
-                            }
-
-                            @Override
-                            public void onStopTrackingTouch(SeekBar seekBar) {
-//                    GT.log("进度:" + seekBar.getProgress());
-                                getLayoutParams().height = seekBar.getProgress();
-                                updateView();
-                            }
-                        });
-                    }
-
-                    *//**
-         * 设置全图
-         *
-         * @param isFullScreen
-         *//*
-                    public void setIsFullScreen(boolean isFullScreen) {
-                        if (isFullScreen) {
-                            cl_title.setVisibility(View.GONE);
-                            ll_bottom.setVisibility(View.GONE);
-                            iv_fillTop.setVisibility(View.VISIBLE);
-                        } else {
-                            cl_title.setVisibility(View.VISIBLE);
-                            ll_bottom.setVisibility(View.VISIBLE);
-                            iv_fillTop.setVisibility(View.GONE);
-                        }
-                    }
-
-                    *//**
-         * 设置双击全屏
-         *//*
-                    @SuppressLint("ClickableViewAccessibility")
-                    public View setDoubleClickFullScreen(View flowLayout) {
-                        flowLayout.setOnTouchListener((v, event) -> {
-                            switch (event.getAction()) {
-                                case MotionEvent.ACTION_DOWN://按下
-                                    long currentTimeMillis = System.currentTimeMillis();
-                                    if (currentTimeMillis - lastClickTime < DOUBLE_TIME) {//如果双击的时间在300毫秒之内就执行双击操作
-                                        //执行双击全屏操作
-                                        if (isFullScreen) {
-                                            isFullScreen = false;
-                                        } else {
-                                            isFullScreen = true;
-                                        }
-                                        setIsFullScreen(isFullScreen);
-                                    }
-                                    lastClickTime = currentTimeMillis;
-                                    break;
-                                default:
-                                    break;
-                            }
-                            return true;
-                        });
-                        return flowLayout;
-                    }
-
-                    *//**
-         * 加载APP
-         *//*
-                    public void loadApp() {
-
-                        cl_close.setVisibility(View.VISIBLE);//显示开关机组件
-                        tv_shutdown.setText("开机");
-                        GT.Thread.runJava(new Runnable() {
-                            @Override
-                            public void run() {
-                                cl_close.setVisibility(View.VISIBLE);//显示开关机组件
-                                tv_shutdown.setText("开机");
-                                String manufacturer = DeviceUtils.getManufacturer().toLowerCase();
-                                List<AppUtils.AppInfo> appsInfo = AppUtils.getAppsInfo();//获取手机所有APP信息
-                                for (int i = 0; i < appsInfo.size(); i++) {
-                                    AppUtils.AppInfo appInfo = appsInfo.get(i);
-                                    String name = appInfo.getName();
-                                    String packageName = appInfo.getPackageName().toLowerCase();//获取当前遍历的包名
-                                    if (packageName.contains("google") || packageName.contains("android") || packageName.contains(manufacturer)) {
-                                        continue;//过滤掉系统自带应用
-                                    }
-//                        GT.log("packageName:" + packageName);
-                                    View item_app_ico = LayoutInflater.from(context).inflate(R.layout.item_app_ico, null);
-                                    TextView tv_appName = item_app_ico.findViewById(R.id.tv_appName);
-                                    ImageView iv_icon = item_app_ico.findViewById(R.id.iv_icon);
-                                    tv_appName.setText(name);//设置APP名称
-                                    iv_icon.setImageDrawable(appInfo.getIcon());
-                                    GT.Thread.runAndroid(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            flowLayout.addView(item_app_ico);//添加APP
-                                        }
-                                    });
-
-                                    item_app_ico.setOnClickListener(new View.OnClickListener() {
-                                        @Override
-                                        public void onClick(View v) {
-                                            String s = tv_appName.getText().toString();
-//                                GT.log("单击了：" + s);
-
-                                            PackageManager packageManager = getPackageManager();
-                                            Intent intent = new Intent();
-                                            // 这里面的值是你要跳转app的包名，你跳转的清单文件里的package名
-                                            intent = packageManager.getLaunchIntentForPackage(packageName);
-                                            startActivity(intent);
-
-                                        }
-                                    });
-
-
-                                    //将APP存储到容器中
-                                    viewMap.put(tv_appName.getText().toString(), item_app_ico);
-
-                                }
-
-                                GT.Thread.runAndroid(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        cl_close.setVisibility(View.GONE);//隐藏开关机组件
-                                    }
-                                });
-
-                            }
-                        });
-
-                    }
-
-
-                    private Timer timer = new Timer();
-                    private final long DELAY = 1000; // in ms
-
-                    *//**
-         * 设置搜索事件
-         *//*
-                    public void setSearchEvent(SearchView sv_find) {
-
-                        //搜索框展开时后面叉叉按钮的点击事件
-                        sv_find.setOnCloseListener(new SearchView.OnCloseListener() {
-                            @Override
-                            public boolean onClose() {
-                                getView().findViewById(R.id.tv_hide).setVisibility(View.VISIBLE);
-                                getView().findViewById(R.id.cb_expansion).setVisibility(View.VISIBLE);
-                                getView().findViewById(R.id.tv_close).setVisibility(View.VISIBLE);
-                                setGetFocus(false);//设置取消焦点
-                                return false;
-                            }
-                        });
-                        //搜索图标按钮(打开搜索框的按钮)的点击事件
-                        sv_find.setOnSearchClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View v) {
-//                    GT.log("搜索图标按钮(打开搜索框的按钮)的点击事件");
-                                getView().findViewById(R.id.tv_hide).setVisibility(View.GONE);
-                                getView().findViewById(R.id.cb_expansion).setVisibility(View.GONE);
-                                getView().findViewById(R.id.tv_close).setVisibility(View.GONE);
-                                setGetFocus(true);//设置获取焦点
-
-                            }
-                        });
-                        //搜索框文字变化监听
-                        sv_find.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-                            @Override
-                            public boolean onQueryTextSubmit(String s) {
-//                    GT.log("TextSubmit : " + s);//点击了搜索框的搜索
-                                search(s);
-                                return false;
-                            }
-
-                            @Override
-                            public boolean onQueryTextChange(String s) {
-                                if (timer != null) {
-                                    timer.cancel();
-                                    timer = null;
-                                }
-
-                                timer = new Timer();
-                                timer.schedule(new TimerTask() {
-                                    @Override
-                                    public void run() {
-                                        search(s);
-                                    }
-                                }, DELAY);
-
-
-                                return false;
-                            }
-                        });
-
-                    }
-
-                    *//**
-         * 搜索方法
-         *
-         * @param keyValue
-         *//*
-                    public void search(String keyValue) {
-                        GT.Thread.runAndroid(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (fl_main.getChildCount() == 0) {
-                                    //桌面查询事件
-                                    flowLayout.removeAllViews();//清空所有View
-                                    GT.Thread.runJava(new Runnable() {
-                                        @Override
-                                        public void run() {
-
-                                            for (String appName : viewMap.keySet()) {
-                                                GT.Thread.runAndroid(new Runnable() {
-                                                    @Override
-                                                    public void run() {
-                                                        if (keyValue.length() == 0) {
-                                                            flowLayout.addView(viewMap.get(appName));
-                                                        } else if (appName.toLowerCase().contains(keyValue.toLowerCase())) {
-                                                            flowLayout.addView(viewMap.get(appName));
-                                                        }
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    View childAt = fl_main.getChildAt(fl_main.getChildCount() - 1);
-                                    switch (childAt.getId()) {
-                                        case R.layout.frame_log:
-
-                                            GT.Thread.runJava(new Runnable() {
-                                                @Override
-                                                public void run() {
-
-                                                    List<LogBean> logBeans = utilsGTApp.getLogBeans();
-                                                    List<LogBean> logBeans2 = new ArrayList<>();
-                                                    for (LogBean logBean : logBeans) {
-
-                                                        if (keyValue.length() != 0) {
-                                                            if (logBean.getValue().toLowerCase().contains(keyValue.toLowerCase())) {
-                                                                logBeans2.add(new LogBean(logBean.getValue()));
-                                                            }
-                                                        } else {
-                                                            logBeans2.add(new LogBean(logBean.getValue()));
-                                                        }
-                                                    }
-
-                                                    GT.Thread.runAndroid(new Runnable() {
-                                                        @Override
-                                                        public void run() {
-                                                            //更新数据
-                                                            utilsGTApp.getLogAdapter().setBeanList(logBeans2);
-                                                        }
-                                                    });
-
-                                                }
-                                            });
-
-
-                                            break;
-                                        case R.layout.frame_sql:
-//                                GT.log("搜索进入 SQL页面:" + keyValue);
-                                            List<String> sqlValues = utilsGTApp.getSQLValues();
-                                            sqlValues.clear();
-
-                                            switch (utilsGTApp.hierarchyNumber) {
-                                                case 1:
-//                                        GT.log("数据库过滤:" + keyValue);
-                                                    List<String> sqlAllNames = utilsGTApp.hibernate.getSqlAllName();//获取数据库所有名称
-//                                        GT.log("sqlAllNames:" + sqlAllNames);
-                                                    if (sqlAllNames == null || sqlAllNames.size() == 0) {
-//                                            GT.log("进入 if");
-                                                        sqlValues.add("暂无数据，\n请通过搜索框搜索！");
-                                                    } else {
-//                                            GT.log("进入 else:" + keyValue.length());
-//                                            GT.log("sqlValues:" + sqlValues);
-                                                        if (keyValue.length() == 0) {
-                                                            sqlValues.addAll(sqlAllNames);
-                                                        } else {
-                                                            for (String sqlName : sqlAllNames) {
-                                                                if (sqlName.split("\\.")[0].toLowerCase().contains(keyValue.toLowerCase())) {
-//                                                        GT.log("单个添加:" + sqlName);
-                                                                    sqlValues.add(sqlName);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    utilsGTApp.getSqlAdapter().setBeanList(sqlValues);
-                                                    break;
-                                                case 2:
-//                                        GT.log("表过滤:" + keyValue);
-                                                    List<String> sqlAllTableName = utilsGTApp.hibernate.getSqlAllTableName();
-                                                    if (sqlAllTableName == null || sqlAllTableName.size() == 0) {
-                                                        sqlValues.add("暂无数据，\n请通过搜索框搜索！");
-                                                    } else {
-                                                        if (keyValue.length() == 0) {
-                                                            sqlValues.addAll(sqlAllTableName);
-                                                        } else {
-                                                            for (String sqlTableName : sqlAllTableName) {
-                                                                if (sqlTableName.toLowerCase().contains(keyValue.toLowerCase())) {
-                                                                    sqlValues.add(sqlTableName);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    utilsGTApp.getTableAdapter().setBeanList(sqlValues);
-                                                    break;
-
-                                            }
-
-                                            //刷新数据
-//                                GT.log("刷新适配器", sqlValues);
-                                            break;
-
-                                        case R.layout.frame_sql_table:
-//                                GT.log("表字段过滤");
-                                            break;
-                                        case R.layout.frame_fragment_stack:
-//                                GT.log("搜索进入 FStack页面:" + keyValue);
-                                            LinearLayout ll_fragmentStack = utilsGTApp.getLl_fragmentStack();
-                                            if (ll_fragmentStack != null) {
-                                                for (int i = 0; i < ll_fragmentStack.getChildCount(); i++) {
-                                                    View childAtView = ll_fragmentStack.getChildAt(i);
-                                                    TextView tv_showStack = childAtView.findViewById(R.id.tv_showStack);
-                                                    String showStackData = tv_showStack.getText().toString();
-//                                        GT.log("showStackData:" + showStackData);
-                                                }
-                                            }
-
-                                            break;
-                                        default:
-//                                GT.log("默认的过滤");
-                                            break;
-                                    }
-
-                                }
-                            }
-                        });
-                    }
-
-                    *//**
-         * 退出栈顶界面
-         *//*
-                    public void backStackTopFrame() {
-                        if (fl_main.getChildCount() != 0) {
-                            fl_main.removeViewAt(fl_main.getChildCount() - 1);//退出栈顶的页面
-                        }
-                    }
-
-                    *//**
-         * 退出指定的 Frame
-         *//*
-                    public void backAssignFrame(int backFrameID) {
-                        int childCount = fl_main.getChildCount();
-                        if (backFrameID == -1) {
-                            if (childCount != 0) {
-                                fl_main.removeViewAt(0);
-                            }
-                        } else {
-                            for (int i = 0; i < childCount; i++) {
-                                View childAt = fl_main.getChildAt(i);
-                                if (childAt.getId() == backFrameID) {
-                                    fl_main.removeView(childAt);//退出指定的界面
-                                    break;
-                                }
-
-                            }
-                        }
-                    }
-
-                    *//**
-         * 退出栈顶界面
-         *//*
-                    public void backAllFrame() {
-                        int childCount = fl_main.getChildCount();
-                        for (int i = 0; i < childCount; i++) {
-                            View childAt = fl_main.getChildAt(i);
-                            fl_main.removeView(childAt);//退出指定的界面
-
-                        }
-                    }
-
-                    *//**
-         * 获取最顶端的Frame
-         *
-         * @return
-         *//*
-                    public View getTopFrame() {
-                        int childCount = fl_main.getChildCount();
-                        if (childCount != 0) {
-                            return fl_main.getChildAt(0);
-                        }
-                        return null;
-                    }
-
-
-                }//工具方法结尾
-
-                public class UtilsGTApp implements SQLAdapter.ClickSqlTable {
-
-                    *//**
-         * 定义一个接收到消息后刷新UI的内部类广播
-         *//*
-                    private class UiReceiver extends BroadcastReceiver {
-                        @Override
-                        public void onReceive(Context context, Intent intent) {
-                            if (intent != null) {
-                                String logAllData = intent.getStringExtra("logAllData");
-                                logBeans.add(new LogBean(logAllData));
-                                logAdapter.setBeanList(logBeans);//刷新数据
-                                if (cb_dynamicRefresh.isChecked()) {
-                                    linearLayoutManager_log.scrollToPosition(logBeans.size() - 1);//每次滑动最底部
-                                }
-                            }
-                        }
-
-                    }
-
-                    private LogAdapter logAdapter;
-                    private List<LogBean> logBeans = new ArrayList<>();
-                    private UiReceiver uiReceiver;
-                    private CheckBox cb_dynamicRefresh;
-                    private LinearLayoutManager linearLayoutManager_log;
-
-                    public LogAdapter getLogAdapter() {
-                        return logAdapter;
-                    }
-
-                    public void setLogAdapter(LogAdapter logAdapter) {
-                        this.logAdapter = logAdapter;
-                    }
-
-                    public List<LogBean> getLogBeans() {
-                        return logBeans;
-                    }
-
-                    public void setLogBeans(List<LogBean> logBeans) {
-                        this.logBeans = logBeans;
-                    }
-
-                    @SuppressLint("ResourceType")
-                    public View initLog() {
-                        View frame_log = LayoutInflater.from(context).inflate(R.layout.frame_log, null);
-                        frame_log.setId(R.layout.frame_log);//设置ID
-                        RecyclerView recyclerView = frame_log.findViewById(R.id.recyclerView);
-                        cb_dynamicRefresh = frame_log.findViewById(R.id.cb_dynamicRefresh);
-                        logAdapter = new LogAdapter(context);
-                        linearLayoutManager_log = logAdapter.setLinearLayoutManager_V(recyclerView);
-
-                        //实例化过滤器并设置要过滤的广播
-                        uiReceiver = new UiReceiver();
-                        IntentFilter intentFilter = new IntentFilter();
-                        intentFilter.addAction(getClass().getName());
-                        context.registerReceiver(uiReceiver, intentFilter); //注册广播
-                        isOpenLog = true;//设置成功注册广播
-//            GT.log("日志 注册成功");
-
-                        GT.Thread.runJava(new Runnable() {
-                            @Override
-                            public void run() {
-                                while (true) {
-                                    if (frame_log.getParent() == null) {
-                                        try {
-                                            unregisterReceiver(uiReceiver);//解除广播
-                                            uiReceiver = null;
-                                            isOpenLog = false;
-                                            logBeans.clear();
-                                        } catch (IllegalArgumentException e) {
-//                                GT.log("异常:" + e);
-                                        }
-                                        break;
-                                    }
-                                    GT.Thread.sleep(300);
-                                }
-                            }
-                        });
-                        return frame_log;
-                    }
-
-
-                    private GT.Hibernate hibernate = new GT.Hibernate();
-                    private List<String> sqlValues = new ArrayList<>();
-                    private SQLAdapter sqlAdapter;
-                    private SQLAdapter tableAdapter;
-                    private SQLiteDatabase sqLiteDatabase;
-                    public int hierarchyNumber = 0;
-
-                    public GT.Hibernate getHibernate() {
-                        return hibernate;
-                    }
-
-                    public void setHibernate(GT.Hibernate hibernate) {
-                        this.hibernate = hibernate;
-                    }
-
-
-                    public SQLAdapter getTableAdapter() {
-                        return tableAdapter;
-                    }
-
-                    public void setTableAdapter(SQLAdapter tableAdapter) {
-                        this.tableAdapter = tableAdapter;
-                    }
-
-                    public SQLAdapter getSqlAdapter() {
-                        return sqlAdapter;
-                    }
-
-                    public void setSqlAdapter(SQLAdapter sqlAdapter) {
-                        this.sqlAdapter = sqlAdapter;
-                    }
-
-                    public List<String> getSQLValues() {
-                        return sqlValues;
-                    }
-
-                    public void setSQLValues(List<String> sqlValues) {
-                        this.sqlValues = sqlValues;
-                    }
-
-                    @SuppressLint("ResourceType")
-                    public View initSQL() {
-                        //初始化UI
-                        View frame_sqlAll = LayoutInflater.from(context).inflate(R.layout.frame_sql, null);
-                        frame_sqlAll.setId(R.layout.frame_sql);
-                        RecyclerView recyclerView = frame_sqlAll.findViewById(R.id.recyclerView);
-                        sqlAdapter = new SQLAdapter(context, this);
-                        sqlAdapter.setLinearLayoutManager_V(recyclerView);
-
-                        if (sqlValues != null) {
-                            sqlValues.clear();
-                        }
-
-                        List<String> sqlAllNames = hibernate.getSqlAllName();//获取数据库所有名称
-                        if (sqlAllNames == null || sqlAllNames.size() == 0) {
-                            sqlValues.add("暂无数据，\n请通过搜索框搜索！");
-                        } else {
-                            sqlValues.addAll(sqlAllNames);
-                        }
-
-                        //刷新数据
-                        sqlAdapter.setBeanList(sqlValues);
-                        hierarchyNumber = 1;
-                        return frame_sqlAll;
-                    }
-
-                    @SuppressLint("ResourceType")
-                    @Override
-                    public void clickTable(String name) {
-
-                        if (name.contains(".db")) {
-                            //单击数据库
-                            sqLiteDatabase = context.openOrCreateDatabase(name, context.MODE_PRIVATE, null);
-                            hibernate.setSqLiteDatabase(sqLiteDatabase);
-//                GT.log("单击的数据库名称:" + name);
-
-
-                            View frame_sql = LayoutInflater.from(context).inflate(R.layout.frame_sql, null);
-                            frame_sql.setId(R.layout.frame_sql);
-                            RecyclerView recyclerView = frame_sql.findViewById(R.id.recyclerView);
-                            tableAdapter = new SQLAdapter(context, this);
-                            tableAdapter.setLinearLayoutManager_V(recyclerView);
-                            if (sqlValues != null) {
-                                sqlValues.clear();
-                            }
-
-                            List<String> sqlAllTableName = hibernate.getSqlAllTableName();
-                            if (sqlAllTableName == null || sqlAllTableName.size() == 0) {
-                                sqlValues.add("暂无数据，\n请通过搜索框搜索！");
-                            } else {
-                                sqlValues.addAll(sqlAllTableName);
-                            }
-
-                            //刷新数据
-                            tableAdapter.setBeanList(sqlValues);
-                            utils.setDoubleClickFullScreen(frame_sql);//设置双击全屏
-                            fl_main.addView(frame_sql);
-                            hierarchyNumber = 2;
-                        } else {
-                            //单击表
-                            View view = initTable(name);
-                            utils.setDoubleClickFullScreen(view);//设置双击全屏
-                            fl_main.addView(view);
-                        }
-
-
-                    }
-
-
-                    private TableDataAdapter tableDataAdapter;
-                    private List<String> tableVaues;
-
-                    *//**
-         * 初始化 表名称
-         * tableName
-         *
-         * @return
-         *//*
-                    @SuppressLint("ResourceType")
-                    public View initTable(String tableName) {
-                        //初始化UI
-                        View frame_sqlTitle = LayoutInflater.from(context).inflate(R.layout.frame_sql_table, null);
-                        frame_sqlTitle.setId(R.layout.frame_sql_table);
-                        LinearLayout ll_title = frame_sqlTitle.findViewById(R.id.ll_title);
-
-
-                        RecyclerView recyclerView = frame_sqlTitle.findViewById(R.id.recyclerView);
-                        tableDataAdapter = new TableDataAdapter(context);
-                        tableDataAdapter.setLinearLayoutManager_V(recyclerView);
-
-
-                        GT.Thread.runJava(new Runnable() {
-                            @Override
-                            public void run() {
-//                    GT.log("tableName:" + tableName);
-                                Cursor cursor = hibernate.query(tableName);
-//                    GT.log("tableAllValues:" + cursor.getColumnCount());
-                                String[] tableAllValues = cursor.getColumnNames();
-
-                                if (tableDataAdapter.bytesList != null) {
-                                    tableDataAdapter.bytesList.clear();
-                                }
-
-                                //初始化标题
-                                for (int i = 0; i < tableAllValues.length; i++) {
-                                    TextView item_sql_tv = (TextView) LayoutInflater.from(context).inflate(R.layout.item_sql_tv, null);
-                                    item_sql_tv.setText(tableAllValues[i]);
-                                    GT.Thread.runAndroid(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            tableDataAdapter.bytesList.add(item_sql_tv.getText().toString().getBytes().length);
-                                            ll_title.addView(item_sql_tv);
-                                        }
-                                    });
-                                }
-
-                                if (tableVaues == null) {
-                                    tableVaues = new ArrayList<>();
-                                } else {
-                                    tableVaues.clear();
-                                }
-                                //初始化内容
-                                GT.Thread.runJava(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        String[] columnNames = cursor.getColumnNames();
-                                        StringBuffer val = new StringBuffer();
-                                        for (int j = 0; j < cursor.getCount(); j++) {
-                                            val.delete(0, val.length());//清空
-                                            for (int i = 0; i < columnNames.length; i++) {
-                                                String string = cursor.getString(cursor.getColumnIndex(columnNames[i]));
-//                                    val += string + "-GT-";
-                                                val.append(string).append("-GT-");
-//                                    val += string + "    ,    ";
-                                            }
-//                                GT.log("val:" + val);
-                                            tableVaues.add(val.toString());
-                                            cursor.moveToNext();//移动到下一位
-                                        }
-
-
-//                            GT.log("总共有：" + tableVaues.size());
-                                        GT.Thread.runAndroid(new Runnable() {
-                                            @Override
-                                            public void run() {
-                                                tableDataAdapter.setBeanList(tableVaues);
-                                            }
-                                        });
-
-                                    }
-                                });
-
-
-                                hierarchyNumber = 3;
-                            }
-                        });
-
-                        return frame_sqlTitle;
-                    }
-
-
-                    private LinearLayout ll_fragmentStack;
-
-                    public LinearLayout getLl_fragmentStack() {
-                        return ll_fragmentStack;
-                    }
-
-                    public void setLl_fragmentStack(LinearLayout ll_fragmentStack) {
-                        this.ll_fragmentStack = ll_fragmentStack;
-                    }
-
-                    @SuppressLint("ResourceType")
-                    public View initFStack() {
-                        View frame_f_stack = LayoutInflater.from(context).inflate(R.layout.frame_fragment_stack, null);
-                        frame_f_stack.setId(R.layout.frame_fragment_stack);
-                        ll_fragmentStack = frame_f_stack.findViewById(R.id.ll_fragmentStack);
-                        updateFStack();//更新栈数据
-
-                        frame_f_stack.findViewById(R.id.btn_refresh).setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View v) {
-                                GT.toast("更新完成!");
-                                updateFStack();//更新栈数据
-                            }
-                        });
-
-                        return frame_f_stack;
-                    }
-
-                    //更新Fragment栈信息
-                    private void updateFStack() {
-                        ll_fragmentStack.removeAllViews();//情况所有组件
-                        List<String> stackFragmentNames = GT.GT_Fragment.getGt_fragment().getStackFragmentNames();
-//            GT.log("stackFragmentNames:" + stackFragmentNames);
-                        if (stackFragmentNames != null && stackFragmentNames.size() != 0) {
-                            for (String stackFragmentName : stackFragmentNames) {
-                                View item_fragment_stack = LayoutInflater.from(context).inflate(R.layout.item_fragment_stack, null);
-                                TextView tv_showStack = item_fragment_stack.findViewById(R.id.tv_showStack);
-                                tv_showStack.setText(stackFragmentName);
-                                ll_fragmentStack.addView(item_fragment_stack);
-                            }
-                        } else {
-                            View item_fragment_stack = LayoutInflater.from(context).inflate(R.layout.item_fragment_stack, null);
-                            TextView tv_showStack = item_fragment_stack.findViewById(R.id.tv_showStack);
-                            tv_showStack.setText("栈中无Fragment信息");
-                            ll_fragmentStack.addView(item_fragment_stack);
-                        }
-                    }
-
-
-                }
-
-                @Override
-                protected boolean onBackPressed() {
-                    utils.backStackTopFrame();
-                    return super.onBackPressed();
-                }
-
-                @Override
-                public void onDestroy() {
-                    super.onDestroy();
-                    try {
-                        unregisterReceiver(utils.mBroadcastReceiver);//解除广播
-                    } catch (RuntimeException e) {
-//            GT.log("异常:" + e);
-                    }
-//        System.exit(0);
-                }
-
-            }
-
-            public static class LogBean {
-
-                private String value;
-
-                public LogBean() {
-                    super();
-                }
-
-                public LogBean(String value) {
-                    this.value = value;
-                }
-
-                public String getValue() {
-                    return value;
-                }
-
-                public void setValue(String value) {
-                    this.value = value;
-                }
-            }
-
-            public static class LogAdapter extends GT.GT_Adapters.BaseAdapter<LogBean> {
-
-                public LogAdapter(Context context) {
-                    super(context);
-                }
-
-                @Override
-                protected int loadLayout() {
-                    return R.layout.item_log;
-                }
-
-                @Override
-                protected void initView(BaseHolder holder, int position, LogBean logBean) {
-                    TextView tv_data = holder.itemView.findViewById(R.id.tv_data);
-                    tv_data.setText(logBean.getValue());
-                }
+        //无障碍服务
+        public abstract static class AccessibilityServiceBase extends AccessibilityService {
+
+            /**
+             * 无障碍服务须知：
+             * <p>
+             * 第一步：
+             * <p>
+             * 注意:需要在xml 目录中创建 accessible_service_describe.xml
+             * 内容如下：
+             * <p>
+             * <p>
+             * <?xml version="1.0" encoding="utf-8"?>
+             * <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+             * xmlns:tools="http://schemas.android.com/tools"
+             * android:accessibilityEventTypes="typeAllMask"
+             * android:accessibilityFeedbackType="feedbackGeneric"
+             * android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+             * android:canPerformGestures="true"
+             * android:canRetrieveWindowContent="true"
+             * android:description="@string/AccessibleServiceDescribe"
+             * android:notificationTimeout="100"
+             * tools:ignore="UnusedAttribute" />
+             * <p>
+             * <!--
+             * android:description ：辅助功能描述，描述该辅助功能用来干嘛的
+             * android:packageNames ：指定辅助功能监听的包名，不指定表示监听所有应用
+             * android:accessibilityEventTypes：辅助功能处理事件类型，一般配置为 typeAllMask 表示接收所有事件
+             * android:accessibilityFlags：辅助功能查找截点方式，一般配置为 flagDefault 默认方式。
+             * android:accessibilityFeedbackType：操作相应按钮以后辅助功能给用户的反馈类型，包括声音，震动等。
+             * android:notificationTimeout：相应时间设置
+             * android:canRetrieveWindowContent：是否允许辅助功能获得窗口的节点信息，为了能正常实用辅助功能，请务必保持该项配置为true
+             * <p>
+             * android:packageNames="com.tencent.mm,com.android.systemui"
+             * <p>
+             * -->
+             * <p>
+             * <p>
+             * 第二步：在 AndroidManifest.xml 文件中注册该服务
+             * <p>
+             * <application
+             * ...
+             * <p>
+             * <!-- 无障碍服务 -->
+             * <service
+             * android:name="创建的无障碍服务类"
+             * android:enabled="true"
+             * android:exported="true"
+             * android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+             * <intent-filter>
+             * <action android:name="android.accessibilityservice.AccessibilityService" />
+             * </intent-filter>
+             * <meta-data
+             * android:name="android.accessibilityservice"
+             * android:resource="@xml/accessible_service_describe" />
+             * </service>
+             * <p>
+             * ...
+             * />
+             * <p>
+             * <p>
+             * 第三步：申请无障碍服务并开启
+             * <p>
+             * //申请无障碍服务
+             * if (!DemoService.isStart()) {
+             * try {
+             * this.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+             * } catch (Exception e) {
+             * this.startActivity(new Intent(Settings.ACTION_SETTINGS));
+             * e.printStackTrace();
+             * }
+             * }
+             */
+
+            public static AccessibilityServiceBase mService;
+            public static String RUN_ACTIVITY = "";//运行动作
+            public static boolean TF_LOG = false;//是否打开日
+            public static boolean RUN_STATE = false;//运行状态// 志
+
+            //初始化
+            @Override
+            protected void onServiceConnected() {
+                super.onServiceConnected();
+                if (TF_LOG)
+                    GT.log("无障碍服务——连接中");
+                mService = this;
+                RUN_STATE = true;
 
 
             }
 
-            public static class SQLAdapter extends GT.GT_Adapters.BaseAdapter<String> {
+            /**
+             * 初始化View,会不停的循环此方法
+             *
+             * @param action
+             * @param packageName
+             * @param rootInfo
+             * @param event
+             */
+            protected abstract void initView(int action, String packageName, AccessibilityNodeInfo rootInfo, AccessibilityEvent event);
 
-                private ClickSqlTable clickSqlTable;
-
-                public SQLAdapter(Context context, ClickSqlTable clickSqlTable) {
-                    super(context);
-                    this.clickSqlTable = clickSqlTable;
-                }
-
-
-                @Override
-                protected int loadLayout() {
-                    return R.layout.item_sql;
-                }
-
-                @Override
-                protected void initView(BaseHolder holder, int position, String string) {
-                    TextView tv_sql = (TextView) holder.itemView;
-                    tv_sql.setText(string);
-                    //单击事件
-                    tv_sql.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            clickSqlTable.clickTable(string);
-                        }
-                    });
-
-                }
-
-                public interface ClickSqlTable {
-                    public void clickTable(String name);
-                }
+            /**
+             * 业务逻辑,当有正确的动作后才会相应此方法
+             *
+             * @param action
+             * @param packageName
+             * @param rootInfo
+             * @param event
+             * @param run_Activity 接受到信息后请立刻清空消息
+             */
+            protected void loadData(int action, String packageName, AccessibilityNodeInfo rootInfo, AccessibilityEvent event, String run_Activity) {
 
             }
 
-            public static class TableDataAdapter extends GT.GT_Adapters.BaseAdapter<String> {
+            //实现辅助功能
+            @Override
+            public void onAccessibilityEvent(AccessibilityEvent event) {
+                if (TF_LOG)
+                    GT.log("无障碍服务——监听中");
 
-                public List<Integer> bytesList = new ArrayList<>();
+                AccessibilityNodeInfo rootInfo = getRootInActiveWindow();
+                if (event == null || rootInfo == null || !RUN_STATE) return;
 
-                public TableDataAdapter(Context context) {
-                    super(context);
+                if (TF_LOG) {
+                    GT.log(event.getAction());
+                    GT.log(event.getPackageName());
+                    GT.log(rootInfo);
                 }
 
-                @Override
-                protected int loadLayout() {
-                    return R.layout.item_table_all_data;
-                }
+                int action = event.getAction();
+                CharSequence packageNameCS = event.getPackageName();
+                if (packageNameCS == null) return;
 
-                @Override
-                protected void initView(BaseHolder holder, int position, String strings) {
-//        GT.log("strings:" + strings);
-                    LinearLayout ll_allData = (LinearLayout) holder.itemView;
+                String packageName = String.valueOf(packageNameCS);
 
-     *//*   GT.ViewUtils.MarqueeTextView item_sql = (GT.ViewUtils.MarqueeTextView) LayoutInflater.from(getContext()).inflate(R.layout.item_sql_table_tv, null);
-        item_sql.setText(strings);
-        ll_allData.addView(item_sql);*//*
+                initView(action, packageName, rootInfo, event);
 
-                    String[] split = strings.split("-GT-");
-                    GT.log("第 " + position + " 条");
-                    for (int i = 0; i < split.length; i++) {
-                        GT.ViewUtils.MarqueeTextView item_sql = (GT.ViewUtils.MarqueeTextView) LayoutInflater.from(getContext()).inflate(R.layout.item_sql_table_tv, null);
-                        String data = adaptationCharacter(bytesList.get(i), split[i]); //字符适配
-                        item_sql.setText(data);
-                        ll_allData.addView(item_sql);
-                    }
-                }
-
-
-                *//**
-         * 适配字符
-         *
-         * @param maxLength
-         * @param data
-         * @return
-         *//*
-                private String adaptationCharacter(int maxLength, String data) {
-                    if (data == null) return data;
-//        GT.log("最大字符：" + maxLength + "当前字符：" + data.getBytes().length);
-                    maxLength = 15;
-                    if (data.getBytes().length < maxLength) {
-                        //小于
-                        while (true) {
-                            data += " ";
-                            if (data.getBytes().length >= maxLength) {
-                                break;
-                            }
-                        }
-                    } else if (data.getBytes().length > maxLength) {
-                        //大于
-                        if (maxLength > 6) {
-                            data = data.substring(0, maxLength - 2) + "..";
-                        } else {
-                            data = data.substring(0, maxLength);
-                        }
-                    }
-                    GT.log("最大长度：" + maxLength + " 返回：" + data + " : " + data.getBytes().length);
-                    return data;
-                }
-
+                if (RUN_ACTIVITY == null || RUN_ACTIVITY.length() == 0)
+                    loadData(event.getAction(), packageName, rootInfo, event, RUN_ACTIVITY);
 
             }
 
+            @Override
+            public void onInterrupt() {
+                if (TF_LOG)
+                    GT.log("无障碍服务——停止中");
+                mService = null;
+                RUN_STATE = false;
+            }
 
+            @Override
+            public void onDestroy() {
+                super.onDestroy();
+                if (TF_LOG) {
+                    GT.log("无障碍服务——已关闭");
+                }
+                mService = null;
+                RUN_STATE = false;
+            }
+
+            /**
+             * 辅助功能是否启动
+             */
+            public static boolean isStart() {
+                return mService != null;
+            }
+
+            public static void finish() {
+                RUN_STATE = false;
+            }
+
+            public static void start() {
+                RUN_STATE = true;
+            }
+
+
+            protected void MyGesture() {//仿滑动
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    Path path = new Path();
+                    path.moveTo(1000, 1000);//滑动起点
+                    path.lineTo(2000, 1000);//滑动终点
+                    GestureDescription.Builder builder = new GestureDescription.Builder();
+                    GestureDescription description = builder.addStroke(new GestureDescription.StrokeDescription(path, 100L, 100L)).build();
+                    //100L 第一个是开始的时间，第二个是持续时间
+                    dispatchGesture(description, new AccessibilityServiceUtils.MyCallBack(), null);
+                }
+            }
+
+
+            /**
+             * 立即发送移动的手势
+             * 注意7.0以上的手机才有此方法，请确保运行在7.0手机上
+             *
+             * @param path  移动路径
+             * @param mills 持续总时间
+             */
+            @RequiresApi(24)
+            protected void dispatchGestureMove(Path path, long mills) {
+                dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription
+                        (path, 0, mills)).build(), null, null);
+            }
+
+            /**
+             * 点击指定位置
+             * 注意7.0以上的手机才有此方法，请确保运行在7.0手机上
+             */
+            @RequiresApi(24)
+            protected void dispatchGestureClick(int x, int y) {
+                Path path = new Path();
+                path.moveTo(x - 1, y - 1);
+                path.lineTo(x + 1, y + 1);
+                dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription
+                        (path, 0, 100)).build(), null, null);
+            }
+
+            /**
+             * 长按指定位置
+             * 注意7.0以上的手机才有此方法，请确保运行在7.0手机上
+             */
+            @RequiresApi(24)
+            protected void dispatchGestureLongClick(int x, int y) {
+                Path path = new Path();
+                path.moveTo(x - 1, y - 1);
+                path.lineTo(x, y - 1);
+                path.lineTo(x, y);
+                path.lineTo(x - 1, y);
+                dispatchGesture(new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription
+                        (path, 0, 1000)).build(), null, null);
+            }
+
+
+            /*  int childCount = rootInfo.getChildCount();
+        GT.log("childCount:" + childCount);
+
+        for (int a = 0; a < childCount; a++) {
+            AccessibilityNodeInfo child = rootInfo.getChild(a);
+            GT.log("child[" + a + "]：" + child);
+            if (child == null) continue;
+
+            int childCount1 = child.getChildCount();
+            GT.log("childCount1:" + childCount1);
+
+            for (int b = 0; b < childCount1; b++) {
+                AccessibilityNodeInfo child1 = child.getChild(b);
+                GT.log("child1[" + b + "]：" + child1);
+                if (child1 == null) continue;
+
+                if (child1.toString().contains("使用 WLAN")) {
+                    GT.log("进入点击 WLAN 流程");
+                    RUN_ACTIVITY = "";
+                    RUN_STATE = true;
+                    clickView(child1);//单击WIFI开关
+                    RUN_STATE = false;
+                }
+
+                int childCount2 = child1.getChildCount();
+                GT.log("childCount2:" + childCount2);
+
+                for (int c = 0; c < childCount2; c++) {
+                    AccessibilityNodeInfo child2 = child1.getChild(c);
+                    GT.log("child2[" + b + "]：" + child2);
+                    if (child2 == null) continue;
+
+
+                    child2.recycle();
+                }
+
+
+                child1.recycle();//回收资源
+                child1 = null;
+            }
+
+
+            child.recycle();//回收资源
+            child = null;
+        }
+
+        rootInfo.recycle();
+        rootInfo = null;
+
+
+        switch (RUN_ACTIVITY) {
+            case "打开WIFI":
+                RUN_ACTIVITY = "";//清空动作
+
+
+                break;
+
+            default:
+                MyGesture();//滑动屏幕
+                break;
         }*/
 
+
+        }
+
+        public abstract static class AccessibilityServiceUtils<T> {
+
+            /**
+             * 是包含还必须相等;
+             */
+            protected final boolean mIsEquals;
+            protected final T mCheckData;
+
+            public AccessibilityServiceUtils(@NonNull T checkData, boolean isEquals) {
+                mCheckData = checkData;
+                mIsEquals = isEquals;
+            }
+
+            public abstract boolean checkOk(AccessibilityNodeInfo thisInfo);
+
+            /**
+             * 找id，就是findAccessibilityNodeInfosByViewId方法
+             * 和找text一样效率最高，如果能找到，尽量使用这个
+             */
+            public static class IdTF extends AccessibilityServiceUtils<String> implements IdTextTF {
+                public IdTF(@NonNull String idFullName) {
+                    super(idFullName, true);
+                }
+
+                @Override
+                public boolean checkOk(AccessibilityNodeInfo thisInfo) {
+                    return true;//此处不需要实现
+                }
+
+                @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
+
+                @Override
+                public AccessibilityNodeInfo findFirst(AccessibilityNodeInfo root) {
+                    List<AccessibilityNodeInfo> list = root.findAccessibilityNodeInfosByViewId(mCheckData);
+                    if (isEmptyArray(list)) {
+                        return null;
+                    }
+                    for (int i = 1; i < list.size(); i++) {//其他的均回收
+                        list.get(i).recycle();
+                    }
+                    return list.get(0);
+                }
+
+                @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
+
+                @Override
+                public List<AccessibilityNodeInfo> findAll(AccessibilityNodeInfo root) {
+                    return root.findAccessibilityNodeInfosByViewId(mCheckData);
+                }
+            }
+
+            /**
+             * 普通text，就是findAccessibilityNodeInfosByText方法
+             * 和找id一样效率最高，如果能找到，尽量使用这个
+             */
+            public static class TextTF extends AccessibilityServiceUtils<String> implements IdTextTF {
+                public TextTF(@NonNull String text, boolean isEquals) {
+                    super(text, isEquals);
+                }
+
+                @Override
+                public boolean checkOk(AccessibilityNodeInfo thisInfo) {
+                    return true;//此处不需要实现
+                }
+
+
+                @Override
+                public AccessibilityNodeInfo findFirst(AccessibilityNodeInfo root) {
+                    List<AccessibilityNodeInfo> list = root.findAccessibilityNodeInfosByText(mCheckData);
+                    if (isEmptyArray(list)) {
+                        return null;
+                    }
+                    if (mIsEquals) {
+                        AccessibilityNodeInfo returnInfo = null;
+                        for (AccessibilityNodeInfo info : list) {
+                            if (returnInfo == null && info.getText() != null && mCheckData.equals(info.getText().toString())) {
+                                returnInfo = info;
+                            } else {
+                                info.recycle();
+                            }
+                        }
+                        return returnInfo;
+                    } else {
+                        return list.get(0);
+                    }
+                }
+
+
+                @Override
+                public List<AccessibilityNodeInfo> findAll(AccessibilityNodeInfo root) {
+                    List<AccessibilityNodeInfo> list = root.findAccessibilityNodeInfosByText(mCheckData);
+                    if (isEmptyArray(list)) {
+                        return null;
+                    }
+                    if (mIsEquals) {
+                        ArrayList<AccessibilityNodeInfo> listNew = new ArrayList<>();
+                        for (AccessibilityNodeInfo info : list) {
+                            if (info.getText() != null && mCheckData.equals(info.getText().toString())) {
+                                listNew.add(info);
+                            } else {
+                                info.recycle();
+                            }
+                        }
+                        return listNew;
+                    } else {
+                        return list;
+                    }
+                }
+            }
+
+            /**
+             * 类似uc浏览器，有text值但无法直接根据text来找到
+             */
+            public static class WebTextTF extends AccessibilityServiceUtils<String> {
+                public WebTextTF(@NonNull String checkString, boolean isEquals) {
+                    super(checkString, isEquals);
+                }
+
+                @Override
+                public boolean checkOk(AccessibilityNodeInfo thisInfo) {
+                    CharSequence text = thisInfo.getText();
+                    if (mIsEquals) {
+                        return text != null && text.toString().equals(mCheckData);
+                    } else {
+                        return text != null && text.toString().contains(mCheckData);
+                    }
+                }
+            }
+
+            /**
+             * 找ContentDescription字段
+             */
+            public static class ContentDescriptionTF extends AccessibilityServiceUtils<String> {
+                public ContentDescriptionTF(@NonNull String checkString, boolean isEquals) {
+                    super(checkString, isEquals);
+                }
+
+                @Override
+                public boolean checkOk(AccessibilityNodeInfo thisInfo) {
+                    CharSequence text = thisInfo.getContentDescription();
+                    if (mIsEquals) {
+                        return text != null && text.toString().equals(mCheckData);
+                    } else {
+                        return text != null && text.toString().contains(mCheckData);
+                    }
+                }
+            }
+
+            /**
+             * 找ClassName匹配
+             */
+            public static class ClassNameTF extends AccessibilityServiceUtils<String> {
+                public ClassNameTF(@NonNull String checkString, boolean isEquals) {
+                    super(checkString, isEquals);
+                }
+
+                @Override
+                public boolean checkOk(AccessibilityNodeInfo thisInfo) {
+                    if (mIsEquals) {
+                        return thisInfo.getClassName().toString().equals(mCheckData);
+                    } else {
+                        return thisInfo.getClassName().toString().contains(mCheckData);
+                    }
+                }
+            }
+
+            /**
+             * 在某个区域内的控件
+             */
+            public static class RectTF extends AccessibilityServiceUtils<Rect> {
+                public RectTF(@NonNull Rect rect) {
+                    super(rect, true);
+                }
+
+                @Override
+                public boolean checkOk(AccessibilityNodeInfo thisInfo) {
+                    thisInfo.getBoundsInScreen(mRecycleRect);
+                    return mCheckData.contains(mRecycleRect);
+                }
+            }
+
+            public interface IdTextTF {
+
+                AccessibilityNodeInfo findFirst(AccessibilityNodeInfo root);
+
+
+                List<AccessibilityNodeInfo> findAll(AccessibilityNodeInfo root);
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 创建方法
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            public static Rect mRecycleRect = new Rect();
+
+            public static final String ST_VIEW = "android.view.View",
+                    ST_TEXTVIEW = "android.widget.TextView",
+                    ST_IMAGEVIEW = "android.widget.ImageView",
+                    ST_BUTTON = "android.widget.Button",
+                    ST_IMAGEBUTTON = "android.widget.ImageButton",
+                    ST_EDITTEXT = "android.widget.EditText",
+                    ST_LISTVIEW = "android.widget.ListView",
+                    ST_LINEARLAYOUT = "android.widget.LinearLayout",
+                    ST_VIEWGROUP = "android.view.ViewGroup",
+                    ST_SYSTEMUI = "com.android.systemui";
+
+            /**
+             * 找id，就是findAccessibilityNodeInfosByViewId方法
+             * 和找text一样效率最高，如果能找到，尽量使用这个
+             *
+             * @param pageName 被查找项目的包名:com.android.xxx
+             * @param idName   id值:tv_main
+             */
+            public static AccessibilityServiceUtils newId(String pageName, String idName) {
+                return newId(pageName + ":id/" + idName);
+            }
+
+            /**
+             * @param idfullName id全称:com.android.xxx:id/tv_main
+             */
+            public static AccessibilityServiceUtils newId(@NonNull String idfullName) {
+                return new IdTF(idfullName);
+            }
+
+            /**
+             * 普通text，就是findAccessibilityNodeInfosByText方法
+             * 和找id一样效率最高，如果能找到，尽量使用这个
+             */
+            public static AccessibilityServiceUtils newText(@NonNull String text, boolean isEquals) {
+                return new TextTF(text, isEquals);
+            }
+
+            /**
+             * 类似uc浏览器，有text值但无法直接根据text来找到
+             */
+            public static AccessibilityServiceUtils newWebText(@NonNull String webText, boolean isEquals) {
+                return new WebTextTF(webText, isEquals);
+            }
+
+            /**
+             * 找ContentDescription字段
+             */
+            public static AccessibilityServiceUtils newContentDescription(@NonNull String cd, boolean isEquals) {
+                return new ContentDescriptionTF(cd, isEquals);
+            }
+
+            /**
+             * 找ClassName匹配
+             */
+            public static AccessibilityServiceUtils newClassName(@NonNull String className) {
+                return new ClassNameTF(className, true);
+            }
+
+            public static AccessibilityServiceUtils newClassName(@NonNull String className, boolean isEquals) {
+                return new ClassNameTF(className, isEquals);
+            }
+
+            /**
+             * 在某个区域内的控件
+             */
+            public static AccessibilityServiceUtils newRect(@NonNull Rect rect) {
+                return new RectTF(rect);
+            }
+
+
+            //模拟手势的监听
+            @SuppressLint("NewApi")
+            public static class MyCallBack extends AccessibilityService.GestureResultCallback {
+
+                @Override
+                public void onCompleted(GestureDescription gestureDescription) {
+                    super.onCompleted(gestureDescription);
+
+                }
+
+                @Override
+                public void onCancelled(GestureDescription gestureDescription) {
+                    super.onCancelled(gestureDescription);
+
+                }
+            }
+
+
+            /**
+             * 点击该控件
+             *
+             * @return true表示点击成功
+             */
+            public static boolean clickView(AccessibilityNodeInfo nodeInfo) {
+                if (nodeInfo != null) {
+                    if (nodeInfo.isClickable()) {
+                        nodeInfo.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        return true;
+                    } else {
+                        AccessibilityNodeInfo parent = nodeInfo.getParent();
+                        if (parent != null) {
+                            boolean b = clickView(parent);
+                            parent.recycle();
+                            if (b) return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            /**
+             * 查找第一个匹配的控件
+             *
+             * @param tfs 匹配条件，多个AbstractTF是&&的关系，如：
+             *            AbstractTF.newContentDescription("表情", true),AbstractTF.newClassName(AbstractTF.ST_IMAGEVIEW)
+             *            表示描述内容是'表情'并且是imageview的控件
+             */
+
+            public AccessibilityNodeInfo findFirst(AccessibilityServiceUtils[] tfs, AccessibilityNodeInfo rootInfo) {
+                if (tfs.length == 0) throw new InvalidParameterException("AbstractTF不允许传空");
+
+                if (rootInfo == null) return null;
+
+                int idTextTFCount = 0, idTextIndex = 0;
+                for (int i = 0; i < tfs.length; i++) {
+                    if (tfs[i] instanceof AccessibilityServiceUtils.IdTextTF) {
+                        idTextTFCount++;
+                        idTextIndex = i;
+                    }
+                }
+                switch (idTextTFCount) {
+                    case 0://id或text数量为0，直接循环查找
+                        AccessibilityNodeInfo returnInfo = findFirstRecursive(rootInfo, tfs);
+                        rootInfo.recycle();
+                        return returnInfo;
+                    case 1://id或text数量为1，先查出对应的id或text，然后再查其他条件
+                        if (tfs.length == 1) {
+                            AccessibilityNodeInfo returnInfo2 = ((AccessibilityServiceUtils.IdTextTF) tfs[idTextIndex]).findFirst(rootInfo);
+                            rootInfo.recycle();
+                            return returnInfo2;
+                        } else {
+                            List<AccessibilityNodeInfo> listIdText = ((AccessibilityServiceUtils.IdTextTF) tfs[idTextIndex]).findAll(rootInfo);
+                            if (isEmptyArray(listIdText)) {
+                                break;
+                            }
+                            AccessibilityNodeInfo returnInfo3 = null;
+                            for (AccessibilityNodeInfo info : listIdText) {//遍历找到匹配的
+                                if (returnInfo3 == null) {
+                                    boolean isOk = true;
+                                    for (AccessibilityServiceUtils tf : tfs) {
+                                        if (!tf.checkOk(info)) {
+                                            isOk = false;
+                                            break;
+                                        }
+                                    }
+                                    if (isOk) {
+                                        returnInfo3 = info;
+                                    } else {
+                                        info.recycle();
+                                    }
+                                } else {
+                                    info.recycle();
+                                }
+                            }
+                            rootInfo.recycle();
+                            return returnInfo3;
+                        }
+                    default:
+                        throw new RuntimeException("由于时间有限，并且多了也没什么用，所以IdTF和TextTF只能有一个");
+                }
+                rootInfo.recycle();
+                return null;
+            }
+
+            /**
+             * @param tfs 由于是递归循环，会忽略IdTF和TextTF
+             */
+            public static AccessibilityNodeInfo findFirstRecursive(AccessibilityNodeInfo parent, @NonNull AccessibilityServiceUtils... tfs) {
+                if (parent == null) return null;
+                if (tfs.length == 0) throw new InvalidParameterException("AbstractTF不允许传空");
+
+                for (int i = 0; i < parent.getChildCount(); i++) {
+                    AccessibilityNodeInfo child = parent.getChild(i);
+                    if (child == null) continue;
+                    boolean isOk = true;
+                    for (AccessibilityServiceUtils tf : tfs) {
+                        if (!tf.checkOk(child)) {
+                            isOk = false;
+                            break;
+                        }
+                    }
+                    if (isOk) {
+                        return child;
+                    } else {
+                        AccessibilityNodeInfo childChild = findFirstRecursive(child, tfs);
+                        child.recycle();
+                        if (childChild != null) {
+                            return childChild;
+                        }
+                    }
+                }
+                return null;
+            }
+
+            /**
+             * 查找全部匹配的控件
+             *
+             * @param tfs 匹配条件，多个AbstractTF是&&的关系，如：
+             *            AbstractTF.newContentDescription("表情", true),AbstractTF.newClassName(AbstractTF.ST_IMAGEVIEW)
+             *            表示描述内容是'表情'并且是imageview的控件
+             */
+            @NonNull
+            public List<AccessibilityNodeInfo> findAll(AccessibilityServiceUtils[] tfs, AccessibilityNodeInfo rootInfo) {
+                if (tfs.length == 0) throw new InvalidParameterException("AbstractTF不允许传空");
+
+                ArrayList<AccessibilityNodeInfo> list = new ArrayList<>();
+                if (rootInfo == null) return list;
+
+                int idTextTFCount = 0, idTextIndex = 0;
+                for (int i = 0; i < tfs.length; i++) {
+                    if (tfs[i] instanceof AccessibilityServiceUtils.IdTextTF) {
+                        idTextTFCount++;
+                        idTextIndex = i;
+                    }
+                }
+                switch (idTextTFCount) {
+                    case 0://id或text数量为0，直接循环查找
+                        findAllRecursive(list, rootInfo, tfs);
+                        break;
+                    case 1://id或text数量为1，先查出对应的id或text，然后再循环
+                        List<AccessibilityNodeInfo> listIdText = ((AccessibilityServiceUtils.IdTextTF) tfs[idTextIndex]).findAll(rootInfo);
+                        if (isEmptyArray(listIdText)) {
+                            break;
+                        }
+                        if (tfs.length == 1) {
+                            list.addAll(listIdText);
+                        } else {
+                            for (AccessibilityNodeInfo info : listIdText) {
+                                boolean isOk = true;
+                                for (AccessibilityServiceUtils tf : tfs) {
+                                    if (!tf.checkOk(info)) {
+                                        isOk = false;
+                                        break;
+                                    }
+                                }
+                                if (isOk) {
+                                    list.add(info);
+                                } else {
+                                    info.recycle();
+                                }
+                            }
+                        }
+                        break;
+                    default:
+                        throw new RuntimeException("由于时间有限，并且多了也没什么用，所以IdTF和TextTF只能有一个");
+                }
+                rootInfo.recycle();
+                return list;
+            }
+
+            /**
+             * @param tfs 由于是递归循环，会忽略IdTF和TextTF
+             */
+            public static void findAllRecursive(List<AccessibilityNodeInfo> list, AccessibilityNodeInfo parent, @NonNull AccessibilityServiceUtils... tfs) {
+                if (parent == null || list == null) return;
+                if (tfs.length == 0) throw new InvalidParameterException("AbstractTF不允许传空");
+
+                for (int i = 0; i < parent.getChildCount(); i++) {
+                    AccessibilityNodeInfo child = parent.getChild(i);
+                    if (child == null) continue;
+                    boolean isOk = true;
+                    for (AccessibilityServiceUtils tf : tfs) {
+                        if (!tf.checkOk(child)) {
+                            isOk = false;
+                            break;
+                        }
+                    }
+                    if (isOk) {
+                        list.add(child);
+                    } else {
+                        findAllRecursive(list, child, tfs);
+                        child.recycle();
+                    }
+                }
+            }
+
+
+            /**
+             * 由于太多,最好回收这些AccessibilityNodeInfo
+             */
+            public static void recycleAccessibilityNodeInfo(List<AccessibilityNodeInfo> listInfo) {
+                if (isEmptyArray(listInfo)) return;
+
+                for (AccessibilityNodeInfo info : listInfo) {
+                    info.recycle();
+                }
+            }
+
+            //集合是否是空的
+            public static boolean isEmptyArray(Collection list) {
+                return list == null || list.size() == 0;
+            }
+
+            public static <T> boolean isEmptyArray(T[] list) {
+                return list == null || list.length == 0;
+            }
+
+
+        }
 
     }
 
@@ -22988,6 +22981,8 @@ public class GT {
 
 
     }
+
+//=============================================== 接口模块 ===================================================
 
 
 }

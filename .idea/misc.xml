@@ -1,5 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="DesignSurface">
+    <option name="filePathToZoomLevelMap">
+      <map>
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/drawable/bg_black.xml" value="0.1828125" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/drawable/bg_black_et.xml" value="0.1828125" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/drawable/bg_black_shell.xml" value="0.1828125" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/drawable/bg_gray_bottom.xml" value="0.1828125" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/drawable/bg_gray_top.xml" value="0.1828125" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/drawable/ic_launcher_background.xml" value="0.1828125" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/activity_main.xml" value="0.1" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/activity_main2.xml" value="0.1125" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/adapter_demo.xml" value="0.13958333333333334" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/delete_item_demo.xml" value="0.21875" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/floating_item_below_btn.xml" value="0.1" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/floating_item_shutdown.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/floating_item_status_bar.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/floating_item_top_status_bar.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/floating_main.xml" value="0.1" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/fragment_demo.xml" value="0.1838768115942029" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/frame_fragment_stack.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/frame_log.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/frame_sql.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/frame_sql_table.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_app_ico.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_fragment_stack.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_log.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_notification.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_sql.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_sql_table_tv.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_sql_tv.xml" value="0.12588652482269502" />
+        <entry key="..\:/Workspace/AndroidStudio/GSLS_Tool/app/src/main/res/layout/item_table_all_data.xml" value="0.17798913043478262" />
+      </map>
+    </option>
+  </component>
   <component name="ProjectRootManager" version="2" languageLevel="JDK_11" default="true" project-jdk-name="11" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/build/classes" />
   </component>

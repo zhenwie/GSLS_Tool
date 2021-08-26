@@ -2,15 +2,11 @@ apply plugin: 'com.android.library'
 
 android {
     compileSdkVersion 30
-    buildToolsVersion "29.0.3"
-
+    buildToolsVersion "30.0.3"
 
     defaultConfig {
         minSdkVersion 16
         targetSdkVersion 30
-        versionCode 1
-        versionName "1.0"
-
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
     }
@@ -34,8 +30,8 @@ android {
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'androidx.appcompat:appcompat:1.2.0'
-    implementation 'androidx.recyclerview:recyclerview:1.1.0'
-    implementation 'com.google.android.material:material:1.2.1'
+    implementation 'androidx.recyclerview:recyclerview:1.2.0'
+    implementation 'com.google.android.material:material:1.3.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.3.0'
@@ -44,4 +40,5 @@ dependencies {
     //GT全部功能 需要添加的包
     implementation 'com.lzy.net:okgo:3.0.4' //OkGo 网络框架
     implementation 'com.squareup.okhttp3:okhttp:3.12.0'//OkHttp 网络框架
+    implementation 'com.blankj:utilcodex:1.30.6'//集成 AndroidUtilCode 工具包
 }

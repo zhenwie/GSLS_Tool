@@ -50,7 +50,7 @@
                 android:thumb="@drawable/img_height_16" />
 
             <view
-                class="com.gsls.gtlibrary.util.GT$ViewUtils$FlowLayout"
+                class="com.gsls.gt.GT$ViewUtils$FlowLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_margin="10dp">

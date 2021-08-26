@@ -13,7 +13,7 @@
         android:src="@drawable/ic_launcher_background"
         />
 
-    <view class="com.gsls.gtlibrary.util.GT$ViewUtils$MarqueeTextView"
+    <view class="com.gsls.gt.GT$ViewUtils$MarqueeTextView"
         android:id="@+id/tv_appName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

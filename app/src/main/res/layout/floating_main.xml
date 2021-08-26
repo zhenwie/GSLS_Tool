@@ -28,7 +28,7 @@
 
         <view
             android:id="@+id/flowLayout"
-            class="com.gsls.gtlibrary.util.GT$ViewUtils$FlowLayout"
+            class="com.gsls.gt.GT$ViewUtils$FlowLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
