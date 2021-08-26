@@ -14,7 +14,6 @@ public class MainActivity extends GT.GT_Activity.AnnotationActivity {
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
 
-
     }
 
 

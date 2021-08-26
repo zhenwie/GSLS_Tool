@@ -244,7 +244,7 @@ import okhttp3.Response;
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.0.7 版本）
+ * 更新内容：（1.3.0.8 版本）
  * 内容如下：
  * 1.优化了 log显示
  * 2.增加了国际化工具包
