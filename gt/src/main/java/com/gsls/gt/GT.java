@@ -240,11 +240,11 @@ import okhttp3.Response;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.8.26
+ * 更新时间:2021.9.7
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * <p>更新内容：（1.3.1 版本）
+ * <p>更新内容：（1.3.1.1 版本）
  * <p>内容如下：
  * <p>1.优化了 log显示
  * <p>2.增加了国际化工具包
@@ -271,8 +271,6 @@ public class GT {
     public static Context activity;              //设置 当前动态的 上下文对象
     //================================== 提供访问 GT 属性的接口======================================
 
-    private GT() {
-    }//设置不可实例化
 
     /**
      * 获取线程安全的 GT 单例对象
@@ -6293,6 +6291,17 @@ public class GT {
         public int readSpeed = 1000;            //读取速度
         public int readByteMax = 1024;          //读取字节的最大值
         private byte[] buffer;                  //读取数据的容器
+        private boolean stopRead = false;       //停止读取标识
+
+        /**
+         * 停止读取
+         *
+         * @return
+         */
+        public SerialPortUtils stopRead() {
+            stopRead = true;
+            return this;
+        }
 
         /**
          * @param context   上下文
@@ -6503,6 +6512,7 @@ public class GT {
          * @return
          */
         public byte[] readByteDataCount(int count) {
+            stopRead = false;
             if (inputStream == null || count <= 0) {
                 if (isShowLog)
                     log("读取数据失败！");
@@ -6516,6 +6526,12 @@ public class GT {
                 if (count <= 0) {
                     break;
                 }
+
+                //停止读取
+                if (stopRead) {
+                    return null;
+                }
+
                 try {
                     int size = inputStream.read(buffer);
                     if (isShowLog)
@@ -6557,6 +6573,9 @@ public class GT {
          * @return
          */
         public byte[] readByteDataTime(int time) {
+
+            stopRead = false;
+
             if (inputStream == null || time <= 0) {
                 if (isShowLog)
                     log("读取数据失败！");
@@ -6570,6 +6589,12 @@ public class GT {
                 if (time <= 0) {
                     break;
                 }
+
+                //停止读取
+                if (stopRead) {
+                    return null;
+                }
+
                 try {
                     int size = inputStream.read(buffer);
                     if (isShowLog)
@@ -6611,6 +6636,9 @@ public class GT {
          * @return
          */
         public byte[] readByteDataTimeAddCount(int time, int count) {
+
+            stopRead = false;
+
             if (inputStream == null || time <= 0 || count <= 0) {
                 if (isShowLog)
                     log("读取数据失败！");
@@ -6624,6 +6652,12 @@ public class GT {
                 if (time <= 0 || count <= 0) {
                     break;
                 }
+
+                //停止读取
+                if (stopRead) {
+                    return null;
+                }
+
                 try {
                     int size = inputStream.read(buffer);
                     if (isShowLog)
@@ -6668,6 +6702,8 @@ public class GT {
          */
         public byte[] readByteDataStartAddClose(String start, String close) {
 
+            stopRead = false;
+
             if (inputStream == null || start == null || close == null) {
                 if (isShowLog)
                     log("读取数据失败！");
@@ -6680,6 +6716,12 @@ public class GT {
 
             //读取本次下位机发送的所有数据
             while (true) {
+
+                //停止读取
+                if (stopRead) {
+                    return null;
+                }
+
                 try {
                     int size = inputStream.read(buffer);
                     if (isShowLog)
@@ -6751,6 +6793,9 @@ public class GT {
          * @return
          */
         public byte[] readByteDataAll() {
+
+            stopRead = false;
+
             if (inputStream == null) {
                 if (isShowLog)
                     log("读取数据失败！");
@@ -6763,6 +6808,12 @@ public class GT {
 
             //读取本次下位机发送的所有数据
             while (true) {
+
+                //停止读取
+                if (stopRead) {
+                    return null;
+                }
+
                 try {
                     int size = inputStream.read(buffer);
                     if (isShowLog)
@@ -12470,7 +12521,7 @@ public class GT {
     /**
      * APP 权限管理 类
      */
-    public static class AppAuthorityManagement {
+    public static final class AppAuthorityManagement {
 
         //android6.0之后要动态获取权限 读写权限
         public static void readWritePermission(Activity activity) {
@@ -12649,12 +12700,14 @@ public class GT {
          * 申请权限的 Fragment
          */
         public static class PermissionFragment extends Fragment {
+
             private String[] permission;
             private Permission.OnPermissionListener onPermissionListener;
             private Permission Permission;
             private Permission.PermissionDescription permissionDescription;
             private List<String> grantedList = new ArrayList<>();//已通过
             private List<String> deniedList = new ArrayList<>();//未通过
+            private boolean isAllGranted = true;//检查权限是否全部通过
 
             public PermissionFragment(String[] permission, Permission.OnPermissionListener onPermissionListener, Permission Permission, Permission.PermissionDescription permissionDescription) {
                 this.permission = permission;
@@ -12686,33 +12739,56 @@ public class GT {
                 super.onCreate(savedInstanceState);
                 setRetainInstance(true);
 
-                onPermissionListener.onExplainRequestReason(permissionDescription);
+                isAllGranted = true;
+                if (permission != null && permission.length != 0) {//判断权限是否为 null
 
-                GT.Thread.runJava(new Runnable() {
-                    @Override
-                    public void run() {
-
-                        int i = 0;
-                        //等待结束申请说明
-                        while (!permissionDescription.isCloseAcceptAdvice()) {
-                            GT.Thread.sleep(300);
-                        }
-
-                        if (permissionDescription.isValidClose()) {//判断是否有效关闭
-                            if (permissionDescription.isAcceptAdvice()) {//判断用户是否同意授权
-                                if (permission != null && permission.length != 0) {
-                                    if (onPermissionListener.onForwardToSettings()) {//是否继续进行权限申请
-                                        requestPermissions(permission, 1);//开始授权
-                                    } else {
-                                        onPermissionListener.request(false, new String[]{}, permission, "Stop the authorization");
-                                    }
-                                }
-                            } else {
-                                onPermissionListener.request(false, new String[]{}, permission, "The user rejected the authorization");
-                            }
+                    //检查权限是否全部授予
+                    for (int i = 0; i < permission.length; i++) {
+                        int code = ContextCompat.checkSelfPermission(mActivity, permission[i]);
+                        if (code == -1) {
+                            isAllGranted = false;
                         }
                     }
-                });
+
+                    if (isAllGranted) {
+                        onPermissionListener.request(true, permission, new String[]{}, "All permissions approved");
+                        return;
+                    }
+
+                    //调用授权说明对话框
+                    onPermissionListener.onExplainRequestReason(permissionDescription);
+
+                    GT.Thread.runJava(new Runnable() {
+                        @Override
+                        public void run() {
+
+                            int i = 0;
+                            //等待结束申请说明
+                            while (!permissionDescription.isCloseAcceptAdvice()) {
+                                GT.Thread.sleep(300);
+                            }
+
+                            if (permissionDescription.isValidClose()) {//判断是否有效关闭
+                                if (permissionDescription.isAcceptAdvice()) {//判断用户是否同意授权
+                                    if (permission != null && permission.length != 0) {
+                                        if (onPermissionListener.onForwardToSettings()) {//是否继续进行权限申请
+                                            requestPermissions(permission, 1);//开始授权
+                                        } else {//特殊权限方法
+                                            onPermissionListener.request(false, new String[]{}, permission, "Stop the authorization");
+                                        }
+                                    }
+                                } else {//用户拒绝授权
+                                    onPermissionListener.request(false, new String[]{}, permission, "The user rejected the authorization");
+                                }
+                            }
+                        }
+                    });
+
+                } else {
+                    onPermissionListener.request(false, new String[]{}, permission, "Add the authorization information in the Permissions method");
+                    return;
+                }
+
 
             }
 
@@ -15970,7 +16046,7 @@ public class GT {
         /**
          * 用于辅助 Fragment
          */
-        public abstract static class BaseFragments extends Fragment {
+        public abstract static class BaseFragment extends Fragment {
 
             // 是否恢复Fragment数据
             protected View view;// 用于存储 Fragment
@@ -16308,6 +16384,22 @@ public class GT {
             protected void loadData() {
             }
 
+            //是否解决EditText bug
+            private boolean isSolveEditTextBug = true;
+
+            public boolean isSolveEditTextBug() {
+                return isSolveEditTextBug;
+            }
+
+            /**
+             * 设置是否解决EditText bug
+             *
+             * @param solveEditTextBug
+             */
+            public void setSolveEditTextBug(boolean solveEditTextBug) {
+                isSolveEditTextBug = solveEditTextBug;
+            }
+
             @Override
             public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
@@ -16337,14 +16429,17 @@ public class GT {
                     }
                 });
 
-                //给EditText 组件设置返回事件
-                GT.Thread.runJava(new Runnable() {
-                    @Override
-                    public void run() {
-                        setViewBackListener(view);
-                        setEditTextRequestFocus(view);
-                    }
-                });
+                //是否解决EditText bug
+                if (isSolveEditTextBug) {
+                    //给EditText 组件设置返回事件
+                    GT.Thread.runJava(new Runnable() {
+                        @Override
+                        public void run() {
+                            setViewBackListener(view);
+                            setEditTextRequestFocus(view);
+                        }
+                    });
+                }
 
             }
 
@@ -16361,15 +16456,22 @@ public class GT {
                 //如果是Edit类型的那就监听返回事件
                 if (viewLayout instanceof EditText) {
 
-                    GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
-                        @Override
-                        public boolean onKey(View v, int keyCode, KeyEvent event) {
-                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
-                                return onBackPressed();// 回调按下返回键
+                    if (activity != null) {
+                        GT.Thread.runAndroid(activity, new Runnable() {
+                            @Override
+                            public void run() {
+                                GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
+                                    @Override
+                                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                                        if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                                            return onBackPressed();// 回调按下返回键
+                                        }
+                                        return false;
+                                    }
+                                });
                             }
-                            return false;
-                        }
-                    });
+                        });
+                    }
                     return;
                 } else if (viewLayout instanceof ViewGroup) {
 
@@ -16400,7 +16502,14 @@ public class GT {
                 ViewGroup viewGroup = null;
                 //如果是Edit类型的那就监听返回事件
                 if (viewLayout instanceof EditText) {
-                    viewLayout.requestFocus();
+                    if (activity != null) {
+                        GT.Thread.runAndroid(activity, new Runnable() {
+                            @Override
+                            public void run() {
+                                viewLayout.requestFocus();
+                            }
+                        });
+                    }
                     return true;
                 } else if (viewLayout instanceof ViewGroup) {
                     try {
@@ -16451,7 +16560,7 @@ public class GT {
         /**
          * 用于辅助 Fragment
          */
-        public abstract static class AnnotationFragment extends BaseFragments {
+        public abstract static class AnnotationFragment extends BaseFragment {
 
             //布局ID
             private int resLayout;
@@ -16644,6 +16753,14 @@ public class GT {
                 } else {
                     selectItemList.clear();
                 }
+
+                //初始化加入默认选项
+                for (int i = 0; i < initChoiceSets.length; i++) {
+                    if (initChoiceSets[i]) {
+                        selectItemList.add(items[i]);
+                    }
+                }
+
                 // 设置默认选中的选项，全为false默认均未选中
                 setIcon(img);
                 setTitle(title);
@@ -16699,7 +16816,7 @@ public class GT {
              * @param onProgressBarListener 监听进度接口
              * @return
              */
-            public ProgressDialog progressBarDialog(int img, String title, String messgae, int maxValue, int progress, int loadingSpeed, boolean isCancelable, OnProgressBarListener onProgressBarListener) {
+            public ProgressDialog progressBarDialog(int img, String title, String messgae, int maxValue, int progress, boolean isCancelable, OnProgressBarListener onProgressBarListener) {
                 ProgressDialog progressDialog = new ProgressDialog(getContext());
                 progressDialog.setIcon(img);
                 progressDialog.setTitle(title);
@@ -16721,7 +16838,7 @@ public class GT {
                             if (progressDialog.getProgress() != progress && !isStart) {
                                 startTime = System.currentTimeMillis();
                                 isStart = true;
-                                onProgressBarListener.startLoad(progressDialog.getProgress(), progressDialog.getMax(), loadingSpeed);
+                                onProgressBarListener.startLoad(progressDialog.getProgress(), progressDialog.getMax());
                             }
                             //加载中
                             if (isStart && record != progressDialog.getProgress()) {
@@ -16734,7 +16851,7 @@ public class GT {
                                 onProgressBarListener.closeLoad(endTime - startTime);
                                 break;
                             }
-                            Thread.sleep(loadingSpeed);
+                            Thread.sleep(100);
                         }
 
                     }
@@ -16755,7 +16872,7 @@ public class GT {
                  * @param maxValue     目标最大值
                  * @param loadingSpeed 加载速度
                  */
-                void startLoad(int progress, int maxValue, int loadingSpeed);
+                void startLoad(int progress, int maxValue);
 
                 /**
                  * 加载中
@@ -17389,6 +17506,22 @@ public class GT {
                 }
             }
 
+            //是否解决EditText bug
+            private boolean isSolveEditTextBug = true;
+
+            public boolean isSolveEditTextBug() {
+                return isSolveEditTextBug;
+            }
+
+            /**
+             * 设置是否解决EditText bug
+             *
+             * @param solveEditTextBug
+             */
+            public void setSolveEditTextBug(boolean solveEditTextBug) {
+                isSolveEditTextBug = solveEditTextBug;
+            }
+
             @Override
             public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
                 super.onViewCreated(view, savedInstanceState);
@@ -17407,15 +17540,17 @@ public class GT {
                 });
                 this.gt_fragment = GT_Fragment.gt_fragment;
 
-                //给EditText 组件设置返回事件
-                GT.Thread.runJava(new Runnable() {
-                    @Override
-                    public void run() {
-                        setViewBackListener(view);
-                        setEditTextRequestFocus(view);
-                    }
-                });
-
+                //是否解决 EditText bug
+                if (isSolveEditTextBug) {
+                    //给EditText 组件设置返回事件
+                    GT.Thread.runJava(new Runnable() {
+                        @Override
+                        public void run() {
+                            setViewBackListener(view);
+                            setEditTextRequestFocus(view);
+                        }
+                    });
+                }
             }
 
 
@@ -17430,16 +17565,21 @@ public class GT {
 
                 //如果是Edit类型的那就监听返回事件
                 if (viewLayout instanceof EditText) {
-
-                    GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
-                        @Override
-                        public boolean onKey(View v, int keyCode, KeyEvent event) {
-                            if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
-                                return onBackPressed();// 回调按下返回键
+                    if (activity != null)
+                        GT.Thread.runAndroid(activity, new Runnable() {
+                            @Override
+                            public void run() {
+                                GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
+                                    @Override
+                                    public boolean onKey(View v, int keyCode, KeyEvent event) {
+                                        if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
+                                            return onBackPressed();// 回调按下返回键
+                                        }
+                                        return false;
+                                    }
+                                });
                             }
-                            return false;
-                        }
-                    });
+                        });
                     return;
                 } else if (viewLayout instanceof ViewGroup) {
 
@@ -17470,7 +17610,14 @@ public class GT {
                 ViewGroup viewGroup = null;
                 //如果是Edit类型的那就监听返回事件
                 if (viewLayout instanceof EditText) {
-                    viewLayout.requestFocus();
+                    if (activity != null) {
+                        GT.Thread.runAndroid(activity, new Runnable() {
+                            @Override
+                            public void run() {
+                                viewLayout.requestFocus();
+                            }
+                        });
+                    }
                     return true;
                 } else if (viewLayout instanceof ViewGroup) {
                     try {
