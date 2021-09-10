@@ -240,11 +240,11 @@ import okhttp3.Response;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.9.7
+ * 更新时间:2021.9.10
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * <p>更新内容：（1.3.1.1 版本）
+ * <p>更新内容：（1.3.1.2 版本）
  * <p>内容如下：
  * <p>1.优化了 log显示
  * <p>2.增加了国际化工具包
@@ -252,7 +252,8 @@ import okhttp3.Response;
  * <p>4.新增 Permission 权限动态申请框架
  * <p>5.新增无障碍服务基类， AccessibilityServiceBase 使用起来非常简单
  * <p>6.新增 GT_View 专门用来解决局部View特别复杂时会让 Avtibity 或 Fragment 变复杂的问题
- * 7.
+ * <p>7.回调增加 非常用的注解绑定方法
+ * <p>8.权限申请类适配可以Fragment中直接使用
  * <p>
  * <p>
  * <p>
@@ -324,6 +325,17 @@ public class GT {
             activity = getActivity();
         }
         AnnotationAssist.initAll(obj); //初始化 IOC 注解
+    }
+
+    /**
+     * 给与非常用的类型进行组件绑定
+     *
+     * @param obj
+     * @param view
+     */
+    public static void build(Object obj, View view) {
+        AnnotationAssist.initView(obj, view);
+        AnnotationAssist.initClick(obj, view);
     }
 
     /**
@@ -1130,12 +1142,12 @@ public class GT {
      * @param content
      * @标准Toast
      */
-    public static void toast(Object content) {
+    public static void toast(Object message) {
         if (getActivity() != null) {
             if (toast == null) {
-                toast = Toast.makeText(getActivity(), content.toString(), Toast.LENGTH_SHORT);
+                toast = Toast.makeText(getActivity(), message.toString(), Toast.LENGTH_SHORT);
             } else {
-                toast.setText(content.toString());
+                toast.setText(message.toString());
             }
             toast.show();
         } else {
@@ -1334,11 +1346,11 @@ public class GT {
         }
 
         /**
-         * 关闭广播
+         * 注销广播
          *
          * @param broadcastName 要关闭广播的名字
          */
-        public static void close(Object broadcastName) {
+        public static void unregisterReceiver(Object broadcastName) {
             Context context = getActivity();
             if (context != null && broadcastName != null) {
                 //判断是否为class
@@ -12592,28 +12604,48 @@ public class GT {
             }
             fragmentManager = context.getSupportFragmentManager();
             fragment = (PermissionFragment) context.getSupportFragmentManager().findFragmentByTag(TAG_EACH_PERMISSION);
-
             return Permission;
         }
 
         public Permission permissions(String[] permission, OnPermissionListener onPermissionListener) {
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
 
-            if (permissionDescription != null) {
-                permissionDescription.invalidClose();
-            }
+                    GT.Thread.runAndroid(new Runnable() {
+                        @Override
+                        public void run() {
 
-            permissionDescription = new Permission.PermissionDescription();
+                            if (permissionDescription != null) {
+                                permissionDescription.invalidClose();
+                            }
 
-            if (fragment == null) {
-                fragment = PermissionFragment.newInstance(permission, onPermissionListener, Permission, permissionDescription);
-            }
-            if (fragmentManager != null) {
-                fragmentManager
-                        .beginTransaction()
-                        .add(fragment, TAG_PERMISSION)
-                        .commitAllowingStateLoss();
-                fragmentManager.executePendingTransactions();
-            }
+                            permissionDescription = new Permission.PermissionDescription();
+
+                            if (fragment == null) {
+                                fragment = PermissionFragment.newInstance(permission, onPermissionListener, Permission, permissionDescription);
+                            }
+
+                            if (fragmentManager != null) {
+                                fragmentManager
+                                        .beginTransaction()
+                                        .add(fragment, TAG_PERMISSION)
+                                        .commitAllowingStateLoss();
+                                try {
+                                    fragmentManager.executePendingTransactions();
+                                } catch (IllegalStateException e) {
+                                    GT.log("进入异常:" + e);
+//                    fragment.getChildFragmentManager().executePendingTransactions();
+                                }
+                            }
+
+                        }
+                    });
+
+                }
+            });
+
+
             return Permission;
         }
 
@@ -16652,8 +16684,11 @@ public class GT {
              * @param onClickListener 单击事件
              * @return 返回对话框操作对象
              */
-            public AlertDialog.Builder dialogButton(int img, String title, String message, String btnName, DialogInterface.OnClickListener onClickListener) {
-                setTitle(title).setIcon(img).setMessage(message);   //设置 标题、图标、消息
+            public AlertDialog.Builder dialogButton(int img, String title, String message, boolean isCancelable, String btnName, DialogInterface.OnClickListener onClickListener) {
+                setTitle(title);
+                setIcon(img);
+                setMessage(message);   //设置 标题、图标、消息
+                setCancelable(isCancelable);
                 if (btnName != null && onClickListener != null) {
                     setNegativeButton(btnName, onClickListener);//设置单击事件
                 }
@@ -21076,8 +21111,8 @@ public class GT {
 
         }
 
-
         //================================   下面是 通用 的注解内容   ==========================
+
 
         private static void initView(Object obj) {
             if (obj == null) return;
@@ -21121,6 +21156,65 @@ public class GT {
                 }
             }
         }
+
+        /**
+         * 注入控件
+         *
+         * @param object
+         * @param mClass
+         * @param view
+         */
+        private static void initView(Object object, View view) {
+            Field[] fields = object.getClass().getDeclaredFields();//获致所有成员变更
+            for (Field field : fields) {
+                Annotations.GT_View initView = field.getAnnotation(Annotations.GT_View.class);
+                if (initView != null) {
+                    int viewId = initView.value();
+                    try {
+                        View viewById = view.findViewById(viewId);
+                        field.setAccessible(true);
+                        field.set(object, viewById);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+
+        /**
+         * 注入点击事件
+         */
+        private static void initClick(Object object, View view) {
+            Method[] methods = object.getClass().getMethods();//获取所有声明为公有的方法
+            for (Method method : methods) {//遍历所有公有方法
+                Annotation[] annotations = method.getAnnotations();//获取该公有方法的所有注解
+                for (Annotation annotation : annotations) {//遍历所有注解
+                    Class<? extends Annotation> annotationType = annotation.annotationType();//获取具体的注解类
+                    Annotations.OnClickEvent onClickEvent = annotationType.getAnnotation(Annotations.OnClickEvent.class);//取出注解的onClickEvent注解
+                    if (onClickEvent != null) {//如果不为空
+                        try {
+                            Method valueMethod = annotationType.getDeclaredMethod("value");//获取注解InjectOnClick的value方法
+                            int[] viewIds = (int[]) valueMethod.invoke(annotation, (Object[]) null);//获取控件值
+                            Class<?> listenerType = onClickEvent.listenerType();//获取接口类型
+                            String listenerSetter = onClickEvent.listenerSetter();//获取set方法
+                            String methodName = onClickEvent.methodName();//获取接口需要实现的方法
+                            MyInvocationHandler handler = new MyInvocationHandler(object);//自己实现的代码，负责调用
+                            handler.setMethodMap(methodName, method);//设置方法及设置方法
+                            Object object2 = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[]{listenerType}, handler);//创建动态代理对象类
+                            for (int viewId : viewIds) {//遍历要设置监听的控件
+                                View view2 = view.findViewById(viewId);//获取该控件
+                                Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                m.invoke(view2, object2);//调用方法
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        }
+
 
         /**
          * 注入点击事件
