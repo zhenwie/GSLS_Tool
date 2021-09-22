@@ -161,6 +161,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintStream;
 import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -179,6 +180,7 @@ import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.ProtocolException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -240,11 +242,11 @@ import okhttp3.Response;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.9.10
+ * 更新时间:2021.9.22
  * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
  * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
  * <p> GitHub https://github.com/1079374315/GT
- * <p>更新内容：（1.3.1.2 版本）
+ * <p>更新内容：（1.3.1.3 版本）
  * <p>内容如下：
  * <p>1.优化了 log显示
  * <p>2.增加了国际化工具包
@@ -254,6 +256,10 @@ import okhttp3.Response;
  * <p>6.新增 GT_View 专门用来解决局部View特别复杂时会让 Avtibity 或 Fragment 变复杂的问题
  * <p>7.回调增加 非常用的注解绑定方法
  * <p>8.权限申请类适配可以Fragment中直接使用
+ * <p>9.优化了 GT_SharedPreferences 类的查询方法，支持指定返回数据类型
+ * <p>10.优化了 getHtmlData 获取网页代码的接口
+ * <p>
+ * <p>
  * <p>
  * <p>
  * <p>
@@ -1531,24 +1537,6 @@ public class GT {
         }   //获取 SharedPreferences.Editor
 
         private boolean commit = false;             //定义是否自动提交
-        public static final int PRIVATE = 0;        //只有本应用可读写
-        public static final int PROTECTED = 1;      //其他应用可以只读
-        public static final int PUBLIC = 2;         //其他应用可以读写
-
-        /**
-         * 初始化 SP
-         *
-         * @param context     上下文
-         * @param SPName      存储的名字
-         * @param permissions 存储可读取的权限
-         * @param commit      是否自动提交
-         */
-        public GT_SharedPreferences(Context context, String sPName, int permissions, boolean commit) {
-            this.context = context;
-            this.commit = commit;
-            sp = context.getSharedPreferences(sPName, permissions);//打开 或 创建 SharedPreferences
-            sp_e = sp.edit();//让userData处于编辑状态
-        }
 
         /**
          * 初始化 SP
@@ -1561,7 +1549,7 @@ public class GT {
         public GT_SharedPreferences(Context context, String sPName, boolean commit) {
             this.context = context;
             this.commit = commit;
-            sp = context.getSharedPreferences(sPName, PRIVATE);//打开 或 创建 SharedPreferences
+            sp = context.getSharedPreferences(sPName, 0);//打开 或 创建 SharedPreferences
             sp_e = sp.edit();//让userData处于编辑状态
         }
 
@@ -1630,6 +1618,7 @@ public class GT {
             return this;
         }
 
+
         /**
          * 查询数据
          *
@@ -1687,6 +1676,38 @@ public class GT {
                 }
             }
             return obj;
+        }
+
+
+        public <T> T query(Class<T> dataType, String key) {
+            Object obj = null;
+            if (dataType == Integer.class) {
+                obj = sp.getInt(key, 0);
+            } else if (dataType == String.class) {
+                obj = sp.getString(key, null);
+            } else if (dataType == Long.class) {
+                obj = sp.getLong(key, 0);
+            } else if (dataType == Float.class) {
+                obj = sp.getFloat(key, 0);
+            } else if (dataType == Boolean.class) {
+                obj = sp.getBoolean(key, false);
+            } else if (dataType == Set.class) {
+                obj = sp.getStringSet(key, null);
+            } else {// Bean
+                String str_class = sp.getString(key + "_class", null);     //获取对象 class 数据
+                String str = sp.getString(key, null);                          //获取对象 Json  数据
+                if (str_class == null) {      //如果 class 数据为空
+                    obj = str;              //普通的 Json 数据
+                } else {
+                    Object object_class = getObj(str_class);    //通过对象的 class 反射出 实例对象
+                    try {
+                        obj = JSON.fromJson(str, object_class.getClass());     //通过 JSON 与 实例对象 获取相应的 Object 对象
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            return (T) obj;
         }
 
         /**
@@ -8960,39 +8981,115 @@ public class GT {
      * WebWiew 工具类
      */
     public static class WebViewUtils {
-
         /**
          * 前提网络权限
          * <uses-permission android:name="android.permission.INTERNET"/>
          */
 
+        private static long webSize = -1;
+
         /**
-         * 将网页上的 JSON 数据取下来(需要放在子线程运行)
+         * 获取网页代码
          *
-         * @param urlApi 请求 Api 接口的网址
-         * @return 返回纯 JSON 字符串
+         * @param htmlUrl               网页地址
+         * @param htmlSize              网页大小(可以直接获取 onGetClose 上获取到确切值)
+         * @param onGetHtmlCodeListener 对应接口
          */
-        public static String getHtmlData(String urlApi) throws Exception {
-            if (urlApi == null) return "The currently given HtmlURL is empty";
-            URL url = new URL(urlApi);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(5 * 1000);
-            InputStream inStream = conn.getInputStream();//通过输入流获取html数据
-            byte[] data = readInputStream(inStream);//得到html的二进制数据
-            String html = new String(data, "UTF-8");
-            return html;
+        public static void getHtmlData(String htmlUrl, int htmlSize, OnGetHtmlCodeListener onGetHtmlCodeListener) {
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (htmlUrl == null || onGetHtmlCodeListener == null) {
+                        onGetHtmlCodeListener.onGetError(htmlUrl, "The parameter cannot be empty");
+                        return;
+                    }
+                    HttpURLConnection conn = null;
+                    String html = null;
+                    try {
+                        conn = (HttpURLConnection) new URL(htmlUrl).openConnection();
+                    } catch (IOException e) {
+//            e.printStackTrace();
+                        onGetHtmlCodeListener.onGetError(htmlUrl, e);
+                    }
+                    try {
+                        conn.setRequestMethod("GET");
+                    } catch (ProtocolException e) {
+//            e.printStackTrace();
+                        onGetHtmlCodeListener.onGetError(htmlUrl, e);
+                    }
+                    conn.setConnectTimeout(5 * 1000);
+                    InputStream inStream = null;//通过输入流获取html数据
+                    try {
+                        inStream = conn.getInputStream();
+                    } catch (IOException e) {
+//            e.printStackTrace();
+                        onGetHtmlCodeListener.onGetError(htmlUrl, e);
+
+                    }
+                    onGetHtmlCodeListener.onGetStart(htmlUrl);
+                    byte[] data = new byte[0];//得到html的二进制数据
+                    webSize = -1;
+                    try {
+                        data = readInputStream(inStream, htmlSize, onGetHtmlCodeListener);
+                    } catch (Exception e) {
+//            e.printStackTrace();
+                        onGetHtmlCodeListener.onGetError(htmlUrl, e);
+                        return;
+                    }
+
+                    try {
+                        html = new String(data, "UTF-8");
+                    } catch (UnsupportedEncodingException e) {
+//            e.printStackTrace();
+                        onGetHtmlCodeListener.onGetError(htmlUrl, e);
+                        return;
+                    }
+                    onGetHtmlCodeListener.onGetClose(htmlUrl, html, webSize);
+                }
+            });
+
         }
 
-        private static byte[] readInputStream(InputStream inStream) throws Exception {
+        private static byte[] readInputStream(InputStream inStream, int webSize2, OnGetHtmlCodeListener onGetHtmlCodeListener) throws Exception {
             ByteArrayOutputStream outStream = new ByteArrayOutputStream();
-            byte[] buffer = new byte[1024];
+            int sumLen = 0;
             int len = 0;
-            while ((len = inStream.read(buffer)) != -1) {
+            byte[] buffer = new byte[1024];
+            while (true) {
+                len = inStream.read(buffer);
+                sumLen += len;
+                int mProgress = (int) (((float) sumLen / webSize2) * 100);
+                if (len < 0) break;
+                onGetHtmlCodeListener.onGetProgress(mProgress);
                 outStream.write(buffer, 0, len);
             }
             inStream.close();
+            webSize = sumLen;
             return outStream.toByteArray();
+        }
+
+        public interface OnGetHtmlCodeListener {
+
+            /**
+             * @加载开始
+             */
+            void onGetStart(String url);
+
+            /**
+             * @加载中
+             */
+            void onGetProgress(int progress);
+
+            /**
+             * @加载结束
+             */
+            void onGetClose(String url, String htmlCode, long htmlSize);
+
+            /**
+             * @加载错误
+             */
+            void onGetError(String url, Object errorMessage);
+
         }
 
 
@@ -11824,24 +11921,26 @@ public class GT {
              * <external-path path="." name="external_storage_root" />
              * </paths>
              */
+            /**
+             * @param activity
+             * @param apkPath  相对APP的详细位置包括：路径与xxx.apk
+             */
             public static void installNewApk(Activity activity, String apkPath) {
-                String url = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + apkPath;
                 Uri uri;
                 Intent intent = new Intent(Intent.ACTION_VIEW);
 
                 //支持7.0
                 if (Build.VERSION.SDK_INT >= 24) {
-                    uri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", new File(url));
+                    uri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", new File(apkPath));
                 } else {
-                    uri = Uri.fromFile(new File(url));
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    uri = Uri.fromFile(new File(apkPath));
                 }
-
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                } else {
                 }
-
                 intent.setDataAndType(uri, "application/vnd.android.package-archive"); // 对应apk类型
-
                 activity.getApplication().startActivity(intent);
             }
 
@@ -19694,7 +19793,6 @@ public class GT {
 
     }
 
-
 //============================================= 多媒体类 ========================================
 
     /**
@@ -22090,7 +22188,6 @@ public class GT {
         }
 
     }
-
 
 //========================================== 线程 ==============================================
 
