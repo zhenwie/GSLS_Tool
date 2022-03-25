@@ -32,6 +32,8 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
+
+
 }
 
 dependencies {
@@ -48,8 +50,8 @@ dependencies {
     //注册本地库 gt-DataBinding
 
     //注册 gt-DataBinding
-    annotationProcessor project(':gt-DataBinding')
-    implementation project(':gt-DataBinding')
+//    annotationProcessor project(':gt-DataBinding')
+//    implementation project(':gt-DataBinding')
 
 
 }
