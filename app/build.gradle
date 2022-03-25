@@ -49,7 +49,7 @@ dependencies {
     implementation project(':gt')//依赖GT库
     //注册本地库 gt-DataBinding
 
-    //注册 gt-DataBinding
+    //注册 gt-DataBinding TODO 在发布的时候需要注释掉，因为 gt库已经依赖，所以再次依赖会重复无法 发布成功
 //    annotationProcessor project(':gt-DataBinding')
 //    implementation project(':gt-DataBinding')
 
