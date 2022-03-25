@@ -1,5 +1,20 @@
-apply plugin: 'com.android.library'
-apply plugin: 'maven'
+plugins {
+    id 'com.android.library'
+    id 'maven-publish'
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.gsls'
+                artifactId = 'gt'
+                version = '1.0-dev02'
+            }
+        }
+    }
+}
 
 android {
     compileSdkVersion 30
