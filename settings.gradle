@@ -1,1 +1,1 @@
-include ':app', ':gt'
+include ':app', ':gt', ':gt-DataBinding'

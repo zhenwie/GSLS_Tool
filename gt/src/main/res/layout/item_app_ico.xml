@@ -10,7 +10,7 @@
         android:id="@+id/iv_icon"
         android:layout_width="32dp"
         android:layout_height="32dp"
-        android:src="@drawable/ic_launcher_background"
+        android:src="@drawable/bg_black"
         />
 
     <view class="com.gsls.gt.GT$ViewUtils$MarqueeTextView"

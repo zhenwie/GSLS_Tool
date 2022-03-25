@@ -1,4 +1,4 @@
-package com.gsls.gtlibrary.util;
+package com.gsls.gt_toolkit;
 
 public class LogBean {
     private String value;

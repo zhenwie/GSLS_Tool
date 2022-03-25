@@ -46,10 +46,14 @@
         app:layout_constraintTop_toTopOf="@+id/sv" />
 
     <!-- 状态栏 -->
-    <include layout="@layout/floating_item_top_status_bar" />
+    <include
+        android:id="@+id/status_bar"
+        layout="@layout/floating_item_top_status_bar" />
 
     <!-- 下面返回键 -->
-    <include layout="@layout/floating_item_below_btn" />
+    <include
+        android:id="@+id/below_btn"
+        layout="@layout/floating_item_below_btn" />
 
     <!-- 全屏状态时才会显示出来 -->
     <ImageView
@@ -75,9 +79,13 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- 展开的状态栏 -->
-    <include layout="@layout/floating_item_status_bar" />
+    <include
+        android:id="@+id/status_bar"
+        layout="@layout/floating_item_status_bar" />
 
     <!-- 关机或开机动画 -->
-    <include layout="@layout/floating_item_shutdown" />
+    <include
+        android:id="@+id/shutdown"
+        layout="@layout/floating_item_shutdown" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

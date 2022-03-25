@@ -3,27 +3,25 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.gsls.gt">
 
-    <!-- 悬浮窗 -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
-    <!-- 网络权限 -->
-    <uses-permission android:name="android.permission.INTERNET" />
-
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" /><!-- 读取手机权限 -->
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--&lt;!&ndash; U盘操作 &ndash;&gt;
+     <uses-permission
+         android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"
+         tools:ignore="ProtectedPermissions" /> &lt;!&ndash; 悬浮窗 &ndash;&gt;
+     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" /> &lt;!&ndash; 网络权限 &ndash;&gt;
+     <uses-permission android:name="android.permission.INTERNET" />
+     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+     <uses-permission android:name="android.permission.READ_PHONE_STATE" /> &lt;!&ndash; 读取手机权限 &ndash;&gt;
+     <uses-permission android:name="android.permission.READ_CONTACTS" />
+     <uses-permission android:name="android.permission.WAKE_LOCK" />
+     <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+     <uses-permission android:name="android.permission.SEND_SMS" />
+     <uses-permission android:name="android.permission.RECEIVE_SMS" />
+     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+     <uses-permission android:name="android.permission.ACCESS_LOCATION_EXTRA_COMMANDS" />
+     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />-->
 
     <application
         android:allowBackup="true"
@@ -32,8 +30,13 @@
         android:supportsRtl="true"
         tools:ignore="GoogleAppIndexingWarning,UnusedAttribute">
 
+        <!-- 注册GT悬浮窗 -->
+        <service
+            android:name="com.gsls.gt_toolkit.GT_Toolkit"
+            android:exported="true" />
+
         <!-- 自动安装APK -->
-        <provider
+       <!-- <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.gsls.gt.fileprovider"
             android:exported="false"
@@ -41,7 +44,7 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
-        </provider>
+        </provider>-->
 
     </application>
 

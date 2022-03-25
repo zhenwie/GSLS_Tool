@@ -23,6 +23,7 @@ import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -57,6 +58,8 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
@@ -77,8 +80,10 @@ import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.telephony.TelephonyManager;
+import android.text.Editable;
 import android.text.Html;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.util.AttributeSet;
 import android.util.Base64;
 import android.util.DisplayMetrics;
@@ -92,6 +97,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -113,6 +119,7 @@ import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -135,7 +142,14 @@ import androidx.fragment.app.FragmentTransaction;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.blankj.utilcode.util.ToastUtils;
 import com.friendlyarm.AndroidSDK.HardwareInit;
+import com.github.mjdev.libaums.UsbMassStorageDevice;
+import com.github.mjdev.libaums.fs.FileSystem;
+import com.github.mjdev.libaums.fs.UsbFile;
+import com.github.mjdev.libaums.fs.UsbFileInputStream;
+import com.github.mjdev.libaums.fs.UsbFileOutputStream;
+import com.github.mjdev.libaums.partition.Partition;
 import com.lzy.okgo.callback.StringCallback;
 
 import org.json.JSONArray;
@@ -242,25 +256,28 @@ import okhttp3.Response;
  * GSLS_Tool
  * <p>
  * <p>
- * 更新时间:2021.9.22
- * <p> CSDN 详细教程:https://blog.csdn.net/qq_39799899/article/details/102490617
- * <p> CSDN 博客:https://blog.csdn.net/qq_39799899
- * <p> GitHub https://github.com/1079374315/GT
- * <p>更新内容：（1.3.1.3 版本）
- * <p>内容如下：
- * <p>1.优化了 log显示
- * <p>2.增加了国际化工具包
- * <p>3.更新了简易对话框
- * <p>4.新增 Permission 权限动态申请框架
- * <p>5.新增无障碍服务基类， AccessibilityServiceBase 使用起来非常简单
- * <p>6.新增 GT_View 专门用来解决局部View特别复杂时会让 Avtibity 或 Fragment 变复杂的问题
- * <p>7.回调增加 非常用的注解绑定方法
- * <p>8.权限申请类适配可以Fragment中直接使用
- * <p>9.优化了 GT_SharedPreferences 类的查询方法，支持指定返回数据类型
- * <p>10.优化了 getHtmlData 获取网页代码的接口
  * <p>
- * <p>
- * <p>
+ * 更新时间:2021.3.25
+ * CSDN 博客/官网教程:https://blog.csdn.net/qq_39799899
+ * GitHub https://github.com/1079374315/GT
+ * 更新内容：（1.3.6.6 版本 大爆料：新增 MVC、MVP、MVVM 辅助框架）
+ * 内容如下：
+ * 1.新增 GT_PopupWindow 类
+ * 2.LOG 类新增 GT.logt("标记日志"); GT.errt("标记日志");
+ * 3.优化 时间与时间戳互转的方法 GT.GT_Date.timeToTimestampToTime(String timeOrTimestamp, String timeFormat)
+ * 4.新增 编程辅助框架 MVC/MVP/MVVM/GT/GT_Binding模式
+ * 5.增强 AnnotationAssist 反射、注解工具类,新增以下功能方法
+ * 1.获取类的泛类型
+ * 2.反射类中方法进行赋值
+ * 3.获取反射方法的返回值
+ * 4.获取反射变量的值(可私用变量)
+ * 5.利用反射给变量设置值(可私有变量)
+ * 6.反射该类所有的变量值 (可接受类型 class、String(类包名)、实体类)
+ * 7.字符串转Class
+ * 6.增强分享功能
+ * 7.优化所有的 DataBinding自动生成类 ，增强 GT_BindingViewModel 并支持 通过泛类映射实例化 ，增加了 适配器的 DataBinding
+ * 8.增加 WebViewUtils 类
+ * 9.
  * <p>
  * <p>
  * 小提示：(用于 AndroidStudio )
@@ -274,10 +291,10 @@ public class GT {
 
     //================================== 所有属于 GT 类的属性 =======================================
     private static GT gtAndroid = null;          //定义 GT 对象
-    private static Toast toast;                  //吐司缓冲
-    public static Context activity;              //设置 当前动态的 上下文对象
+    private static Toast toast;//弱引用 Toast
+    private static Context context;//弱引用 Context
+    private static FragmentActivity fragmentActivity;//弱引用 当前动态的 上下文对象
     //================================== 提供访问 GT 属性的接口======================================
-
 
     /**
      * 获取线程安全的 GT 单例对象
@@ -301,10 +318,20 @@ public class GT {
      * @return
      */
     public static Context getActivity() {
-        if (activity == null) {
-            activity = GT_Activity.getApplicationByReflect();
+        if (context == null) {
+            context = GT_Activity.getApplicationByReflect();
         }
-        return activity;
+        return context;
+    }
+
+    public static FragmentActivity getFragmentActivity() {
+        if (context == null) {
+            context = GT_Activity.getApplicationByReflect();
+        }
+        if (context != null && context instanceof FragmentActivity) {
+            fragmentActivity = (FragmentActivity) context;
+        }
+        return fragmentActivity;
     }
 
     /**
@@ -314,21 +341,9 @@ public class GT {
      * @Activity 为外部提供访问 GT Context 接口
      */
     public static void build(Object obj) {
-        if (obj instanceof Activity) {
-            activity = (Context) obj;
-        } else if (obj instanceof Fragment) {
-            Fragment fragment = (Fragment) obj;
-            activity = fragment.getContext();
-        } else if (obj instanceof View) {
-            View view = (View) obj;
-            activity = view.getContext();
-        } else if (obj instanceof GT_FloatingWindow.BaseFloatingWindow) {
-
-        } else {
-
-        }
-        if (activity == null) {
-            activity = getActivity();
+        context = (Context) AnnotationAssist.returnActivityOrView(obj)[0];
+        if (context == null) {
+            context = getActivity();
         }
         AnnotationAssist.initAll(obj); //初始化 IOC 注解
     }
@@ -340,9 +355,12 @@ public class GT {
      * @param view
      */
     public static void build(Object obj, View view) {
+        AnnotationAssist.initAll(obj);
         AnnotationAssist.initView(obj, view);
         AnnotationAssist.initClick(obj, view);
     }
+
+    //============================================= 静态调用方法 =====================================
 
     /**
      * @param number 提示报错文件是第几级
@@ -370,8 +388,6 @@ public class GT {
         StackTraceElement ste = new Throwable().getStackTrace()[1];//默认是当前报错层级
         return "提示的文件  " + ste.getFileName() + "  行号 " + ste.getLineNumber();
     }
-
-    //============================================= 调试功能 =========================================
 
     /**
      * 提示消息 Log
@@ -405,15 +421,32 @@ public class GT {
     }
 
     /**
+     * @param mg
+     * @标记日志
+     */
+    public static void logt(Object mg) {
+        if (LOG.LOG_TF) {
+            String prefix = "";
+            prefix = LOG.getPrefixT(LOG.lineInfoIndex);
+            LOG.setLogData(prefix + mg);
+            Log.i("GT_i", prefix + mg);
+            if (LOG.LOG_FILE_TF) {// 打印到sd卡
+                if (TextUtils.isEmpty(prefix)) {
+                    prefix = LOG.getPrefix(LOG.lineInfoIndex);
+                }
+                LOG.writeToSdCard(LOG.path, prefix, mg);
+            }
+        }
+    }
+
+    /**
      * 打印所有提示消息 Log
      *
      * @param msg object 类型的消息
      */
     public static void logAll(Object msg) {
         if (LOG.LOG_TF) {
-
             String strMsg = msg.toString();
-
             if (strMsg.length() > LOG.logMaxLength) {
                 while (true) {
                     String substring = strMsg.substring(0, LOG.logMaxLength);
@@ -464,6 +497,24 @@ public class GT {
         }
     }
 
+    /**
+     * @param mg
+     * @标记日志
+     */
+    public static void errt(Object mg) {
+        if (LOG.LOG_TF) {
+            String prefix = "";
+            prefix = LOG.getPrefixT(LOG.lineInfoIndex);
+            Log.e("GT_i", prefix + mg);
+            LOG.setLogData(prefix + mg);
+            if (LOG.LOG_FILE_TF) {// 打印到sd卡
+                if (TextUtils.isEmpty(prefix)) {
+                    prefix = LOG.getPrefix(LOG.lineInfoIndex);
+                }
+                LOG.writeToSdCard(LOG.path, prefix, mg);
+            }
+        }
+    }
 
     /**
      * 打印所有提示消息 Log
@@ -606,6 +657,358 @@ public class GT {
     }
 
     /**
+     * 单个消息框 Toast
+     *
+     * @param msg object 类型的消息
+     */
+    public static void toast_s(Object msg) {
+        if (TOAST.TOAST_TF) {
+            if (context != null && context != null) {
+                Toast.makeText(context, String.valueOf(msg), Toast.LENGTH_SHORT).show();
+            } else {
+                if (LOG.LOG_TF)//设置为默认输出日志
+                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
+            }
+
+        }
+    }
+
+    /**
+     * 单个 Toast
+     *
+     * @param msg  消息
+     * @param time 显示时间
+     */
+    public static void toast_time(Object msg, long time) {
+        if (TOAST.TOAST_TF) {
+            if (context != null && context != null) {
+                final Toast toast = Toast.makeText(context, String.valueOf(msg), Toast.LENGTH_LONG);
+                final Timer timer = new Timer();
+                timer.schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        toast.show();
+                    }
+                }, 0, 3000);
+                new Timer().schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        toast.cancel();
+                        timer.cancel();
+                    }
+                }, time);
+            } else {
+                if (LOG.LOG_TF)//设置为默认输出日志
+                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
+            }
+
+        }
+    }/**/
+
+    /**
+     * 可多个消息框 Toast
+     *
+     * @param context 上下文
+     * @param msg     object 类型的消息
+     */
+    public static void toast_s(Context context, Object msg) {
+        if (TOAST.TOAST_TF)
+            Toast.makeText(context, String.valueOf(msg), Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * 可多个消息框 Toast
+     *
+     * @param context 上下文
+     * @param msg     object 类型的消息
+     */
+    public static void toast_time(Context context, Object msg, int time) {
+        if (TOAST.TOAST_TF) {
+            final Toast toast = Toast.makeText(context, String.valueOf(msg), Toast.LENGTH_LONG);
+            final Timer timer = new Timer();
+            timer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    toast.show();
+                }
+            }, 0, 3000);
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    toast.cancel();
+                    timer.cancel();
+                }
+            }, time);
+
+        }
+    }
+
+    /**
+     * @param content
+     * @标准Toast
+     */
+    public static void toast(Object message) {
+        if (getActivity() != null) {
+            if (toast == null) {
+                toast = Toast.makeText(getActivity(), message.toString(), Toast.LENGTH_SHORT);
+            } else {
+                toast.setText(message.toString());
+            }
+            toast.show();
+        } else {
+            log(getLineInfo(1), "当前没有赋值 Context 无法显示 Toast ");
+        }
+
+    }
+
+    public static void toast(Context context, Object content) {
+        if (toast == null) {
+            toast = Toast.makeText(getActivity(), content.toString(), Toast.LENGTH_SHORT);
+        } else {
+            toast.setText(content.toString());
+        }
+        toast.show();
+    }
+
+    public static GT_Fragment getGT_Fragment() {
+        return GT_Fragment.gt_fragment;
+    }
+
+    /**
+     * @param dialogFragment
+     * @跳转其他的 DialogFragment
+     */
+    public static void startDialogFragment(DialogFragment dialogFragment) {
+        dialogFragment.show(getFragmentActivity().getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+    }
+
+    public static void startDialogFragment(Fragment fragment, DialogFragment dialogFragment) {
+        dialogFragment.setTargetFragment(fragment, 1);
+        dialogFragment.show(getFragmentActivity().getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+    }
+
+    /**
+     * @param dialogFragment
+     * @跳转其他的 DialogFragment
+     */
+    public static void startDialogFragment(DialogFragment dialogFragment, FragmentManager fragmentManager) {
+        dialogFragment.show(fragmentManager, dialogFragment.getClass().toString());// 弹出退出提示
+    }
+
+    /**
+     * @param dialogFragment
+     * @跳转其他的 DialogFragment
+     */
+    public static void startDialogFragment(Class<?> dialogFragmentClass, FragmentManager fragmentManager) {
+
+        DialogFragment fragment = null;
+
+        try {
+            fragment = (DialogFragment) dialogFragmentClass.newInstance();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        }
+
+        fragment.show(fragmentManager, fragment.getClass().toString());// 弹出退出提示
+    }
+
+    public static void startDialogFragment(Fragment fragment, FragmentManager supportFragmentManager, DialogFragment dialogFragment) {
+        dialogFragment.setTargetFragment(fragment, 1);
+        dialogFragment.show(supportFragmentManager, dialogFragment.getClass().toString());// 弹出退出提示
+    }
+
+    public static void startDialogFragment(Class<?> dialogFragmentClass) {
+
+        DialogFragment fragment = null;
+
+        try {
+            fragment = (DialogFragment) dialogFragmentClass.newInstance();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        }
+
+        fragment.show(getFragmentActivity().getSupportFragmentManager(), fragment.getClass().toString());// 弹出退出提示
+    }
+
+    public static void startDialogFragment(Fragment fragment, Class<?> dialogFragmentClass) {
+        DialogFragment dialogFragment = null;
+        try {
+            dialogFragment = (DialogFragment) dialogFragmentClass.newInstance();
+            dialogFragment.setTargetFragment(fragment, 1);
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        }
+
+        dialogFragment.show(getFragmentActivity().getSupportFragmentManager(), fragment.getClass().toString());// 弹出退出提示
+    }
+
+    /**
+     * @param toFragment
+     * @跳转 Fragment
+     */
+    public static void startFragment(Fragment toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startFragment(toFragment);
+        }
+    }
+
+    /**
+     * @param toFragment
+     * @跳转 Fragment
+     */
+    public static void startFragment(Class<?> toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startFragment(toFragment);
+        }
+    }
+
+    /**
+     * 跳转Fragment
+     *
+     * @param fragmentId
+     * @param toFragment
+     */
+    public static void startFragment(int fragmentId, Fragment toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+        }
+    }
+
+    /**
+     * 跳转Fragment
+     *
+     * @param fragmentId
+     * @param toFragment
+     */
+    public static void startFragment(int fragmentId, Class<?> toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+        }
+    }
+
+    /**
+     * 跳转Fragment
+     *
+     * @param toFragment 跳转的Fragment
+     * @param startMode  启动模式
+     */
+    public static void startFragment(Fragment toFragment, int startMode) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+        }
+    }
+
+    /**
+     * 跳转Fragment
+     *
+     * @param toFragment 跳转的Fragment
+     * @param startMode  启动模式
+     */
+    public static void startFragment(Class<?> toFragment, int startMode) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
+        }
+    }
+
+    /**
+     * 跳转Fragment
+     *
+     * @param fragmentId 跳转的容器
+     * @param toFragment 跳转的Fragment
+     * @param startMode  启动模式
+     */
+    public static void startFragment(int fragmentId, Fragment toFragment, int startMode) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+        }
+    }
+
+    /**
+     * 跳转Fragment
+     *
+     * @param fragmentId 跳转的容器
+     * @param toFragment 跳转的Fragment
+     * @param startMode  启动模式
+     */
+    public static void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
+        }
+    }
+
+    /**
+     * @param toFragment
+     * @跳转 Fragment
+     */
+    public static void startFragmentHome(Fragment toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+        }
+    }
+
+    /**
+     * @param toFragment
+     * @跳转 Fragment
+     */
+    public static void startFragmentHome(Class<?> toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startFragmentHome(toFragment);
+        }
+    }
+
+    /**
+     * 使用首页模式启动Fragment
+     *
+     * @param fragmentId
+     * @param toFragment
+     */
+    public static void startFragmentHome(int fragmentId, Fragment toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
+            GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+        }
+    }
+
+    /**
+     * 使用首页模式启动Fragment
+     *
+     * @param fragmentId
+     * @param toFragment
+     */
+    public static void startFragmentHome(int fragmentId, Class<?> toFragment) {
+        if (GT_Fragment.gt_fragment != null) {
+            GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
+            GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
+        }
+    }
+
+    /**
+     * 启动悬浮窗
+     *
+     * @param toFragment
+     */
+    public static void startFloatingWindow(Class<?> toFragment) {
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (!Settings.canDrawOverlays(getActivity())) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getActivity().getPackageName()));
+                getFragmentActivity().startActivityForResult(intent, 0);
+            } else {
+                getActivity().startService(new Intent(getActivity(), toFragment));
+            }
+        } else {
+            getActivity().startService(new Intent(getActivity(), toFragment));
+        }
+    }
+
+    //============================================= 日志功能 =========================================
+
+    /**
      * @用于打详细日志的 LOG 框架
      */
     public static class LOG {
@@ -734,8 +1137,24 @@ public class GT {
             }
             try {
                 StackTraceElement caller = java.lang.Thread.currentThread().getStackTrace()[number];// new Throwable().getStackTrace()[number];
-                prefix = "(" + caller.getFileName() + ":%d)[%s] %s(): ";//初始化
-                prefix = String.format(prefix, caller.getLineNumber(), caller.getClassName(), caller.getMethodName()); // 替换
+                prefix = "%s(" + caller.getFileName() + ":%d)" + " %s(): ";//初始化
+                String packName = caller.getClassName().substring(0, caller.getClassName().lastIndexOf(".") + 1);
+                prefix = String.format(prefix, packName, caller.getLineNumber(), caller.getMethodName()); // 替换
+            } catch (Exception e) {
+//                errs("获取日志层级出现错误e:" + e);
+                getPrefix(--number);
+            }
+            return prefix;
+        }
+
+        private static String getPrefixT(int number) {
+            if (number < 0) {
+                return "log Hierarchy error ";
+            }
+            try {
+                StackTraceElement caller = java.lang.Thread.currentThread().getStackTrace()[number];// new Throwable().getStackTrace()[number];
+                prefix = "(" + caller.getFileName() + ":%d): ";//初始化
+                prefix = String.format(prefix, caller.getLineNumber()); // 替换
             } catch (Exception e) {
 //                errs("获取日志层级出现错误e:" + e);
                 getPrefix(--number);
@@ -753,12 +1172,17 @@ public class GT {
          */
         private static SimpleDateFormat dfs = new SimpleDateFormat("HH:mm:ss.SSS", Locale.CHINESE);
 
+        /**
+         * 打本地日志
+         *
+         * @param path
+         * @param prefix
+         * @param msg
+         */
         public static void writeToSdCard(String path, String prefix, Object msg) {
-
             if (logFilePath != null && logFilePath.length() > 0) {
                 path = Environment.getExternalStorageDirectory().getPath() + "/" + logFilePath;
             }
-
             String time = dfs.format(new Date());
             File file = createPathFile(path);
             BufferedWriter out = null;
@@ -915,19 +1339,6 @@ public class GT {
         }
     }
 
-    /**
-     * 调试显示类
-     * 1.支持 Log 可视化
-     * 2.Fragment 栈的可视化
-     * 3.Hibernate 数据表的可视化
-     */
-    public static class DebugShow {
-
-        public static boolean isStartDebugShow = false;//默认不开起调试显示模式
-
-
-    }
-
     //============================================= 吐司类 =====================================
 
     /**
@@ -982,9 +1393,9 @@ public class GT {
              */
             public ToastView initLayout(int layout) {
                 if (TOAST.TOAST_TF) {
-                    if (getGT().activity != null) {
-                        view = LayoutInflater.from(getGT().activity).inflate(layout, null);
-                        toast = new Toast(getGT().activity);
+                    if (context != null && context != null) {
+                        view = LayoutInflater.from(context).inflate(layout, null);
+                        toast = new Toast(context);
                         toast.setView(view);
                     } else {
                         if (LOG.LOG_TF) {//设置为默认输出日志
@@ -1016,11 +1427,10 @@ public class GT {
              * @return
              */
             public ToastView initLayout(int layout, int Gravity) {
-
                 if (TOAST.TOAST_TF) {
-                    if (getGT().activity != null) {
-                        view = LayoutInflater.from(getGT().activity).inflate(layout, null);
-                        toast = new Toast(getGT().activity);
+                    if (context != null && context != null) {
+                        view = LayoutInflater.from(context).inflate(layout, null);
+                        toast = new Toast(context);
                         if (Gravity != 0)
                             toast.setGravity(Gravity, 0, 0);
                         toast.setView(view);
@@ -1055,120 +1465,6 @@ public class GT {
 
         }
 
-    }
-
-    /**
-     * 单个消息框 Toast
-     *
-     * @param msg object 类型的消息
-     */
-    public static void toast_s(Object msg) {
-        if (TOAST.TOAST_TF) {
-            if (getGT().activity != null) {
-                Toast.makeText(getGT().activity, String.valueOf(msg), Toast.LENGTH_SHORT).show();
-            } else {
-                if (LOG.LOG_TF)//设置为默认输出日志
-                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
-            }
-
-        }
-    }
-
-    /**
-     * 单个 Toast
-     *
-     * @param msg  消息
-     * @param time 显示时间
-     */
-    public static void toast_time(Object msg, long time) {
-        if (TOAST.TOAST_TF) {
-            if (getGT().activity != null) {
-                final Toast toast = Toast.makeText(getGT().activity, String.valueOf(msg), Toast.LENGTH_LONG);
-                final Timer timer = new Timer();
-                timer.schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        toast.show();
-                    }
-                }, 0, 3000);
-                new Timer().schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        toast.cancel();
-                        timer.cancel();
-                    }
-                }, time);
-            } else {
-                if (LOG.LOG_TF)//设置为默认输出日志
-                    err("GT_bug", "消息框错误日志：你没有为 Context 进行赋值 ，却引用了 Toast 导致该功能无法实现。解决措施 在调用 toast 代码之前添加：GT.getGT().setactivity(activity);");
-            }
-
-        }
-    }/**/
-
-    /**
-     * 可多个消息框 Toast
-     *
-     * @param context 上下文
-     * @param msg     object 类型的消息
-     */
-    public static void toast_s(Context context, Object msg) {
-        if (TOAST.TOAST_TF)
-            Toast.makeText(context, String.valueOf(msg), Toast.LENGTH_SHORT).show();
-    }
-
-    /**
-     * 可多个消息框 Toast
-     *
-     * @param context 上下文
-     * @param msg     object 类型的消息
-     */
-    public static void toast_time(Context context, Object msg, int time) {
-        if (TOAST.TOAST_TF) {
-            final Toast toast = Toast.makeText(context, String.valueOf(msg), Toast.LENGTH_LONG);
-            final Timer timer = new Timer();
-            timer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    toast.show();
-                }
-            }, 0, 3000);
-            new Timer().schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    toast.cancel();
-                    timer.cancel();
-                }
-            }, time);
-
-        }
-    }
-
-    /**
-     * @param content
-     * @标准Toast
-     */
-    public static void toast(Object message) {
-        if (getActivity() != null) {
-            if (toast == null) {
-                toast = Toast.makeText(getActivity(), message.toString(), Toast.LENGTH_SHORT);
-            } else {
-                toast.setText(message.toString());
-            }
-            toast.show();
-        } else {
-            log(getLineInfo(1), "当前没有赋值 Context 无法显示 Toast ");
-        }
-
-    }
-
-    public static void toast(Context context, Object content) {
-        if (toast == null) {
-            toast = Toast.makeText(context, content.toString(), Toast.LENGTH_SHORT);
-        } else {
-            toast.setText(content.toString());
-        }
-        toast.show();
     }
 
     //============================================= 数据类 =====================================
@@ -1512,7 +1808,6 @@ public class GT {
             boolean setISCommit() default true;     //默认自动提交
         }
 
-
         private Context context;
 
         public void commit() {
@@ -1618,7 +1913,6 @@ public class GT {
             return this;
         }
 
-
         /**
          * 查询数据
          *
@@ -1678,8 +1972,15 @@ public class GT {
             return obj;
         }
 
-
-        public <T> T query(Class<T> dataType, String key) {
+        /**
+         * 可返回指定类型
+         *
+         * @param key
+         * @param dataType
+         * @param <T>
+         * @return
+         */
+        public <T> T query(String key, Class<T> dataType) {
             Object obj = null;
             if (dataType == Integer.class) {
                 obj = sp.getInt(key, 0);
@@ -1903,8 +2204,23 @@ public class GT {
          * @param filePathAddFileName
          * @return
          */
-        public static boolean fileExist(String filePathAddFileName) {
-            return new File(filePathAddFileName).exists();
+        public static boolean fileExist(String filePath) {
+            return new File(filePath).exists();
+        }
+
+        /**
+         * 该文件是否为文件夹
+         *
+         * @param filePath
+         * @return
+         */
+        public static boolean fileIsDirectory(String filePath) {
+            File file = new File(filePath);
+            boolean isFolder = false;
+            if (file.exists()) {
+                isFolder = file.isDirectory();
+            }
+            return isFolder;
         }
 
         /**
@@ -2045,7 +2361,7 @@ public class GT {
          * @return
          * @throws Exception
          */
-        private static long getFileSize(File file) throws Exception {
+        public static long getFileSize(File file) throws Exception {
             long size = 0;
             if (file.exists()) {
                 FileInputStream fis = null;
@@ -2063,7 +2379,7 @@ public class GT {
          * @param fileS
          * @return
          */
-        private static String formetFileSize(long fileS) {
+        public static String formetFileSize(long fileS) {
             DecimalFormat df = new DecimalFormat("#.00");
             String fileSizeString = "";
             String wrongSize = "0B";
@@ -2174,7 +2490,6 @@ public class GT {
             }
             return usbName;
         }
-
 
         /**
          * 获取USB信息
@@ -2383,9 +2698,507 @@ public class GT {
          *
          * @return
          */
-        public static String getAppDirectory() {
+        public static String getAppDirectory(Context context, boolean isNew) {
+            if (isNew) {
+                if (Build.VERSION.SDK_INT >= 26) {
+                    return ContextCompat.getExternalFilesDirs(context, Environment.DIRECTORY_DCIM)[0].getAbsolutePath();
+                } else {
+                    return Environment.getExternalStorageDirectory().toString();
+                }
+            }
             return Environment.getExternalStorageDirectory().toString();
         }
+
+
+        //自定义U盘读写权限
+        private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
+        private Context context;
+        private OnUSB_flashDiskListener onUSB_flashDiskListener;
+
+        public FileUtils(Context context) {
+            this.context = context;
+        }
+
+        /**
+         * U盘事件监听
+         *
+         * @param onUSB_flashDiskListener
+         */
+        public void onUSB_flashDiskListener(OnUSB_flashDiskListener onUSB_flashDiskListener) {
+            this.onUSB_flashDiskListener = onUSB_flashDiskListener;
+            IntentFilter usbDeviceStateFilter = new IntentFilter();
+            usbDeviceStateFilter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+            usbDeviceStateFilter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+            context.registerReceiver(mOtgReceiver, usbDeviceStateFilter);
+            //注册监听自定义广播
+            IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+            context.registerReceiver(mOtgReceiver, filter);
+        }
+
+        /**
+         * @description OTG广播，监听U盘的插入及拔出
+         * @author ldm
+         * @time 2017/9/1 17:20
+         * @param
+         */
+        private BroadcastReceiver mOtgReceiver = new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                switch (action) {
+                    case ACTION_USB_PERMISSION://接受到自定义广播
+                        UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                        //允许权限申请
+                        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                            if (usbDevice != null) {
+                                //用户已授权，可以进行读取操作
+                                UsbFile usbFile = readDevice(getUsbMass(usbDevice));//成功读取信息的
+                                onUSB_flashDiskListener.onPermissionObtainedSuccessfully(usbDevice, usbFile);
+                            } else {
+                                onUSB_flashDiskListener.onError("No USB flash drive is inserted");
+                            }
+                        } else {
+                            onUSB_flashDiskListener.onObtainingPermissionFailed(usbDevice);
+                        }
+                        break;
+                    case UsbManager.ACTION_USB_DEVICE_ATTACHED://接收到U盘设备插入广播
+                        UsbDevice device_add = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                        if (device_add != null) {
+                            //接收到U盘插入广播，尝试读取U盘设备数据
+                            onUSB_flashDiskListener.onReceiveInsertBroadcast(device_add);
+                            redUDiskDevsList();//很难读取到信息的
+                        }
+                        break;
+                    case UsbManager.ACTION_USB_DEVICE_DETACHED://接收到U盘设设备拔出广播
+                        onUSB_flashDiskListener.onReceivePullOutBroadcast();
+                        break;
+                }
+            }
+        };
+
+        /**
+         * @description U盘设备读取
+         * @author ldm
+         * @time 2017/9/1 17:20
+         */
+        private void redUDiskDevsList() {
+            //设备管理器
+            UsbManager usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+            //获取U盘存储设备
+            storageDevices = UsbMassStorageDevice.getMassStorageDevices(context);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, new Intent(ACTION_USB_PERMISSION), 0);
+            //一般手机只有1个OTG插口
+            for (UsbMassStorageDevice device : storageDevices) {
+                //读取设备是否有权限
+                if (device == null) continue;
+                if (usbManager.hasPermission(device.getUsbDevice())) {
+                    readDevice(device);
+                } else {
+                    //没有权限，进行申请
+                    usbManager.requestPermission(device.getUsbDevice(), pendingIntent);
+                }
+            }
+            if (storageDevices.length == 0) {
+                onUSB_flashDiskListener.onError("The usb flash drive is unavailable");
+            }
+        }
+
+        //当前处接U盘列表
+        private UsbMassStorageDevice[] storageDevices;
+
+        private UsbMassStorageDevice getUsbMass(UsbDevice usbDevice) {
+            for (UsbMassStorageDevice device : storageDevices) {
+                if (usbDevice.equals(device.getUsbDevice())) {
+                    return device;
+                }
+            }
+            return null;
+        }
+
+        //当前U盘所在文件目录
+
+        private UsbFile readDevice(UsbMassStorageDevice device) {
+            try {
+                device.init();//初始化
+                //设备分区
+                Partition partition = device.getPartitions().get(0);
+                //文件系统
+                FileSystem currentFs = partition.getFileSystem();
+                String volumeLabel = currentFs.getVolumeLabel();//可以获取到设备的标识
+                //通过FileSystem可以获取当前U盘的一些存储信息，包括剩余空间大小，容量等等
+                //U盘信息
+                USB_Bean usb_bean = new USB_Bean();
+                usb_bean.setCapacity(formetFileSize(currentFs.getCapacity()));
+                usb_bean.setHaveBeenUsed(formetFileSize(currentFs.getOccupiedSpace()));
+                usb_bean.setFreeSpace(formetFileSize(currentFs.getFreeSpace()));
+                usb_bean.setBlockSize(formetFileSize(currentFs.getChunkSize()));
+                usb_bean.setType(currentFs.getType());
+                onUSB_flashDiskListener.onU_DiskInformation(usb_bean);
+                return currentFs.getRootDirectory();//设置当前文件对象为根目录
+            } catch (Exception e) {
+                onUSB_flashDiskListener.onError(e.toString());
+            }
+            return null;
+        }
+
+        //USB 接口
+        public static interface OnUSB_flashDiskListener {
+            void onReceiveInsertBroadcast(UsbDevice device_add);//接收插入广播
+
+            void onPermissionObtainedSuccessfully(UsbDevice usbDevice, UsbFile usbFile);//获取权限成功
+
+            void onObtainingPermissionFailed(UsbDevice usbDevice);//获取权限失败
+
+            void onU_DiskInformation(USB_Bean usbBean);//U盘信息
+
+            void onError(String message);//U盘异常
+
+            void onReceivePullOutBroadcast();//接收拔出广播
+        }
+
+        //U盘的实体类信息
+        public class USB_Bean {
+
+            private String capacity;        //容量
+            private String haveBeenUsed;    //当前占用容量
+            private String freeSpace;       //空闲空间
+            private String blockSize;       //块大小
+            private int type;               //类型
+
+            public USB_Bean() {
+                super();
+            }
+
+            public USB_Bean(String capacity, String haveBeenUsed, String freeSpace, String blockSize, int type) {
+                this.capacity = capacity;
+                this.haveBeenUsed = haveBeenUsed;
+                this.freeSpace = freeSpace;
+                this.blockSize = blockSize;
+                this.type = type;
+            }
+
+            public String getCapacity() {
+                return capacity;
+            }
+
+            public void setCapacity(String capacity) {
+                this.capacity = capacity;
+            }
+
+            public String getHaveBeenUsed() {
+                return haveBeenUsed;
+            }
+
+            public void setHaveBeenUsed(String haveBeenUsed) {
+                this.haveBeenUsed = haveBeenUsed;
+            }
+
+            public String getFreeSpace() {
+                return freeSpace;
+            }
+
+            public void setFreeSpace(String freeSpace) {
+                this.freeSpace = freeSpace;
+            }
+
+            public String getBlockSize() {
+                return blockSize;
+            }
+
+            public void setBlockSize(String blockSize) {
+                this.blockSize = blockSize;
+            }
+
+            public int getType() {
+                return type;
+            }
+
+            public void setType(int type) {
+                this.type = type;
+            }
+
+            @Override
+            public String toString() {
+                return "USB_Bean{" +
+                        "capacity='" + capacity + '\'' +
+                        ", haveBeenUsed='" + haveBeenUsed + '\'' +
+                        ", freeSpace='" + freeSpace + '\'' +
+                        ", blockSize='" + blockSize + '\'' +
+                        ", type=" + type +
+                        '}';
+            }
+        }
+
+        /**
+         * 读取SD卡文件与写入USB中
+         *
+         * @param os
+         * @param is
+         * @param sdFile
+         * @param onUSBSaveListener
+         * @throws IOException
+         */
+        private static void redFileStream(OutputStream os, InputStream is, File sdFile, OnUSB_SaveListener onUSBSaveListener) throws IOException {
+            int length = (int) sdFile.length();
+            int count = 0;
+            byte[] buffer = new byte[1024];
+            while (true) {
+                int numread = is.read(buffer);
+                count += numread;
+                int mProgress = (int) (((float) count / length) * 100);
+                if (onUSBSaveListener != null)
+                    onUSBSaveListener.onInProgress(mProgress);
+                if (numread < 0) break;//下载完成
+                os.write(buffer, 0, numread);
+            }
+            os.flush();
+            os.close();
+            is.close();
+        }
+
+        /**
+         * 把本地文件写入到U盘中
+         *
+         * @param sdFile            SD卡中的文件
+         * @param usbFile           USB盘文件对象
+         * @param uDiskPath         USB文件路径(可写纯路径或路径+完整文件名)如：测试路径/AA/拷贝的数据.xls    测试路径/AA
+         * @param onUSBSaveListener 监听USB接口
+         * @return
+         */
+        public static boolean saveSDFile2OTG(final File sdFile, UsbFile usbFile, String uDiskPath, OnUSB_SaveListener onUSBSaveListener) {
+            UsbFile uFile;
+            FileInputStream fis;
+            try {
+                fis = new FileInputStream(sdFile);//读取选择的文件的
+                if (usbFile.isDirectory()) {//如果选择是个文件夹
+                    UsbFile[] usbFiles = usbFile.listFiles();
+                    if (usbFiles.length > 0) {
+                        for (UsbFile file : usbFiles) {
+                            if (file.getName().equals(sdFile.getName())) {
+                                file.delete();
+                            }
+                        }
+                    }
+
+                    //创建U盘中的文件夹
+                    FileBean fileBean = parseFilePath(uDiskPath);
+                    List<String> filePathList = fileBean.getFilePathList();
+                    if (filePathList != null) {
+                        for (String folder : filePathList)
+                            usbFile = usbFile.createDirectory(folder);
+                    }
+
+                    //设置文件名称
+                    String fileName = sdFile.getName();
+                    if (fileBean.fileName != null) {
+                        fileName = fileBean.fileName;
+                    }
+
+                    //开始创建U盘文件
+                    uFile = usbFile.createFile(fileName);
+                    UsbFileOutputStream uos = new UsbFileOutputStream(uFile);
+                    try {
+                        if (onUSBSaveListener != null)
+                            onUSBSaveListener.onStart();
+                        redFileStream(uos, fis, sdFile, onUSBSaveListener);
+                        if (onUSBSaveListener != null)
+                            onUSBSaveListener.onClose(true);
+                        return true;
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        if (onUSBSaveListener != null)
+                            onUSBSaveListener.onClose(false);
+                    }
+                }
+            } catch (final Exception e) {
+                e.printStackTrace();
+                if (onUSBSaveListener != null)
+                    onUSBSaveListener.onClose(false);
+                return false;
+            }
+            if (onUSBSaveListener != null)
+                onUSBSaveListener.onClose(false);
+            return false;
+        }
+
+        /**
+         * 解析路径
+         *
+         * @param uDiskPath
+         * @return
+         */
+        public static FileBean parseFilePath(String uDiskPath) {
+            FileBean fileBean = new FileBean();
+            List<String> list = null;
+            String[] filePaths = uDiskPath.split("/");
+            if (uDiskPath.contains(".")) {
+                // 指定了文件名
+                if (uDiskPath.contains("/")) {
+                    // 指定了路径
+                    list = new ArrayList<>();
+                    for (int i = 0; i < filePaths.length - 1; i++) {
+                        list.add(filePaths[i]);
+                    }
+                    fileBean.setFilePath(uDiskPath.substring(0, uDiskPath.lastIndexOf("/")));
+                    String fileName = uDiskPath.substring(uDiskPath.lastIndexOf("/") + 1, uDiskPath.length());
+                    fileBean.setFileName(fileName);
+                } else {
+                    // 未指定路径
+                    fileBean.setFileName(uDiskPath);
+                }
+            } else {
+                if (uDiskPath.contains("/")) {
+                    // 纯路径
+                    fileBean.setFilePath(uDiskPath.substring(0, uDiskPath.lastIndexOf("/")));
+                }
+
+            }
+            fileBean.setFilePathList(list);
+            return fileBean;
+
+        }
+
+        public static class FileBean {
+            private String fileName;// 文件名
+            private List<String> filePathList;// 文件路径
+            private String filePath;// 文件路径
+
+            public FileBean() {
+            }
+
+            public FileBean(String fileName, List<String> filePathList, String filePath) {
+                this.fileName = fileName;
+                this.filePathList = filePathList;
+                this.filePath = filePath;
+            }
+
+            public String getFileName() {
+                return fileName;
+            }
+
+            public void setFileName(String fileName) {
+                this.fileName = fileName;
+            }
+
+            public List<String> getFilePathList() {
+                return filePathList;
+            }
+
+            public void setFilePathList(List<String> filePathList) {
+                this.filePathList = filePathList;
+            }
+
+            public String getFilePath() {
+                return filePath;
+            }
+
+            public void setFilePath(String filePath) {
+                this.filePath = filePath;
+            }
+
+            @Override
+            public String toString() {
+                return "FileBean{" +
+                        "fileName='" + fileName + '\'' +
+                        ", filePathList=" + filePathList +
+                        ", filePath='" + filePath + '\'' +
+                        '}';
+            }
+        }
+
+        //USB 接口
+        public interface OnUSB_SaveListener {
+            void onStart();//任务开始
+
+            void onInProgress(int progress);//获取权限成功
+
+            void onClose(boolean copyState);//任务结束
+
+        }
+
+        /**
+         * 读取 USB设备列表
+         *
+         * @return USB设备列表
+         */
+        public UsbMassStorageDevice[] getDeviceList() {
+            UsbManager usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+            //获取存储设备
+            storageDevices = UsbMassStorageDevice.getMassStorageDevices(context);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, new Intent(ACTION_USB_PERMISSION), 0);
+            //可能有几个 一般只有一个 因为大部分手机只有1个otg插口
+            for (UsbMassStorageDevice device : storageDevices) {
+//            Log.e(TAG, device.getUsbDevice().getDeviceName());
+                //有就直接读取设备是否有权限
+                if (!usbManager.hasPermission(device.getUsbDevice())) {
+                    //没有权限请求权限
+                    usbManager.requestPermission(device.getUsbDevice(), pendingIntent);
+                }
+            }
+            return storageDevices;
+        }
+
+        /**
+         * 读取 USB 内文件夹下文件列表
+         *
+         * @param usbFolder usb文件夹
+         * @return 文件列表
+         */
+        public ArrayList<UsbFile> getUsbFolderFileList(UsbFile usbFolder) {
+            //更换当前目录
+            ArrayList<UsbFile> usbFiles = new ArrayList<>();
+            try {
+                Collections.addAll(usbFiles, usbFolder.listFiles());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return usbFiles;
+        }
+
+        /**
+         * 复制 USB文件到本地
+         *
+         * @param targetFile        需要复制的文件
+         * @param savePath          复制的目标文件路径
+         * @param onUSBSaveListener 下载进度回调
+         * @return 复制结果
+         */
+        public boolean saveUSbFileToLocal(UsbFile targetFile, String savePath, OnUSB_SaveListener onUSBSaveListener) {
+            boolean result;
+            try {
+                //开始写入
+                UsbFileInputStream uis = new UsbFileInputStream(targetFile);//读取选择的文件的
+                FileOutputStream fos = new FileOutputStream(savePath);
+                //这里uis.available一直为0
+//            int avi = uis.available();
+                long avi = targetFile.getLength();
+                int writeCount = 0;
+                int bytesRead;
+                byte[] buffer = new byte[1024];
+                if (onUSBSaveListener != null)
+                    onUSBSaveListener.onStart();
+                while ((bytesRead = uis.read(buffer)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
+                    writeCount += bytesRead;
+//                Log.e(TAG, "Progress : write : " + writeCount + " All : " + avi);
+                    //回调下载进度
+                    if (onUSBSaveListener != null)
+                        onUSBSaveListener.onInProgress((int) (writeCount * 100 / avi));
+                }
+                fos.flush();
+                uis.close();
+                fos.close();
+                result = true;
+                if (onUSBSaveListener != null)
+                    onUSBSaveListener.onClose(true);
+            } catch (Exception e) {
+                e.printStackTrace();
+                result = false;
+                if (onUSBSaveListener != null)
+                    onUSBSaveListener.onClose(false);
+            }
+            return result;
+        }
+
 
     }
 
@@ -2402,7 +3215,7 @@ public class GT {
             if (context != null) {
                 this.context = context;
             } else {
-                errs("当前并没有绑定 Activity 无法使用无参构造方法，请先使用 GT.getGT().build(this); 进行 Activity 绑定。");
+                errs("当前并没有绑定 Activity 无法使用无参构造方法，请先使用 GT.GT.build(this); 进行 Activity 绑定。");
             }
         }
 
@@ -2479,7 +3292,6 @@ public class GT {
 //            boolean setIsEncryption() default false;//默认不进行加密
         }
 
-
         //设置主键注解
         @Target({ElementType.FIELD})
         @Retention(RetentionPolicy.RUNTIME)
@@ -2494,7 +3306,6 @@ public class GT {
 
             double setMin() default Double.MIN_VALUE;   //设置最小值
         }
-
 
         //表字段特殊设置注解
         @Target({ElementType.FIELD})
@@ -2549,8 +3360,6 @@ public class GT {
         public static String SQL_CODE = "";
 
         //=============================== 无实体类完成数据库 ====================================
-
-
         public SQLiteDatabase getSqliteDatabase() {
             return sqLiteDatabase2;
         }
@@ -2745,7 +3554,7 @@ public class GT {
          * @return
          * @修改表名称
          */
-        public Hibernate updateTableName(String oldTableName, String NewTableName) {
+        public synchronized Hibernate updateTableName(String oldTableName, String NewTableName) {
             String sql = "ALTER TABLE " + oldTableName + " RENAME TO " + NewTableName;
             if (sqLiteDatabase2 == null) return this;
             sqLiteDatabase2.execSQL(sql);//ok
@@ -2758,7 +3567,7 @@ public class GT {
          * @return
          * @修改表名称
          */
-        public Hibernate updateTableName(Class<?> oldTableNameClass, Class<?> NewTableNameClass) {
+        public synchronized Hibernate updateTableName(Class<?> oldTableNameClass, Class<?> NewTableNameClass) {
             String sql = "ALTER TABLE " + oldTableNameClass.getSimpleName() + " RENAME TO " + NewTableNameClass.getSimpleName();
             if (sqLiteDatabase2 == null) return this;
             sqLiteDatabase2.execSQL(sql);//ok
@@ -2770,7 +3579,7 @@ public class GT {
          * @return
          * @获取表所有字段名
          */
-        public List<String> getTableAllValue(String tableName) {
+        public synchronized List<String> getTableAllValue(String tableName) {
             Cursor tempCursor = null;
             List<String> tableNameList = new ArrayList<>();
             try {
@@ -2797,7 +3606,7 @@ public class GT {
          * @return
          * @获取表所有字段名
          */
-        public List<String> getTableAllValue(Class<?> tableClass) {
+        public synchronized List<String> getTableAllValue(Class<?> tableClass) {
             if (tableClass == null || !isTable(tableClass.getSimpleName())) return null;
             Cursor tempCursor = null;
             List<String> tableNameList = new ArrayList<>();
@@ -2827,7 +3636,7 @@ public class GT {
          * @param tableClass
          * @return
          */
-        public boolean createTable(Class<?> tableClass) {
+        public synchronized boolean createTable(Class<?> tableClass) {
             if (!isTable(tableClass)) {
                 scanTable(tableClass);//将类转为SQL代码
                 for (String sqlStr : creationTableNameList) {
@@ -2839,7 +3648,7 @@ public class GT {
             return false;
         }
 
-        public boolean createTable(String tableName) {
+        public synchronized boolean createTable(String tableName) {
 
             return false;
         }
@@ -2850,7 +3659,7 @@ public class GT {
          * @return
          * @删除表
          */
-        public Hibernate deleteTable(String tableName) {
+        public synchronized Hibernate deleteTable(String tableName) {
             try {
                 String sql = "DROP TABLE " + tableName;
                 if (sqLiteDatabase2 == null) return this;
@@ -2866,7 +3675,7 @@ public class GT {
          * @return
          * @删除表
          */
-        public Hibernate deleteTable(Class<?> tableClass) {
+        public synchronized Hibernate deleteTable(Class<?> tableClass) {
             try {
                 String sql = "DROP TABLE " + tableClass.getSimpleName();
                 if (sqLiteDatabase2 == null) return this;
@@ -2881,7 +3690,7 @@ public class GT {
          * @return
          * @获取当前数据库所有表名称
          */
-        public List<String> getSqlAllTableName() {
+        public synchronized List<String> getSqlAllTableName() {
             List<String> strList = new ArrayList<>();
             if (sqLiteDatabase2 == null) return strList;
             Cursor cursor = sqLiteDatabase2.rawQuery("select name from sqlite_master where type='table' order by name", null);//ok
@@ -2901,7 +3710,7 @@ public class GT {
          *
          * @return
          */
-        public List<String> getSqlAllName() {
+        public synchronized List<String> getSqlAllName() {
             if (context == null) return null;
             List<String> filesAllNames = FileUtils.getFilesAllName(context.getFilesDir().getParent() + "/databases/");
             if (filesAllNames == null) {
@@ -2935,7 +3744,7 @@ public class GT {
          * @return 存在返回 true 不存在返回 false
          * @监测当前数据库是否存在此表
          */
-        public boolean isTable(String tableName) {
+        public synchronized boolean isTable(String tableName) {
             List<String> sqlAllTableName = getSqlAllTableName();
             if (sqlAllTableName.contains(tableName)) {
                 return true;
@@ -2948,7 +3757,7 @@ public class GT {
          * @return 存在返回 true 不存在返回 false
          * @监测当前数据库是否存在此表
          */
-        public boolean isTable(Class<?> tableClass) {
+        public synchronized boolean isTable(Class<?> tableClass) {
             List<String> sqlAllTableName = getSqlAllTableName();
             if (sqlAllTableName.contains(tableClass.getSimpleName())) {
                 return true;
@@ -2962,7 +3771,7 @@ public class GT {
          * @return
          * @导入表的数据 (自动匹配相同表字段自动导入数据)
          */
-        public Hibernate inputTableData(String oldTable, String newTable) {
+        public synchronized Hibernate inputTableData(String oldTable, String newTable) {
 
             List<String> tempSQLTableValue = getTableAllValue(oldTable);//获取上个版本表所有字段
             List<String> SQLTableValue = getTableAllValue(newTable);//获取当前最新版本数据库表所有字段
@@ -2994,7 +3803,7 @@ public class GT {
          * @return
          * @导入表的数据 (自动匹配相同表字段自动导入数据)
          */
-        public Hibernate inputTableData(Class<?> oldTableClass, Class<?> newTableClass) {
+        public synchronized Hibernate inputTableData(Class<?> oldTableClass, Class<?> newTableClass) {
 
             String oldTable = oldTableClass.getSimpleName();
             String newTable = newTableClass.getSimpleName();
@@ -3031,7 +3840,7 @@ public class GT {
          * @return
          * @导入表的数据 (指定匹配相同表字段自动导入数据)
          */
-        public Hibernate inputTableData(String oldTable, List<String> oldTableList, String newTable, List<String> newTableList) {
+        public synchronized Hibernate inputTableData(String oldTable, List<String> oldTableList, String newTable, List<String> newTableList) {
 
             //如果当前数据库存在该表
             if (isTable(oldTable) && isTable(newTable)) {
@@ -3067,7 +3876,7 @@ public class GT {
          * @return
          * @导入表的数据 (指定匹配相同表字段自动导入数据)
          */
-        public Hibernate inputTableData(Class<?> oldTableClass, List<String> oldTableList, Class<?> newTableClass, List<String> newTableList) {
+        public synchronized Hibernate inputTableData(Class<?> oldTableClass, List<String> oldTableList, Class<?> newTableClass, List<String> newTableList) {
 
             String oldTable = oldTableClass.getSimpleName();
             String newTable = newTableClass.getSimpleName();
@@ -3479,7 +4288,6 @@ public class GT {
             }
 
         }
-
 
         /**
          * ======================================================== 表的 聚合函数 代码 ========================================
@@ -3927,7 +4735,7 @@ public class GT {
                         //加密数据
 
                         if (gt_Property != null && gt_Property.setIsEncryption()) {
-                            val = GT.Encryption.DES.encryptPassword(val, passWord);
+                            val = Encryption.DES.encryptPassword(val, passWord);
                         }
 
                         /*if (isEncryption) {
@@ -4107,7 +4915,7 @@ public class GT {
                             String value = cursor.getString(cursor.getColumnIndex(valueName));
                             //解密
                             if (gt_Property != null && gt_Property.setIsEncryption()) {
-                                value = GT.Encryption.DES.decryptPassword(value, passWord);
+                                value = Encryption.DES.decryptPassword(value, passWord);
                             }
                             obj = value;
                         } else if (int.class == type || Integer.class == type) {
@@ -4415,7 +5223,7 @@ public class GT {
                                         String value = cursor.getString(cursor.getColumnIndex(valueName));
 //                                      //解密
                                         if (gt_Property != null && gt_Property.setIsEncryption()) {
-                                            value = GT.Encryption.DES.decryptPassword(value, passWord);
+                                            value = Encryption.DES.decryptPassword(value, passWord);
                                         }
                                         obj = value;
                                     } else if (int.class == type || Integer.class == type) {
@@ -4838,7 +5646,7 @@ public class GT {
          *
          * @return
          */
-        public Hibernate beginTransaction() {
+        public synchronized Hibernate beginTransaction() {
             if (sqLiteDatabase2 == null) return this;
             sqLiteDatabase2.beginTransaction();//开启事务 ok
             return this;
@@ -4849,7 +5657,7 @@ public class GT {
          *
          * @return
          */
-        public Hibernate setTransactionSuccessful() {
+        public synchronized Hibernate setTransactionSuccessful() {
             if (sqLiteDatabase2 == null) return this;
             sqLiteDatabase2.setTransactionSuccessful();//设置该事务成功 ok
             return this;
@@ -4860,7 +5668,7 @@ public class GT {
          *
          * @return
          */
-        public Hibernate endTransaction() {
+        public synchronized Hibernate endTransaction() {
             if (sqLiteDatabase2 == null) return this;
             sqLiteDatabase2.endTransaction();//结束本次事务 ok
             return this;
@@ -4879,7 +5687,7 @@ public class GT {
          * @return
          * @保存
          */
-        public Hibernate save(String tableName, ContentValues contentValues) {
+        public synchronized Hibernate save(String tableName, ContentValues contentValues) {
             if (!isTable(tableName)) {
                 err(getLineInfo(LOG.lineInfoIndex), "保存的表不存在，操作失败");
                 status = false;
@@ -4899,13 +5707,44 @@ public class GT {
         }
 
         /**
+         * 异步保存
+         *
+         * @param tableName     表名称
+         * @param contentValues 内容值
+         * @return
+         */
+        public synchronized Hibernate saveAsync(String tableName, ContentValues contentValues) {
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (!isTable(tableName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "保存的表不存在，操作失败");
+                        status = false;
+                        return;
+                    }
+                    initSqlParameter();
+                    if (sqLiteDatabase2 == null) return;
+                    long insert = sqLiteDatabase2.insert(tableName, null, contentValues);//ok
+                    statusNumber = (int) insert;
+                    //设置状态码
+                    if (insert == -1) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                }
+            });
+            return this;
+        }
+
+        /**
          * @param tableName   表名
          * @param condition   条件
          * @param valuesArray 条件值
          * @return
          * @删除
          */
-        public Hibernate delete(String tableName) {
+        public synchronized Hibernate delete(String tableName) {
 
             if (tableName == null || conditions == null || values == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "删除的 " + tableName + " 数据为null，操作失败");
@@ -4931,13 +5770,51 @@ public class GT {
         }
 
         /**
+         * 异步删除
+         *
+         * @param tableName   表名
+         * @param condition   条件
+         * @param valuesArray 条件值
+         * @return
+         * @删除
+         */
+        public synchronized Hibernate deleteAsync(String tableName) {
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (tableName == null || conditions == null || values == null) {
+                        err(getLineInfo(LOG.lineInfoIndex), "删除的 " + tableName + " 数据为null，操作失败");
+                        return;
+                    }
+                    //进行删除
+                    if (!isTable(tableName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                        status = false;
+                    }
+                    //初始化
+                    initSqlParameter();
+                    if (sqLiteDatabase2 == null) return;
+                    int update = sqLiteDatabase2.delete(tableName, conditions, values);//ok
+                    if (update == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                    closeSqlParameter();
+                }
+            });
+
+            return this;
+        }
+
+        /**
          * @param tableName   表名
          * @param condition   条件
          * @param valuesArray 条件值
          * @return
          * @查询
          */
-        public Cursor query(String tableName) {
+        public synchronized Cursor query(String tableName) {
 
             //判断这个表是否存在
             if (!isTable(tableName)) {
@@ -4964,7 +5841,7 @@ public class GT {
          * @return
          * @修改
          */
-        public Hibernate update(String tableName, ContentValues contentValues) {
+        public synchronized Hibernate update(String tableName, ContentValues contentValues) {
             if (!isTable(tableName)) {
                 err(getLineInfo(LOG.lineInfoIndex), "修改的表不存在，操作失败");
                 status = false;
@@ -4984,11 +5861,45 @@ public class GT {
         }
 
         /**
+         * 更新异步
+         *
+         * @param tableName    表名
+         * @param returnValues 返回内容值(若返回全部可写 null)
+         * @param condition    条件
+         * @param valuesArray  条件值
+         * @return
+         * @修改
+         */
+        public synchronized Hibernate updateAsync(String tableName, ContentValues contentValues) {
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (!isTable(tableName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "修改的表不存在，操作失败");
+                        status = false;
+                        return;
+                    }
+                    initSqlParameter();
+                    if (sqLiteDatabase2 == null) return;
+                    statusNumber = sqLiteDatabase2.update(tableName, contentValues, conditions, values);//ok
+                    //进行更新
+                    if (statusNumber == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                    closeSqlParameter();
+                }
+            });
+            return this;
+        }
+
+        /**
          * @param tableClass
          * @return
          * @删除所有表
          */
-        public Hibernate deleteAll(String tableName) {
+        public synchronized Hibernate deleteAll(String tableName) {
 
             //判断这个表是否存在
             if (!isTable(tableName)) {
@@ -5009,6 +5920,39 @@ public class GT {
             return this;
         }
 
+        /**
+         * 删除全部异步
+         *
+         * @param tableClass
+         * @return
+         * @删除所有表
+         */
+        public synchronized Hibernate deleteAllAsync(String tableName) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    //判断这个表是否存在
+                    if (!isTable(tableName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                        status = false;
+                        return;
+                    }
+                    initSqlParameter();
+                    if (sqLiteDatabase2 == null) return;
+                    statusNumber = sqLiteDatabase2.delete(tableName, null, null);//ok
+                    //进行更新
+                    if (statusNumber == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                }
+            });
+
+            return this;
+        }
+
         //============================================= 实体类操作 =================================
 
         /**
@@ -5016,7 +5960,7 @@ public class GT {
          * @return
          * @保存数据
          */
-        public <T> Hibernate save(T bean) {
+        public synchronized <T> Hibernate save(T bean) {
 
             if (bean == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "保存的对象为null，操作失败！");
@@ -5055,6 +5999,56 @@ public class GT {
             return this;
         }
 
+        /**
+         * 异步保存
+         *
+         * @param bean //要保存的对象
+         * @return
+         * @保存数据
+         */
+        public synchronized <T> Hibernate saveAsync(T bean) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (bean == null) {
+                        err(getLineInfo(LOG.lineInfoIndex), "保存的对象为null，操作失败！");
+                        status = false;
+                        return;
+                    }
+
+                    String simpleName = bean.getClass().getSimpleName();//获取表名
+                    //检查数据库中是否存在该表
+                    if (!isTable(simpleName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
+                        status = false;
+                        return;
+                    }
+
+                    //创建游标
+                    ContentValues contentValues = new ContentValues();
+
+                    initSqlParameter();
+
+                    //保存和修改的操作
+                    saveAddUpdateOperation(bean, contentValues);
+
+                    //开始插入
+                    if (sqLiteDatabase2 == null) return;
+                    long insert = sqLiteDatabase2.insert(bean.getClass().getSimpleName(), null, contentValues);//ok
+                    statusNumber = (int) insert;
+                    //设置状态码
+                    if (insert == -1) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                }
+            });
+
+
+            return this;
+        }
 
         /**
          * 如果一次性存储的数据很多，推荐用所有存储
@@ -5067,7 +6061,7 @@ public class GT {
          * @param <T>
          * @return
          */
-        public <T> Hibernate saveAll(List<T> beanList) {
+        public synchronized <T> Hibernate saveAll(List<T> beanList) {
 
             if (beanList == null && beanList.size() != 0) {
                 err(getLineInfo(LOG.lineInfoIndex), "保存全部的对象为null，操作失败！");
@@ -5119,6 +6113,74 @@ public class GT {
         }
 
         /**
+         * 异步保存
+         * 如果一次性存储的数据很多，推荐用所有存储
+         * 存储所有数据,当前测试效率：存储10万条数据，09:07:53.199——09:07:59.646 耗时6秒多
+         * 注意，影响存储的效率有如下：
+         * 1.该实体类复杂层度会直接影响存储效率
+         * 2.当前装载的安卓系统配置也会影响到存储效率
+         *
+         * @param beanList
+         * @param <T>
+         * @return
+         */
+        public synchronized <T> Hibernate saveAllAsync(List<T> beanList) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (beanList == null && beanList.size() != 0) {
+                        err(getLineInfo(LOG.lineInfoIndex), "保存全部的对象为null，操作失败！");
+                        status = false;
+                        return;
+                    }
+
+                    long insert = 0;
+
+                    String tableName = beanList.get(0).getClass().getSimpleName();
+                    //检查数据库中是否存在该表
+                    if (!isTable(tableName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + tableName + " 表不存在，操作失败！.");
+                        status = false;
+                        return;
+                    }
+
+                    try {
+                        beginTransaction();//开启事务
+                        //创建游标
+                        ContentValues contentValues = new ContentValues();
+                        initSqlParameter();
+                        for (T bean : beanList) {
+                            //保存和修改的操作
+                            saveAddUpdateOperation(bean, contentValues);//保存全部
+                            //数据库操作
+                            if (sqLiteDatabase2 == null) return;
+                            insert = sqLiteDatabase2.insert(tableName, null, contentValues);//ok
+                            contentValues.clear();
+                        }
+                        setTransactionSuccessful();//设置本次事务成功
+                    } catch (Exception e) {
+                        err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + tableName + " 存储全部，操作失败！.");
+                        status = false;
+                        return;
+                    } finally {
+                        endTransaction();//结束事务
+
+                    }
+
+                    statusNumber = (int) insert;
+                    //设置状态码
+                    if (insert == -1) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                }
+            });
+            return this;
+        }
+
+        /**
          * 删除表(如果没有设置 删除条件 与 条件值 将无法删除)
          *
          * @param beanClass  删除表的名称
@@ -5126,7 +6188,7 @@ public class GT {
          * @param values     删除条件对应值
          * @return
          */
-        public <T> Hibernate delete(T classOrBean) {
+        public synchronized <T> Hibernate delete(T classOrBean) {
 
             Class<?> aClass = classOrBean.getClass();
 
@@ -5174,12 +6236,72 @@ public class GT {
         }
 
         /**
+         * 异步删除
+         * 删除表(如果没有设置 删除条件 与 条件值 将无法删除)
+         *
+         * @param beanClass  删除表的名称
+         * @param conditions 删除条件
+         * @param values     删除条件对应值
+         * @return
+         */
+        public synchronized <T> Hibernate deleteAsync(T classOrBean) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    Class<?> aClass = classOrBean.getClass();
+
+                    if (classOrBean == null || (classOrBean.getClass() == Class.class && (conditions == null || values == null))) {
+                        err(getLineInfo(LOG.lineInfoIndex), "删除的 " + classOrBean + " 数据为null，操作失败");
+                        return;
+                    }
+
+                    if (classOrBean.getClass() == Class.class) {
+                        aClass = (Class) classOrBean;
+                    } else {
+                        aClass = classOrBean.getClass();
+                    }
+
+                    String simpleName = aClass.getSimpleName();//获取表名
+
+                    //如果没有自己设置条件，那就直接使用该对象的ID值进行默认操作
+                    if (conditions == null || values == null) {
+                        wheresKeyValue(classOrBean, aClass);
+                    }
+
+                    //检查数据库中是否存在该表
+                    if (!isTable(simpleName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！...");
+                        status = false;
+                        return;
+                    }
+
+                    initSqlParameter();
+
+                    //进行更新
+                    if (sqLiteDatabase2 == null) return;
+                    int update = sqLiteDatabase2.delete(simpleName, conditions, values);//ok
+
+                    if (update == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+
+                    closeSqlParameter();
+                }
+            });
+
+            return this;
+        }
+
+        /**
          * @param beanClass 删除的表
          * @param keyValue  删除的ID
          * @return
          * @更具ID删除
          */
-        public Hibernate delete(Class<?> beanClass, Object keyValue) {
+        public synchronized Hibernate delete(Class<?> beanClass, Object keyValue) {
 
             if (beanClass == null || keyValue == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "删除的 beanClass 数据为null，操作失败");
@@ -5217,11 +6339,61 @@ public class GT {
         }
 
         /**
+         * 异步删除
+         *
+         * @param beanClass 删除的表
+         * @param keyValue  删除的ID
+         * @return
+         * @更具ID删除
+         */
+        public synchronized Hibernate deleteAsync(Class<?> beanClass, Object keyValue) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (beanClass == null || keyValue == null) {
+                        err(getLineInfo(LOG.lineInfoIndex), "删除的 beanClass 数据为null，操作失败");
+                        return;
+                    }
+
+                    String simpleName = beanClass.getSimpleName();//获取表名
+
+                    //检查数据库中是否存在该表
+                    List<String> tableAllValue = null;
+                    if (isTable(simpleName)) {
+                        tableAllValue = getTableAllValue(simpleName);
+                        if (tableAllValue == null || tableAllValue.size() == 0) {
+                            err(getLineInfo(LOG.lineInfoIndex), "删除的表数据为空，操作失败");
+                            status = false;
+                            return;
+                        }
+                    } else {
+                        err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                        status = false;
+                        return;
+                    }
+
+                    //进行更新
+                    if (sqLiteDatabase2 == null) return;
+                    int update = sqLiteDatabase2.delete(simpleName, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});//ok
+
+                    if (update == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                }
+            });
+
+            return this;
+        }
+
+        /**
          * @param tableClass
          * @return
          * @删除所有表
          */
-        public Hibernate deleteAll(Class<?> tableClass) {
+        public synchronized Hibernate deleteAll(Class<?> tableClass) {
 
             //初始化与获取必要属性
             String simpleName = tableClass.getSimpleName();//获取表名
@@ -5246,21 +6418,55 @@ public class GT {
         }
 
         /**
+         * 异步删除
+         *
+         * @param tableClass
+         * @return
+         * @删除所有表
+         */
+        public synchronized Hibernate deleteAllAsync(Class<?> tableClass) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    //初始化与获取必要属性
+                    String simpleName = tableClass.getSimpleName();//获取表名
+
+                    //判断这个表是否存在
+                    if (!isTable(simpleName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "删除的表不存在，操作失败");
+                        status = false;
+                        return;
+                    }
+                    initSqlParameter();
+                    if (sqLiteDatabase2 == null) return;
+                    statusNumber = sqLiteDatabase2.delete(simpleName, conditions, values);//ok
+                    //进行更新
+                    if (statusNumber == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                    closeSqlParameter();
+                }
+            });
+
+            return this;
+        }
+
+        /**
          * @param tableNameClass 查询的表
          * @param values         查询ID
          * @param <T>
          * @return
          * @根据表ID查询数据
          */
-        public <T> T query(Class<T> tableNameClass) {
-
+        public synchronized <T> T query(Class<T> tableNameClass) {
             if (tableNameClass == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "查询的数据为 null，操作失败");
                 status = false;
                 return null;
             }
-
-
             //反射生成对象并注入
             List<T> list = queryCoreAlgorithm(tableNameClass, false);
             if (list == null || list.size() == 0) {
@@ -5277,7 +6483,7 @@ public class GT {
          * @return
          * @根据表ID查询数据
          */
-        public <T> T query(Class<T> tableNameClass, Object values) {
+        public synchronized <T> T query(Class<T> tableNameClass, Object values) {
 
             if (tableNameClass == null || values == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "查询的数据为 null，操作失败");
@@ -5316,7 +6522,7 @@ public class GT {
          * @param <T>
          * @return
          */
-        public <T> List<T> queryAll(Class<T> tableNameClass) {
+        public synchronized <T> List<T> queryAll(Class<T> tableNameClass) {
             if (tableNameClass == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "查询的数据为 null，操作失败");
                 status = false;
@@ -5335,7 +6541,7 @@ public class GT {
          * @return
          * @更新表
          */
-        public <T> Hibernate update(T bean) {
+        public synchronized <T> Hibernate update(T bean) {
             if (bean == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
                 status = false;
@@ -5374,13 +6580,65 @@ public class GT {
         }
 
         /**
+         * 异步更新
+         *
          * @param bean       更新的表数据(实体类)
          * @param conditions 修改条件
          * @param values     修改条件对应值
          * @return
          * @更新表
          */
-        public Hibernate update(Class<?> tableClass, Object bean) {
+        public synchronized <T> Hibernate updateAsync(T bean) {
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (bean == null) {
+                        err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
+                        status = false;
+                        return;
+                    }
+
+                    Class<?> aClass = bean.getClass();
+
+                    String simpleName = aClass.getSimpleName();//获取表名
+                    //检查数据库中是否存在该表
+                    if (!isTable(simpleName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
+                        status = false;
+                        return;
+                    }
+
+                    //如果没有自己设置条件，那就直接使用该对象的ID值进行默认操作
+                    if (conditions == null || values == null) {
+                        wheresKeyValue(bean, aClass);//第一次调用
+                    }
+
+                    ContentValues contentValues = new ContentValues();
+                    initSqlParameter();
+                    //保存和修改的操作
+                    saveAddUpdateOperation(bean, contentValues);
+                    if (sqLiteDatabase2 == null) return;
+                    statusNumber = sqLiteDatabase2.update(aClass.getSimpleName(), contentValues, conditions, values);//ok
+                    //进行更新
+                    if (statusNumber == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                    closeSqlParameter();
+                }
+            });
+            return this;
+        }
+
+        /**
+         * @param bean       更新的表数据(实体类)
+         * @param conditions 修改条件
+         * @param values     修改条件对应值
+         * @return
+         * @更新表
+         */
+        public synchronized Hibernate update(Class<?> tableClass, Object bean) {
             if (bean == null) {
                 err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
                 status = false;
@@ -5427,6 +6685,66 @@ public class GT {
             return this;
         }
 
+        /**
+         * 异步更新
+         *
+         * @param bean       更新的表数据(实体类)
+         * @param conditions 修改条件
+         * @param values     修改条件对应值
+         * @return
+         * @更新表
+         */
+        public synchronized Hibernate updateAsync(Class<?> tableClass, Object bean) {
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    if (bean == null) {
+                        err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
+                        status = false;
+                        return;
+                    }
+
+                    String simpleName = bean.getClass().getSimpleName();//获取表名
+                    //检查数据库中是否存在该表
+                    if (!isTable(simpleName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "当前数据库中 " + simpleName + " 表不存在，操作失败！.");
+                        status = false;
+                        return;
+                    }
+
+                    //判断更新对象是 实体类 还是 ContentValues 对象
+                    if (ContentValues.class != bean.getClass()) {
+                        ContentValues contentValues = new ContentValues();
+                        initSqlParameter();
+                        //保存和修改的操作
+                        saveAddUpdateOperation(bean, contentValues);
+
+                        if (conditions == null || values == null) {
+                            wheresKeyValue(bean, tableClass);
+                        }
+
+                        if (sqLiteDatabase2 == null) return;
+                        statusNumber = sqLiteDatabase2.update(bean.getClass().getSimpleName(), contentValues, conditions, values);//ok
+                    } else {
+                        if (conditions == null || values == null) {
+                            err(getLineInfo(LOG.lineInfoIndex), "修改的数据为null，操作失败");
+                            status = false;
+                            return;
+                        }
+                        if (sqLiteDatabase2 == null) return;
+                        statusNumber = sqLiteDatabase2.update(tableClass.getSimpleName(), (ContentValues) bean, conditions, values);//ok
+                    }
+                    //进行更新
+                    if (statusNumber == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                    closeSqlParameter();
+                }
+            });
+            return this;
+        }
 
         /**
          * @param bean     修改表的 实体类 或 ContentValues 值
@@ -5434,7 +6752,7 @@ public class GT {
          * @return
          * @修改表
          */
-        public Hibernate update(Object bean, Object keyValue) {
+        public synchronized Hibernate update(Object bean, Object keyValue) {
 
             //判空
             if (bean == null || keyValue == null) {
@@ -5480,12 +6798,70 @@ public class GT {
         }
 
         /**
+         * 异步更新
+         *
+         * @param bean     修改表的 实体类 或 ContentValues 值
+         * @param keyValue 修改表里的那个ID行数据
+         * @return
+         * @修改表
+         */
+        public synchronized Hibernate updateAsync(Object bean, Object keyValue) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    //判空
+                    if (bean == null || keyValue == null) {
+                        err(getLineInfo(LOG.lineInfoIndex), "修改的参数为null，操作失败");
+                        status = false;
+                        return;
+                    }
+
+                    //初始化与获取必要属性
+                    ContentValues contentValues = new ContentValues();
+                    statusNumber = 0;
+
+                    String simpleName = bean.getClass().getSimpleName();//获取表名
+                    //判断这个表是否存在
+                    List<String> tableAllValue = null;
+                    if (isTable(simpleName)) {
+                        tableAllValue = getTableAllValue(simpleName);
+                        if (tableAllValue == null || tableAllValue.size() == 0) {
+                            err(getLineInfo(LOG.lineInfoIndex), "修改的表数据为空，操作失败");
+                            status = false;
+                            return;
+                        }
+                    } else {
+                        err(getLineInfo(LOG.lineInfoIndex), "修改的表不存在，操作失败");
+                        status = false;
+                        return;
+                    }
+
+                    initSqlParameter();
+                    //保存和修改的操作
+                    saveAddUpdateOperation(bean, contentValues);
+                    if (sqLiteDatabase2 == null) return;
+                    statusNumber = sqLiteDatabase2.update(simpleName, contentValues, tableAllValue.get(0) + "= ?", new String[]{keyValue.toString()});//ok
+
+                    //进行更新
+                    if (statusNumber == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                }
+            });
+
+            return this;
+        }
+
+        /**
          * @param tableClass
          * @param contentValues
          * @return
          * @更新这张表全部数据
          */
-        public Hibernate updateAll(Class<?> tableClass, ContentValues contentValues) {
+        public synchronized Hibernate updateAll(Class<?> tableClass, ContentValues contentValues) {
 
             //判空
             if (contentValues == null || tableClass == null) {
@@ -5512,6 +6888,50 @@ public class GT {
             } else {
                 status = true;
             }
+
+            return this;
+        }
+
+        /**
+         * 异步更新
+         *
+         * @param tableClass
+         * @param contentValues
+         * @return
+         * @更新这张表全部数据
+         */
+        public synchronized Hibernate updateAllAsync(Class<?> tableClass, ContentValues contentValues) {
+
+            GT.Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    //判空
+                    if (contentValues == null || tableClass == null) {
+                        err(getLineInfo(LOG.lineInfoIndex), "修改的参数为null，操作失败");
+                        status = false;
+                        return;
+                    }
+
+                    //初始化与获取必要属性
+                    String simpleName = tableClass.getSimpleName();//获取表名
+                    statusNumber = 0;
+
+                    //判断这个表是否存在
+                    if (!isTable(simpleName)) {
+                        err(getLineInfo(LOG.lineInfoIndex), "修改的表不存在，操作失败");
+                        status = false;
+                        return;
+                    }
+                    if (sqLiteDatabase2 == null) return;
+                    statusNumber = sqLiteDatabase2.update(simpleName, contentValues, conditions, values);//ok
+                    //进行更新
+                    if (statusNumber == 0) {
+                        status = false;
+                    } else {
+                        status = true;
+                    }
+                }
+            });
 
             return this;
         }
@@ -5865,7 +7285,7 @@ public class GT {
          * @param aClass
          * @存储需要更新的数据
          */
-        private void saveUpdateData(Class<?> mClass) {
+        private synchronized void saveUpdateData(Class<?> mClass) {
             String simpleName = mClass.getSimpleName();//获取表名
             Field[] fields = mClass.getDeclaredFields();//获取所有成员变量
             String oldStr = "";//存储旧字段
@@ -5912,7 +7332,16 @@ public class GT {
                 SCAN_TABLE = scanTable;//映射表的方式赋值
                 isDeleteNullTable = false;
                 DatabaseHelper databaseHelper = new DatabaseHelper(context, DATABASE_NAME, null, DATABASE_VERSION);
-                try {
+
+                sqLiteDatabase2 = databaseHelper.getWritableDatabase();//ok
+                if (isDeleteNullTable) {
+                    deleteUnnecessaryTable();//删除掉多余的表
+                } else {
+                    if (isTable("android_metadata")) {
+                        deleteTable("android_metadata");
+                    }
+                }
+                /*try {
                     sqLiteDatabase2 = databaseHelper.getWritableDatabase();//ok
                     if (isDeleteNullTable) {
                         deleteUnnecessaryTable();//删除掉多余的表
@@ -5923,7 +7352,7 @@ public class GT {
                     }
                 } catch (RuntimeException e) {
                     errs(getLineInfo() + " 数据库报错:" + e);
-                }
+                }*/
             }
             return this;
         }
@@ -5963,15 +7392,16 @@ public class GT {
             Enumeration<String> enumeration = dexFile.entries();
             while (enumeration.hasMoreElements()) {
                 String className = enumeration.nextElement();
-//                GT.log("className:" + className);
+//                GT.log("className:" + className);//com.gsls.activity.MainActivity
                 //在当前所有可执行的类里面查找包含有该包名的所有类
                 if (className.contains(EnityPackagePath)) {
                     Class<?> clazz1 = null;
                     try {
                         clazz1 = Class.forName(className);
                     } catch (ClassNotFoundException e) {
-                        e.printStackTrace();
+//                        e.printStackTrace();
                     }
+                    if (clazz1 == null) continue;//在扫描到第三模块时会为null
 
                     //过滤掉未被注解过的类
                     GT_Bean bean_Bean = clazz1.getAnnotation(GT_Bean.class);//获取该类 ContextView 的注解类
@@ -6267,9 +7697,15 @@ public class GT {
          * @return int
          */
         public static int getInt() {
-            int min = -2147483648;
-            int max = 2147483647;
-            return random.nextInt(max) % (max - min + 1) + min;
+            int value = 0;
+            try {
+                int min = -2147483648;
+                int max = 2147483647;
+                value = random.nextInt(max) % (max - min + 1) + min;
+            } catch (Exception e) {
+                value = random.nextInt(1079);
+            }
+            return value;
         }
 
         /**
@@ -6280,7 +7716,9 @@ public class GT {
          * @return
          */
         public static int getInt(int min, int max) {
-            return random.nextInt(max) % (max - min + 2) + min;
+            int i = random.nextInt(max) % (max - min + 2) + min;
+            if (i > max) i--;
+            return i;
         }
 
         /**
@@ -6292,6 +7730,35 @@ public class GT {
          */
         public static char getChar(char startChar, char closeChar) {
             return (char) (startChar + Math.random() * (closeChar - startChar + 1));
+        }
+
+        /**
+         * 随机获取一个名称
+         *
+         * @return
+         */
+        public static String getName(int nameLength) {
+            if (nameLength < 1)
+                return null;
+            String sum = "";
+            for (int i = 1; i < nameLength + 1; i++) {
+                String str = "";
+                int hightPos; //
+                int lowPos;
+                hightPos = (176 + Math.abs(random.nextInt(39)));
+                lowPos = (161 + Math.abs(random.nextInt(93)));
+                byte[] b = new byte[2];
+                b[0] = (Integer.valueOf(hightPos)).byteValue();
+                b[1] = (Integer.valueOf(lowPos)).byteValue();
+                try {
+                    str = new String(b, "GBK");
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                    System.out.println("错误");
+                }
+                sum += str.charAt(0);
+            }
+            return sum;
         }
 
     }
@@ -7140,7 +8607,7 @@ public class GT {
          */
         private static void log(Object msg) {
             Log.i("GT_i", msg.toString());
-            GT.DataSendReception.sendUpdateUiBroadcast(SerialPortUtils.class.getName(), msg.toString());
+            DataSendReception.sendUpdateUiBroadcast(SerialPortUtils.class.getName(), msg.toString());
         }
 
 
@@ -7974,7 +9441,7 @@ public class GT {
          * @param clazz 实体类类型
          * @return 反序列化后的数组
          */
-        public static <T> T[] fromJsonArray(JSONArray ja, Class<T> clazz) {
+        public static <T> T[] fromJsonArray(JSONArray ja, Class<T> clazz) throws JSONException {
             if (clazz == null || isNull(ja)) {
                 return null;
             }
@@ -7985,13 +9452,9 @@ public class GT {
             T[] array = (T[]) Array.newInstance(clazz, len);
 
             for (int i = 0; i < len; ++i) {
-                try {
-                    JSONObject jo = ja.getJSONObject(i);
-                    T o = fromJson(jo, clazz);
-                    array[i] = o;
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
+                JSONObject jo = ja.getJSONObject(i);
+                T o = fromJson(jo, clazz);
+                array[i] = o;
             }
 
             return array;
@@ -8005,7 +9468,7 @@ public class GT {
          * @param clazz   实体类类型
          * @return 序列化后的数组
          */
-        public static <T> T[] fromJsonArray(String jsonStr, Class<T> clazz) {
+        public static <T> T[] fromJsonArray(String jsonStr, Class<T> clazz) throws JSONException {
             if (clazz == null || jsonStr == null || jsonStr.length() == 0) {
                 return null;
             }
@@ -8662,14 +10125,14 @@ public class GT {
             public interface OnDownloadListener {
 
                 /**
-                 * 下载成功之后的文件
-                 */
-                void onDownloadSuccess(File file);
-
-                /**
                  * 下载进度
                  */
                 void onDownloading(int progress);
+
+                /**
+                 * 下载成功之后的文件
+                 */
+                void onDownloadSuccess(File file);
 
                 /**
                  * 下载异常信息
@@ -8729,8 +10192,12 @@ public class GT {
 
         /**
          * get请求封装
+         *
+         * @param url      请求域名
+         * @param paramMap 请求体
+         * @param listener 请求接口
          */
-        public static void getRequest(final String url, final Map<String, Object> paramMap, final GT.HttpUtil.OnLoadData listener) {
+        public static void getRequest(final String url, final Map<String, Object> paramMap, final OnLoadData listener) {
             if (url == null || listener == null) {
                 return;
             }
@@ -8747,12 +10214,15 @@ public class GT {
 
         /**
          * get请求封装
+         *
+         * @param url      请求域名
+         * @param listener 请求接口
          */
-        public static void getRequest(final String url, final GT.HttpUtil.OnLoadData listener) {
+        public static void getRequest(final String url, final OnLoadData listener) {
             if (url == null || listener == null) {
                 return;
             }
-            GT.Thread.runJava(new Runnable() { //为请求网络数据开启子线程
+            Thread.runJava(new Runnable() { //为请求网络数据开启子线程
                 @Override
                 public void run() {
                     HttpURLConnection conn = null;
@@ -8783,23 +10253,42 @@ public class GT {
         }
 
         /**
-         * POST请求 get 与 Post 参数格式一样，请求类型不一样
-         * https://apis.map.qq.com/ws/geocoder/v1/?location=22.5948,114.3069163&get_poi=1&key=J6HBZ-N3K33-D2B3V-YH7I4-37AVE-NJFMT
+         * post请求
+         *
+         * @param url      请求的url
+         * @param map      请求体
+         * @param listener 请求接口
          */
-        public static void postRequest(final String url, final Map<String, Object> map, final GT.HttpUtil.OnLoadData listener) {
+        public static void postRequest(final String url, final Map<String, Object> map, final OnLoadData listener) {
 
             String params = mapToParams(map);
             if (params == null) {
                 err(getLineInfo(), "请求参数不能为null");
             }
 
-            postRequest(url + "?" + params, listener);
+            postRequest(url + "?" + params, listener, null);
+        }
+
+        /**
+         * @param url       请求的url
+         * @param map       请求体
+         * @param mapHeader 请求头
+         * @param listener  请求接口
+         */
+        public static void postRequest(final String url, final Map<String, Object> map, Map<String, Object> mapHeader, final OnLoadData listener) {
+
+            String params = mapToParams(map);
+            if (url == null || params == null) {
+                err(getLineInfo(), "请求参数不能为null");
+            }
+
+            postRequest(url + "?" + params, listener, mapHeader);
         }
 
         /**
          * POST请求
          */
-        public static void postRequest(final String url, final OnLoadData listener) {
+        public static void postRequest(final String url, final OnLoadData listener, Map<String, Object> mapHeader) {
 
             if (url == null || listener == null) {
                 return;
@@ -8836,6 +10325,7 @@ public class GT {
                         conn.setUseCaches(false);//禁止使用缓存
                         conn.setInstanceFollowRedirects(true);//自动执行Http重定向
 
+                        //请求头添加处
                         if (type.equals("text")) {
                             // Text 请求
                             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");//4. Content-Type,这里是固定写法，发送内容的类型
@@ -8846,6 +10336,14 @@ public class GT {
                         conn.setRequestProperty("Connection", "Keep-Alive");
                         conn.setRequestProperty("Charset", "UTF-8");
                         conn.setRequestProperty("accept", "application/json");
+
+                        //添加自定义的请求头
+                        if (mapHeader != null) {
+                            for (String key : mapHeader.keySet()) {
+                                String value = String.valueOf(mapHeader.get(key));
+                                conn.setRequestProperty(key, value);
+                            }
+                        }
 
                         // 向服务器提交请求数据
                         conn.setDoOutput(true);// 5. output，这里要记得开启输出流，将自己要添加的参数用这个输出流写进去，传给服务端，这是socket的基本结构
@@ -8884,7 +10382,7 @@ public class GT {
          * @param listener
          * @param onError
          */
-        private static void onError(final GT.HttpUtil.OnLoadData listener, final Exception onError, HttpURLConnection conn) {
+        private static void onError(final OnLoadData listener, final Exception onError, HttpURLConnection conn) {
             conn.disconnect();//断开连接
             listener.onError(onError.toString());
         }
@@ -8896,7 +10394,7 @@ public class GT {
          * @param con
          * @throws IOException
          */
-        private static void onSuccess(final GT.HttpUtil.OnLoadData listener, HttpURLConnection con) throws IOException {
+        private static void onSuccess(final OnLoadData listener, HttpURLConnection con) throws IOException {
             InputStream inputStream = con.getInputStream();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();//创建内存输出流
             int len;
@@ -8981,7 +10479,16 @@ public class GT {
      * WebWiew 工具类
      */
     public static class WebViewUtils {
+
         /**
+         * 需要添加 xml/network_security_config.xml
+         * 配置文件:android:networkSecurityConfig="@xml/network_security_config"
+         * <p>
+         * <?xml version="1.0" encoding="utf-8"?>
+         * <network-security-config>
+         * <base-config cleartextTrafficPermitted="true" />
+         * </network-security-config>
+         * <p>
          * 前提网络权限
          * <uses-permission android:name="android.permission.INTERNET"/>
          */
@@ -8996,7 +10503,7 @@ public class GT {
          * @param onGetHtmlCodeListener 对应接口
          */
         public static void getHtmlData(String htmlUrl, int htmlSize, OnGetHtmlCodeListener onGetHtmlCodeListener) {
-            GT.Thread.runJava(new Runnable() {
+            Thread.runJava(new Runnable() {
                 @Override
                 public void run() {
                     if (htmlUrl == null || onGetHtmlCodeListener == null) {
@@ -9113,7 +10620,6 @@ public class GT {
             return webView;
 
         }
-
 
         private static boolean isLoadSuccess = false;
 
@@ -9241,6 +10747,147 @@ public class GT {
 
         }
 
+        /**
+         * 加载 html
+         *
+         * @param context               活动
+         * @param isPC                  是否电脑端
+         * @param webView               WebView
+         * @param url                   加载的网址
+         * @param isCache               是否缓存
+         * @param onLoadWebViewListener 接口监听
+         * @return
+         */
+        public static WebView loadHtml(Context context, boolean isPC, WebView webView, String url, boolean isCache, OnLoadWebViewListener onLoadWebViewListener) {
+            if (isPC) {
+                return loadPCHtml(context, webView, url, isCache, onLoadWebViewListener);
+            } else {
+                return loadAppHtml(context, webView, url, isCache, onLoadWebViewListener);
+            }
+        }
+
+        /**
+         * 仅仅加强 WebView
+         *
+         * @param context
+         * @param webView
+         * @param isCache
+         * @return
+         */
+        public static WebView setWebView(Context context, WebView webView, boolean isCache) {
+            if (webView == null || context == null) return webView;
+
+            //声明WebSettings子类
+            WebSettings webSettings = webView.getSettings();
+
+            //如果访问的页面中要与Javascript交互，则webview必须设置支持Javascript
+            webSettings.setJavaScriptEnabled(true);
+            // 若加载的 html 里有JS 在执行动画等操作，会造成资源浪费（CPU、电量）
+            // 在 onStop 和 onResume 里分别把 setJavaScriptEnabled() 给设置成 false 和 true 即可
+
+            //设置自适应屏幕，两者合用
+            webSettings.setUseWideViewPort(true); //将图片调整到适合webview的大小
+            webSettings.setLoadWithOverviewMode(true); // 缩放至屏幕的大小
+
+            //缩放操作
+            webSettings.setSupportZoom(true); //支持缩放，默认为true。是下面那个的前提。
+            webSettings.setBuiltInZoomControls(true); //设置内置的缩放控件。若为false，则该WebView不可缩放
+            webSettings.setDisplayZoomControls(false); //隐藏原生的缩放控件
+
+            //其他细节操作
+            webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK); //关闭webview中缓存
+            webSettings.setAllowFileAccess(true); //设置可以访问文件
+            webSettings.setJavaScriptCanOpenWindowsAutomatically(true); //支持通过JS打开新窗口
+            webSettings.setLoadsImagesAutomatically(true); //支持自动加载图片
+            webSettings.setDefaultTextEncodingName("utf-8");//设置编码格式
+
+
+            // 通过设置WebView的settings实现
+            String cacheDirPath = context.getFilesDir().getAbsolutePath() + "cache/";
+            webSettings.setDatabasePath(cacheDirPath);
+
+            if (isCache) {
+                //使用缓存:
+                webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+                webSettings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);//没网，则从本地获取，即离线加载
+
+                webSettings.setDomStorageEnabled(true); // 开启 DOM storage API 功能
+                webSettings.setDatabaseEnabled(true);   //开启 database storage API 功能
+                webSettings.setAppCacheEnabled(true);//开启 Application Caches 功能
+            } else {
+                //不使用缓存:
+                webSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+            }
+            return webView;
+        }
+
+        /**
+         * 加载一个网页
+         *
+         * @param webView
+         * @param url
+         * @return
+         */
+        public static boolean loadWeb_URL(WebView webView, String url) {
+            if (webView == null || url == null) return false;
+            try {
+                webView.loadUrl(url);
+            } catch (Exception e) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * 加载一个Asset 文件里的 html 文件
+         *
+         * @param webView
+         * @param htmlFile 需要加上后缀名 如：test.html
+         * @return
+         */
+        public static boolean loadWeb_Asset(WebView webView, String htmlFile) {
+            if (webView == null || htmlFile == null) return false;
+            try {
+                webView.loadUrl("file:///android_asset/" + htmlFile);
+            } catch (Exception e) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * 加载一个 SD卡里的
+         *
+         * @param webView
+         * @param htmlFile
+         * @return
+         */
+        public static boolean loadWeb_SdCard(WebView webView, String htmlFile) {
+            if (webView == null || htmlFile == null) return false;
+            try {
+                webView.loadUrl("content://com.android.htmlfileprovider/sdcard/" + htmlFile);
+            } catch (Exception e) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * 加载一个 html源码
+         * @param webView
+         * @param htmlCode
+         * @return
+         */
+        public static boolean loadWeb_HtmlCode(WebView webView, String htmlCode) {
+            if (webView == null || htmlCode == null) return false;
+            try {
+                webView.loadData(htmlCode, "text/html", "UTF-8");
+            } catch (Exception e) {
+                return false;
+            }
+            return true;
+        }
+
         //加载网页接口
         public interface OnLoadWebViewListener {
 
@@ -9315,7 +10962,7 @@ public class GT {
              */
             public TCP(int port) {
                 this.port = port;
-                GT.Thread.runJava(new Runnable() {
+                Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         try {
@@ -9346,7 +10993,7 @@ public class GT {
              */
             public TCP(String ip, int port) {
                 this.port = port;
-                GT.Thread.runJava(new Runnable() {
+                Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         try {
@@ -9376,7 +11023,7 @@ public class GT {
              */
             public TCP sendText(Object data) {
                 if (printStream == null) return this;
-                GT.Thread.runJava(new Runnable() {
+                Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         printStream.println(String.valueOf(data));
@@ -9409,7 +11056,7 @@ public class GT {
              */
             public TCP sendImg(Bitmap bitmap) {
                 if (dataOutputStream == null) return this;
-                GT.Thread.runJava(new Runnable() {
+                Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         try {
@@ -9489,7 +11136,7 @@ public class GT {
              */
             public TCP sendImg(String imgFilePath) {
                 if (dataOutputStream == null) return this;
-                GT.Thread.runJava(new Runnable() {
+                Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         FileInputStream fis = null;
@@ -9547,7 +11194,7 @@ public class GT {
              * @return
              */
             public boolean sendFile(String path, String fileName, OnStateListener onStateListener) {
-                GT.Thread.runJava(new Runnable() {
+                Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         onStateListener.start(fileName);
@@ -9558,22 +11205,22 @@ public class GT {
                             FileInputStream fileInput = new FileInputStream(path + fileName);
                             int size = -1;
                             byte[] buffer = new byte[1024];
-                            GT.log("开始读取...");
+//                            GT.log("开始读取...");
                             while (true) {
-                                GT.log("开始read");
+//                                GT.log("开始read");
                                 int i = size = fileInput.read(buffer, 0, 1024);
-                                GT.log("结束read：" + i);
+//                                GT.log("结束read：" + i);
                                 if (i == -1) {
                                     GT.log("跳出循环...");
                                     break;
                                 }
-                                GT.log("读取中...");
+//                                GT.log("读取中...");
                                 onStateListener.loading(size);
-                                GT.log("开始写入...");
+//                                GT.log("开始写入...");
                                 outputData.write(buffer, 0, size);
-                                GT.log("写入完毕...");
+//                                GT.log("写入完毕...");
                             }
-                            GT.log("结束读取...");
+//                            GT.log("结束读取...");
                             onStateListener.close("ok");
                             outputData.close();
                             fileInput.close();
@@ -9794,6 +11441,38 @@ public class GT {
          * 冬至12月22
          */
 
+
+        /**
+         * 时间与时间戳互转
+         *
+         * @param timeOrTimestamp 时间或时间戳
+         * @param timeFormat      转换格式
+         * @return
+         * @throws ParseException
+         */
+        public static String timeToTimestampToTime(String timeOrTimestamp, String timeFormat) throws ParseException {
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat(timeFormat);
+            Date date;
+            try {
+                //时间戳转时间
+                long timeLong = Long.parseLong(timeOrTimestamp);
+                date = new Date(timeLong);
+                return simpleDateFormat.format(date);
+            } catch (Exception e) {
+                try {
+                    //时间转时间戳
+                    date = simpleDateFormat.parse(timeOrTimestamp);
+                    assert date != null;
+                    long ts = date.getTime();
+                    return String.valueOf(ts);
+                } catch (Exception e1) {
+                    //如果是因为时间格式有问题，那就返回当前时间并提示
+                    err("The date format is wrong");
+                    return dateToStamp(GT_Date.getDateTime_CH(), "yyyy-MM-dd HH:mm:ss");
+                }
+            }
+        }
+
         private Lunar lunar = null;
 
         /**
@@ -10007,8 +11686,8 @@ public class GT {
          * @param dataTime
          * @return
          */
-        public String toTime(String dataTime) {
-            SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+        public static String toTime(String dataTime, String timeFormat) {
+            SimpleDateFormat formatter = new SimpleDateFormat(timeFormat, Locale.getDefault());
             long myTime = Long.parseLong(dataTime);
             long lt = new Long(myTime * 1000);//返回来的时间戳1476929029是毫秒，这里要乘1000才是正确的北京时间
             Date date = new Date(lt);
@@ -10022,7 +11701,7 @@ public class GT {
          * @param time 如：2021-07-23 16:36:12  格式必须为这样，单数也要前加 0 可以这样：2021-07-23 00:00:00
          * @return 返回时间戳
          */
-        public long toTimestamp(String time) {
+        public static long toTimestamp(String time) {
             long times = 0;
             try {
                 times = (int) ((Timestamp.valueOf(time).getTime()) / 1000);
@@ -10038,7 +11717,7 @@ public class GT {
          * @param dataTime
          * @return
          */
-        public String toTime_hms(String dataTime) {
+        public static String toTime_hms(String dataTime) {
             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
             long myTime = Long.parseLong(dataTime);
             long lt = new Long(myTime * 1000);//返回来的时间戳1476929029是毫秒，这里要乘1000才是正确的北京时间
@@ -10103,7 +11782,7 @@ public class GT {
          * @param dataTime
          * @return
          */
-        public String toYearMonthDay(String dataTime) {
+        public static String toYearMonthDay(String dataTime) {
             SimpleDateFormat formatter = new SimpleDateFormat("yy-MM-dd", Locale.getDefault());
             long myTime = Long.parseLong(dataTime);
             long lt = new Long(myTime * 1000);//返回来的时间戳1476929029是毫秒，这里要乘1000才是正确的北京时间
@@ -10113,20 +11792,28 @@ public class GT {
         }
 
         /**
-         * 时间戳转 北京时间
+         * 时间戳转时间
          *
          * @param dataTime
          * @return
          */
-        public String toBeijingTime(String dataTime) {
-            SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-            long myTime = Long.parseLong(dataTime);
-            long lt = new Long(myTime * 1000);//返回来的时间戳1476929029是毫秒，这里要乘1000才是正确的北京时间
+        public static String stampToDate(String s, String timeFormat) throws ParseException {
+            String res;
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat(timeFormat);
+            long lt = new Long(s);
             Date date = new Date(lt);
-            String time = formatter.format(date);
-            return time;
+            res = simpleDateFormat.format(date);
+            return res;
         }
 
+        public static String dateToStamp(String s, String timeFormat) throws ParseException {
+            String res;
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat(timeFormat);
+            Date date = simpleDateFormat.parse(s);
+            long ts = date.getTime();
+            res = String.valueOf(ts);
+            return res;
+        }
 
         /**
          * ***********************日历的高级功能***********************
@@ -11315,6 +13002,8 @@ public class GT {
      */
     public static class ApplicationUtils {
 
+        /********************************************* 分享功能 *********************************/
+
         /**
          * 分享文字
          *
@@ -11348,54 +13037,251 @@ public class GT {
         }
 
         /**
-         * 分享图片
+         * 分享图片（不推荐方式）
          *
          * @param activity
          * @param bitmap
          */
-        public static void share(Activity activity, Bitmap bitmap) {
+        public static void shareImageBitmap_F(Activity activity, Bitmap bitmap, String title) {
             Intent intent = new Intent(Intent.ACTION_SEND);
             intent.setType("image/*");
             Uri u = Uri.parse(MediaStore.Images.Media.insertImage(activity.getContentResolver(), bitmap, null, null));//将截图bitmap存系统相册
             intent.putExtra(Intent.EXTRA_STREAM, u);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            activity.startActivity(Intent.createChooser(intent, "分享的图片测试"));
+            activity.startActivity(Intent.createChooser(intent, title));
         }
 
         /**
-         * 弹出软件盘
+         * 分享图片
          *
-         * @param editText
          * @param activity
+         * @param uri
          */
-        public static void editKeyboard(EditText editText, Activity activity) {
-            InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
-            imm.showSoftInput(editText, InputMethodManager.RESULT_SHOWN);
-            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY);
-            editText.requestFocus();// 为搜索框 获取光标
+        public static void shareImageUri(Activity activity, Uri uri) {
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("image/*");
+            intent.putExtra(Intent.EXTRA_STREAM, uri);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(Intent.createChooser(intent, "分享图片"));
         }
 
         /**
-         * 收起软键盘
+         * 分享图片(推荐方式)
          *
-         * @param editText
          * @param activity
+         * @param view
+         * @param AUTHORITY
          */
-        public static void editKeyShrink(EditText editText, Activity activity) {
-            InputMethodManager inputMethodManager = (InputMethodManager) activity
-                    .getSystemService(Context.INPUT_METHOD_SERVICE);
-            inputMethodManager.hideSoftInputFromWindow(editText.getWindowToken(), 0);
+        public static void shareImageView_T(Activity activity, View view, String AUTHORITY) {
+            Bitmap bitmapFromView = createBitmapFromView(view);
+            Uri uri = saveBitmapToSD(activity, bitmapFromView, FileUtils.getAppDirectory(activity, false) + "/GT", "gt_share.png", AUTHORITY);
+            shareImageUri(activity, uri);
         }
 
         /**
-         * 将字符串复制到粘贴板上
+         * 分享图片(推荐方式)
+         *
+         * @param activity
+         * @param bitmapFromView
+         * @param AUTHORITY
+         */
+        public static void shareBitmapView_T(Activity activity, Bitmap bitmapFromView, String AUTHORITY) {
+            Uri uri = saveBitmapToSD(activity, bitmapFromView, FileUtils.getAppDirectory(activity, false) + "/GT", "gt_share.png", AUTHORITY);
+            shareImageUri(activity, uri);
+        }
+
+        /**
+         * 指定分享的渠道（不推荐方式）
          *
          * @param context
-         * @param text
+         * @param bitmap
+         * @param shareType 指定分享渠道
          */
-        public static void copyToClipboard(Context context, String text) {
-            ClipboardManager systemService = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-            systemService.setPrimaryClip(ClipData.newPlainText("text", text));
+        public void shareImageType_F(Context context, Bitmap bitmap, String shareType) {
+            try {
+                ComponentName componentName = null;
+                switch (shareType) {
+                    case "新浪"://新浪
+                        componentName = new ComponentName("com.sina.weibo", "com.sina.weibo.composerinde.ComposerDispatchActivity");
+                        break;
+                    case "QQ空间"://QQ空间
+//                       componentName = new ComponentName("com.qzone", "com.qzonex.module.operation.ui.QZonePublishMoodActivity");
+                        return;
+                    case "QQ"://QQ
+                        componentName = new ComponentName("com.tencent.mobileqq", "com.tencent.mobileqq.activity.JumpActivity");
+                        break;
+                    case "微信"://微信
+                        componentName = new ComponentName("com.tencent.mm", "com.tencent.mm.ui.tools.ShareImgUI");
+                        break;
+                    case "微信朋友圈"://微信朋友圈
+                        componentName = new ComponentName("com.tencent.mm", "com.tencent.mm.ui.tools.ShareToTimeLineUI");
+                        break;
+                    case "微信收藏"://微信收藏
+                        componentName = new ComponentName("com.tencent.mm", "com.tencent.mm.ui.tools.AddFavoriteUI");
+                        break;
+                    case "分享更多"://分享更多
+                        try {
+                            shareImageBitmap_F((Activity) context, bitmap, "选择分享渠道");
+                        } catch (Exception e) {
+                            ToastUtils.showShort("暂未安装改APP,分享失败.");
+                        }
+                        return;
+                }
+                Uri uriToImage = Uri.parse(MediaStore.Images.Media.insertImage(context.getContentResolver(), bitmap, null, null));
+                Intent shareIntent = new Intent();
+                shareIntent.setAction(Intent.ACTION_SEND);
+                shareIntent.putExtra(Intent.EXTRA_STREAM, uriToImage);
+                shareIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                shareIntent.setType("image/*");
+                // 遍历所有支持发送图片的应用。找到需要的应用
+                shareIntent.setComponent(componentName);
+                context.startActivity(Intent.createChooser(shareIntent, "Share"));
+            } catch (Exception e) {
+                GT.errs("分享异常:" + e);
+            }
+        }
+
+        /**
+         * 指定分享的渠道（推荐方式）
+         *
+         * @param context
+         * @param bitmap
+         * @param shareType 指定分享渠道
+         */
+        public void shareImageType_T(Context context, Bitmap bitmap, String shareType, String AUTHORITY) {
+            try {
+                ComponentName componentName = null;
+                switch (shareType) {
+                    case "新浪"://新浪
+                        componentName = new ComponentName("com.sina.weibo", "com.sina.weibo.composerinde.ComposerDispatchActivity");
+                        break;
+                    case "QQ空间"://QQ空间
+//                       componentName = new ComponentName("com.qzone", "com.qzonex.module.operation.ui.QZonePublishMoodActivity");
+                        return;
+                    case "QQ"://QQ
+                        componentName = new ComponentName("com.tencent.mobileqq", "com.tencent.mobileqq.activity.JumpActivity");
+                        break;
+                    case "微信"://微信
+                        componentName = new ComponentName("com.tencent.mm", "com.tencent.mm.ui.tools.ShareImgUI");
+                        break;
+                    case "微信朋友圈"://微信朋友圈
+                        componentName = new ComponentName("com.tencent.mm", "com.tencent.mm.ui.tools.ShareToTimeLineUI");
+                        break;
+                    case "微信收藏"://微信收藏
+                        componentName = new ComponentName("com.tencent.mm", "com.tencent.mm.ui.tools.AddFavoriteUI");
+                        break;
+                    case "分享更多"://分享更多
+                        try {
+                            shareImageBitmap_F((Activity) context, bitmap, "选择分享渠道");
+                        } catch (Exception e) {
+                            ToastUtils.showShort("暂未安装改APP,分享失败.");
+                        }
+                        return;
+                }
+//                Uri uriToImage = Uri.parse(MediaStore.Images.Media.insertImage(context.getContentResolver(), bitmap, null, null));
+                Uri uriToImage = saveBitmapToSD(context, bitmap, FileUtils.getAppDirectory(context, false) + "/GT", "gt_share.png", AUTHORITY);
+                Intent shareIntent = new Intent();
+                shareIntent.setAction(Intent.ACTION_SEND);
+                shareIntent.putExtra(Intent.EXTRA_STREAM, uriToImage);
+                shareIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                shareIntent.setType("image/*");
+                // 遍历所有支持发送图片的应用。找到需要的应用
+                shareIntent.setComponent(componentName);
+                context.startActivity(Intent.createChooser(shareIntent, "Share"));
+            } catch (Exception e) {
+                GT.errs("分享异常:" + e);
+            }
+        }
+
+        /**
+         * 保存方法
+         * <p>
+         * 需要添加这个配置：AUTHORITY
+         * <provider
+         * android:name="androidx.core.content.FileProvider"
+         * android:authorities="com.gsls.gt.fileprovider"
+         * android:exported="false"
+         * android:grantUriPermissions="true">
+         * <meta-data
+         * android:name="android.support.FILE_PROVIDER_PATHS"
+         * android:resource="@xml/file_paths" />
+         * </provider>
+         * <p>
+         * file_paths.xml :
+         * <paths>
+         * <external-path path="." name="external_storage_root" />
+         * </paths>
+         *
+         * @param context
+         * @param bitmap    图片资源
+         * @param savePath  保存路径(不需要加文件名)
+         * @param fileName  文件名字(需要加文件扩展名)
+         * @param AUTHORITY 这个需要添加上面的配置文件
+         * @return
+         */
+        public static Uri saveBitmapToSD(Context context, Bitmap bitmap, String savePath, String fileName, String AUTHORITY) {
+            File file = new File(savePath);
+            if (!file.exists()) {
+                file.mkdirs();
+            }
+            file = new File(savePath, fileName);
+            if (file.exists()) {
+                file.delete();
+            }
+            try {
+                FileOutputStream out = new FileOutputStream(file);
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, out);
+                Uri uri;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && AUTHORITY != null) {
+                    uri = FileProvider.getUriForFile(context, AUTHORITY, file);
+                } else {
+                    uri = Uri.fromFile(file);
+                }
+                out.flush();
+                out.close();
+                return uri;
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        /**
+         * 截图
+         *
+         * @param activity
+         * @return
+         */
+        public static Bitmap takeScreenShot(Activity activity) {
+            View dView = activity.getWindow().getDecorView();
+            dView.setDrawingCacheEnabled(true);
+            dView.buildDrawingCache();
+            return Bitmap.createBitmap(dView.getDrawingCache());
+        }
+
+        /**
+         * View 转 Bitmap
+         *
+         * @param view
+         * @return
+         */
+        public static Bitmap createBitmapFromView(View view) {
+            //是ImageView直接获取
+            if (view instanceof ImageView) {
+                Drawable drawable = ((ImageView) view).getDrawable();
+                if (drawable instanceof BitmapDrawable) {
+                    return ((BitmapDrawable) drawable).getBitmap();
+                }
+            }
+            view.clearFocus();
+            Bitmap bitmap = Bitmap.createBitmap(view.getWidth(), view.getHeight(), Bitmap.Config.ARGB_8888);
+            if (bitmap != null) {
+                Canvas canvas = new Canvas(bitmap);
+                view.draw(canvas);
+                canvas.setBitmap(null);
+            }
+            return bitmap;
         }
 
         /**
@@ -11440,6 +13326,148 @@ public class GT {
 
             }
 
+        }
+
+        /**
+         * 保存图片
+         *
+         * @param activity
+         * @param bitmap
+         * @param savePath
+         * @param fileName
+         */
+        public static void saveImage(Activity activity, Bitmap bitmap, String savePath, String fileName) {
+
+            // 更新图库
+            File file = new File(savePath);
+            if (!file.exists()) {
+                file.mkdirs();// 创建整个目录
+            }
+
+            try {
+                FileOutputStream out = new FileOutputStream(savePath + fileName);
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, out);
+                out.flush();
+                out.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            // 通知系统更新图库
+            if (file.exists()) {
+                try {
+                    MediaStore.Images.Media.insertImage(activity.getContentResolver(), savePath + fileName, fileName, null);// 把文件插入到系统图库
+                    activity.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(new File(savePath + fileName))));// 发送广播通知系统
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+        }
+
+        /**
+         * 截图到相册
+         *
+         * @param activity
+         * @param savePath
+         * @param fileName
+         */
+        public static void screenshotToPhoto(Activity activity, String savePath, String fileName) {
+
+            View dView = activity.getWindow().getDecorView();
+            dView.setDrawingCacheEnabled(true);
+            dView.buildDrawingCache();
+            Bitmap bitmap = Bitmap.createBitmap(dView.getDrawingCache());
+
+            // 更新图库
+            File file = new File(savePath);
+            if (!file.exists()) {
+                file.mkdirs();// 创建整个目录
+            }
+
+            try {
+                FileOutputStream out = new FileOutputStream(savePath + fileName);
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, out);
+                out.flush();
+                out.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            // 通知系统更新图库
+            if (file.exists()) {
+                try {
+                    MediaStore.Images.Media.insertImage(activity.getContentResolver(), savePath + fileName, fileName, null);// 把文件插入到系统图库
+                    activity.sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(new File(savePath + fileName))));// 发送广播通知系统
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+        }
+
+        /********************************************* 其他功能 *********************************/
+
+        /**
+         * 弹出软件盘
+         *
+         * @param editText
+         * @param activity
+         */
+        public static void editKeyboard(EditText editText, Activity activity) {
+            InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+            imm.showSoftInput(editText, InputMethodManager.RESULT_SHOWN);
+            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY);
+            editText.requestFocus();// 为搜索框 获取光标
+        }
+
+        /**
+         * 收起软键盘
+         *
+         * @param editText
+         * @param activity
+         */
+        public static void editKeyShrink(EditText editText, Activity activity) {
+            InputMethodManager inputMethodManager = (InputMethodManager) activity
+                    .getSystemService(Context.INPUT_METHOD_SERVICE);
+            inputMethodManager.hideSoftInputFromWindow(editText.getWindowToken(), 0);
+        }
+
+        /**
+         * 将字符串复制到粘贴板上
+         *
+         * @param context
+         * @param text
+         */
+        public static void copyToClipboard(Context context, String text) {
+            ClipboardManager systemService = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            systemService.setPrimaryClip(ClipData.newPlainText("text", text));
+        }
+
+        /**
+         * 获取粘贴板的内容
+         *
+         * @param context
+         * @return
+         */
+        public static String getClipboardContentTest(Context context) {
+            ClipboardManager cm = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                ClipData data = cm.getPrimaryClip();
+                if (data != null) {
+                    ClipData.Item item = data.getItemAt(0);
+                    if (item != null) {
+                        return item.getText().toString();
+                    }
+                }
+            }
+            return null;
         }
 
         /**
@@ -11678,56 +13706,6 @@ public class GT {
         }
 
         /**
-         * Activity截屏 转 Bitmap
-         */
-        public static Bitmap takeScreenShot(Activity pActivity) {
-            View view = pActivity.getWindow().getDecorView();
-            // 设置是否可以进行绘图缓存
-            view.setDrawingCacheEnabled(true);
-            // 如果绘图缓存无法，强制构建绘图缓存
-            view.buildDrawingCache();
-            // 返回这个缓存视图
-            Bitmap bitmap = view.getDrawingCache();
-
-            // 获取状态栏高度
-            Rect frame = new Rect();
-            // 测量屏幕宽和高
-            view.getWindowVisibleDisplayFrame(frame);
-            int stautsHeight = frame.top;
-            Point point = new Point();
-            pActivity.getWindowManager().getDefaultDisplay().getSize(point);
-            int width = point.x;
-            int height = point.y;
-            // 根据坐标点和需要的宽和高创建bitmap
-            bitmap = Bitmap.createBitmap(bitmap, 0, stautsHeight, width, height - stautsHeight);
-            return bitmap;
-        }
-
-        /**
-         * View 转 Bitmap
-         *
-         * @param view
-         * @return
-         */
-        public static Bitmap createBitmapFromView(View view) {
-            //是ImageView直接获取
-            if (view instanceof ImageView) {
-                Drawable drawable = ((ImageView) view).getDrawable();
-                if (drawable instanceof BitmapDrawable) {
-                    return ((BitmapDrawable) drawable).getBitmap();
-                }
-            }
-            view.clearFocus();
-            Bitmap bitmap = Bitmap.createBitmap(view.getWidth(), view.getHeight(), Bitmap.Config.ARGB_8888);
-            if (bitmap != null) {
-                Canvas canvas = new Canvas(bitmap);
-                view.draw(canvas);
-                canvas.setBitmap(null);
-            }
-            return bitmap;
-        }
-
-        /**
          * 是否在后台
          *
          * @param context
@@ -11781,13 +13759,125 @@ public class GT {
             return packages;
         }
 
-        // 判断手机号码是否规则
+        /**
+         * 判断手机号码是否规则
+         *
+         * @param input
+         * @return
+         */
         public static boolean isPhoneNumber(String input) {
             String regex = "(1[0-9][0-9]|15[0-9]|18[0-9])\\d{8}";
             Pattern p = Pattern.compile(regex);
             return p.matches(regex, input);
         }
 
+        /**
+         * 判断是否停止
+         */
+        private static boolean mIsCancel = false;
+
+        public static boolean ismIsCancel() {
+            return mIsCancel;
+        }
+
+        /**
+         * 是否停止下载
+         *
+         * @param mIsCancel
+         */
+        public static void setmIsCancel(boolean mIsCancel) {
+            ApplicationUtils.mIsCancel = mIsCancel;
+        }
+
+        /**
+         * 下载File
+         *
+         * @param url
+         * @param savePath
+         * @param saveFileName
+         * @param listener
+         */
+        public static void downloadFile(final String url, final String savePath, final String saveFileName, final OnDownloadListener listener) {
+            Thread.runJava(new Runnable() {
+                @Override
+                public void run() {
+                    HttpURLConnection conn;
+                    try {
+                        conn = (HttpURLConnection) new URL(url).openConnection();
+                        conn.connect();
+                        InputStream is = conn.getInputStream();
+                        int length = conn.getContentLength();
+
+                        File file = new File(savePath, saveFileName);
+                        FileOutputStream fos = new FileOutputStream(file);
+
+                        int count = 0;
+                        byte[] buffer = new byte[1024];
+                        listener.onDownloadStart(file);
+                        while (!mIsCancel) {
+                            int numread = is.read(buffer);
+                            count += numread;
+                            // 计算进度条的当前位置
+                            int mProgress = (int) (((float) count / length) * 100);
+                            //下载中更新进度条
+                            listener.onDownloading(mProgress);
+                            if (numread < 0) {
+                                //下载完成
+                                listener.onDownloadSuccess(file);
+                                break;
+                            }
+                            fos.write(buffer, 0, numread);
+                        }
+                        fos.close();
+                        is.close();
+
+                    } catch (IOException e) {
+                        listener.onDownloadFailed(e);
+                    }
+                }
+            });
+        }
+
+        public interface OnDownloadListener {
+
+            /**
+             * 下载成开始
+             */
+            void onDownloadStart(File file);
+
+            /**
+             * 下载进度
+             */
+            void onDownloading(int progress);
+
+            /**
+             * 下载成功
+             */
+            void onDownloadSuccess(File file);
+
+
+            /**
+             * 下载异常信息
+             */
+
+            void onDownloadFailed(Exception e);
+        }
+
+        /**
+         * 判断当前应用是否是debug状态
+         *
+         * @param context
+         * @return 是 debug版本就返回 true
+         */
+        public static boolean isApkInDebug(Context context) {
+            if (context == null) return true;
+            try {
+                ApplicationInfo info = context.getApplicationInfo();
+                return (info.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+            } catch (Exception e) {
+                return false;
+            }
+        }
 
     }
 
@@ -11811,90 +13901,6 @@ public class GT {
              * <uses-permission android:name="android.permission.INTERNET" />  <!-- 网络权限 -->
              * <uses-permission android:name="android.permission.READ_PHONE_STATE" />  <!-- 读取手机权限 -->
              */
-
-            //  判断是否停止
-            private static boolean mIsCancel = false;
-
-            public static boolean ismIsCancel() {
-                return mIsCancel;
-            }
-
-            /**
-             * 是否停止下载
-             *
-             * @param mIsCancel
-             */
-            public static void setmIsCancel(boolean mIsCancel) {
-                UpdateApp.mIsCancel = mIsCancel;
-            }
-
-            /**
-             * 下载App
-             *
-             * @param appUrl
-             * @param appSavePath
-             * @param appSaveFileName
-             * @param listener
-             */
-            public static void downloadApp(final String appUrl, final String appSavePath, final String appSaveFileName, final OnDownloadListener listener) {
-                GT.Thread.runJava(new Runnable() {
-                    @Override
-                    public void run() {
-                        HttpURLConnection conn;
-                        try {
-                            conn = (HttpURLConnection) new URL(appUrl).openConnection();
-                            conn.connect();
-                            InputStream is = conn.getInputStream();
-                            int length = conn.getContentLength();
-
-                            File apkFile = new File(appSavePath, appSaveFileName);
-                            FileOutputStream fos = new FileOutputStream(apkFile);
-
-                            int count = 0;
-                            byte[] buffer = new byte[1024];
-                            while (!mIsCancel) {
-                                int numread = is.read(buffer);
-                                count += numread;
-                                // 计算进度条的当前位置
-                                int mProgress = (int) (((float) count / length) * 100);
-                                //下载中更新进度条
-                                listener.onDownloading(mProgress);
-                                if (numread < 0) {
-                                    //下载完成
-                                    listener.onDownloadSuccess(apkFile);
-                                    break;
-                                }
-                                fos.write(buffer, 0, numread);
-                            }
-                            fos.close();
-                            is.close();
-
-                        } catch (IOException e) {
-                            listener.onDownloadFailed(e);
-                        }
-                    }
-                });
-            }
-
-            public interface OnDownloadListener {
-
-                /**
-                 * 下载成功之后的文件
-                 */
-                void onDownloadSuccess(File file);
-
-                /**
-                 * 下载进度
-                 */
-                void onDownloading(int progress);
-
-                /**
-                 * 下载异常信息
-                 */
-
-                void onDownloadFailed(Exception e);
-            }
-
 
             /**
              * 安装APK
@@ -12264,229 +14270,6 @@ public class GT {
 
     }
 
-//=========================================== 数据适配器 =========================================
-
-    /**
-     * GT 适配器
-     */
-    public static class Adapters {
-
-        /**
-         * 用于旧版继承的 适配器基类
-         *
-         * @param <T>
-         */
-        public static abstract class BaseArrayAdapters<T> extends ArrayAdapter<T> implements BaseViewHolder<T> {
-
-            private int position = 0;
-
-            public int getPosition() {
-                return position;
-            }
-
-            public BaseArrayAdapters(Context context, int resource, List<T> objects) {
-                super(context, resource, objects);
-            }
-
-            /**
-             * 加载布局
-             *
-             * @return
-             */
-            protected abstract int loadLayout();
-
-            public View getView(int position, View convertView, ViewGroup parent) {
-                this.position = position;
-                View layout = LayoutInflater.from(getContext()).inflate(loadLayout(), parent, false);
-                initView(layout, getItem(position));
-                initView(layout, getItem(position), convertView, parent);
-                return layout;
-            }
-
-            protected View initView(View view, T bean) {
-                function(view, bean);
-                return view;
-            }
-
-            protected View initView(View view, T bean, View convertView, ViewGroup parent) {
-                function(view, bean);
-                return view;
-            }
-
-        }
-
-        private static abstract interface BaseViewHolder<T> {
-            void function(final View view, final T bean);
-        }
-
-        /**
-         * 用于继承新版的适配器
-         */
-        public static abstract class BaseAdapter<T> extends RecyclerView.Adapter<BaseAdapter.BaseHolder> {
-
-            private Context context;
-            private List<T> beanList;
-            private LinearLayoutManager linearLayoutManager;
-            private int layout = -1;
-
-            public BaseAdapter(Context context) {
-                this.context = context;
-            }
-
-            /**
-             * @param context
-             * @param beanList 展示内容
-             */
-            public BaseAdapter(Context context, List<T> beanList) {
-                this.context = context;
-                this.beanList = beanList;
-                notifyDataSetChanged();
-            }
-
-            /**
-             * @param context
-             * @param rv
-             * @param beanList      展示内容
-             * @param layout_V_OR_H LinearLayoutManager.VERTICAL OR LinearLayoutManager.HORIZONTAL OR 瀑布流
-             * @param layout        加载的布局
-             */
-            public BaseAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
-                this.context = context;
-                this.layout = layout;
-                linearLayoutManager = new LinearLayoutManager(context, layout_V_OR_H, false);
-                rv.setAdapter(this);
-                rv.setLayoutManager(linearLayoutManager);
-                this.beanList = beanList;
-                notifyDataSetChanged();
-            }
-
-            public Context getContext() {
-                return context;
-            }
-
-            public void setContext(Context context) {
-                this.context = context;
-            }
-
-            public LinearLayoutManager getLinearLayoutManager() {
-                return linearLayoutManager;
-            }
-
-            public void setLinearLayoutManager(LinearLayoutManager linearLayoutManager) {
-                this.linearLayoutManager = linearLayoutManager;
-            }
-
-            public List<?> getBeanList() {
-                return beanList;
-            }
-
-            public void setBeanList(List<T> beanList) {
-                this.beanList = beanList;
-                notifyDataSetChanged();
-            }
-
-            /**
-             * 设置布局
-             *
-             * @param rv
-             * @param adapter
-             * @return
-             */
-            public LinearLayoutManager setLinearLayoutManager_V(RecyclerView rv) {
-                LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
-                rv.setAdapter(this);
-                rv.setLayoutManager(llm);
-                return llm;
-            }
-
-            /**
-             * 设置布局
-             *
-             * @param rv
-             * @param adapter
-             * @return
-             */
-            public LinearLayoutManager setLinearLayoutManager_H(RecyclerView rv) {
-                LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false);
-                rv.setAdapter(this);
-                rv.setLayoutManager(llm);
-                return llm;
-            }
-
-            @Override
-            public BaseAdapter.BaseHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-                BaseHolder baseHolder = new BaseHolder(LayoutInflater.from(context).inflate(loadLayout(), parent, false));
-                return baseHolder;
-            }
-
-            protected int loadLayout() {
-                return layout;
-            }
-
-            protected void initView(BaseAdapter.BaseHolder holder, int position, T t) {
-            }
-
-            protected void initView(View itemView, int position, T t) {
-
-            }
-
-            protected void loadData(View itemView, int position, T t) {
-            }
-
-            @Override
-            public void onBindViewHolder(BaseAdapter.BaseHolder holder, int position) {
-                T t = beanList.get(position);
-                initView(holder, position, t);
-                initView(holder.itemView, position, t);
-                loadData(holder.itemView, position, t);
-            }
-
-            @Override
-            public int getItemCount() {
-                return beanList == null ? 0 : beanList.size();
-            }
-
-            protected static class BaseHolder extends RecyclerView.ViewHolder {
-                public BaseHolder(View itemView) {
-                    super(itemView);
-                }
-            }
-
-        }
-
-        public static abstract class AnnotationAdapter<T> extends BaseAdapter<T> {
-
-            //布局ID
-            private int resLayout;
-
-            public void setLayout(int resLayout) {
-                this.resLayout = resLayout;
-            }
-
-            public AnnotationAdapter(Context context) {
-                super(context);
-                GT.build(this);
-            }
-
-            public AnnotationAdapter(Context context, List<T> detectionDataBeanList) {
-                super(context, detectionDataBeanList);
-            }
-
-            public AnnotationAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
-                super(context, rv, beanList, layout_V_OR_H, layout);
-            }
-
-            @Override
-            protected int loadLayout() {
-                return resLayout;
-            }
-
-
-        }
-
-    }
-
-
 //=========================================== 字符串加密类 =========================================
 
     /**
@@ -12626,7 +14409,6 @@ public class GT {
 
     }
 
-
 //=========================================== APP权限类 =========================================
 
     /**
@@ -12691,9 +14473,10 @@ public class GT {
         private static Permission Permission = null;
         private static FragmentManager fragmentManager;
         private static PermissionFragment fragment;
-        private Permission.PermissionDescription permissionDescription;
+        private PermissionDescription permissionDescription;
+        private static String[] permission;
 
-        public static Permission init(FragmentActivity context) {
+        public static Permission init(FragmentActivity context, String... permission) {
             if (Permission == null) {
                 synchronized (GT.class) {
                     if (Permission == null) {
@@ -12701,17 +14484,22 @@ public class GT {
                     }
                 }
             }
+            if (permission == null || permission.length == 0) {
+                GT.err("Permission list is empty. Application failed!");
+                return Permission;
+            }
+            Permission.permission = permission;
             fragmentManager = context.getSupportFragmentManager();
             fragment = (PermissionFragment) context.getSupportFragmentManager().findFragmentByTag(TAG_EACH_PERMISSION);
             return Permission;
         }
 
-        public Permission permissions(String[] permission, OnPermissionListener onPermissionListener) {
-            GT.Thread.runJava(new Runnable() {
+        public Permission permissions(OnPermissionListener onPermissionListener) {
+            Thread.runJava(new Runnable() {
                 @Override
                 public void run() {
 
-                    GT.Thread.runAndroid(new Runnable() {
+                    Thread.runAndroid(new Runnable() {
                         @Override
                         public void run() {
 
@@ -12719,7 +14507,7 @@ public class GT {
                                 permissionDescription.invalidClose();
                             }
 
-                            permissionDescription = new Permission.PermissionDescription();
+                            permissionDescription = new PermissionDescription();
 
                             if (fragment == null) {
                                 fragment = PermissionFragment.newInstance(permission, onPermissionListener, Permission, permissionDescription);
@@ -12833,21 +14621,21 @@ public class GT {
         public static class PermissionFragment extends Fragment {
 
             private String[] permission;
-            private Permission.OnPermissionListener onPermissionListener;
+            private OnPermissionListener onPermissionListener;
             private Permission Permission;
-            private Permission.PermissionDescription permissionDescription;
+            private PermissionDescription permissionDescription;
             private List<String> grantedList = new ArrayList<>();//已通过
             private List<String> deniedList = new ArrayList<>();//未通过
             private boolean isAllGranted = true;//检查权限是否全部通过
 
-            public PermissionFragment(String[] permission, Permission.OnPermissionListener onPermissionListener, Permission Permission, Permission.PermissionDescription permissionDescription) {
+            public PermissionFragment(String[] permission, OnPermissionListener onPermissionListener, Permission Permission, PermissionDescription permissionDescription) {
                 this.permission = permission;
                 this.onPermissionListener = onPermissionListener;
                 this.Permission = Permission;
                 this.permissionDescription = permissionDescription;
             }
 
-            public static PermissionFragment newInstance(String[] permission, Permission.OnPermissionListener onPermissionListener, Permission Permission, Permission.PermissionDescription permissionDescription) {
+            public static PermissionFragment newInstance(String[] permission, OnPermissionListener onPermissionListener, Permission Permission, PermissionDescription permissionDescription) {
                 return new PermissionFragment(permission, onPermissionListener, Permission, permissionDescription);
             }
 
@@ -12889,14 +14677,14 @@ public class GT {
                     //调用授权说明对话框
                     onPermissionListener.onExplainRequestReason(permissionDescription);
 
-                    GT.Thread.runJava(new Runnable() {
+                    Thread.runJava(new Runnable() {
                         @Override
                         public void run() {
 
                             int i = 0;
                             //等待结束申请说明
                             while (!permissionDescription.isCloseAcceptAdvice()) {
-                                GT.Thread.sleep(300);
+                                Thread.sleep(300);
                             }
 
                             if (permissionDescription.isValidClose()) {//判断是否有效关闭
@@ -12962,7 +14750,6 @@ public class GT {
 
 
     }
-
 
 //============================================= UI类 ===========================================
 
@@ -14100,7 +15887,7 @@ public class GT {
          * @param activity
          */
         public static void fullScreen(Activity activity) {
-            activity.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+            activity.requestWindowFeature(Window.FEATURE_NO_TITLE);
             activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         }
 
@@ -14150,7 +15937,7 @@ public class GT {
          *
          * @param WindowUtils
          */
-        public static void setHideVirtualKey(android.view.Window WindowUtils) {
+        public static void setHideVirtualKey(Window WindowUtils) {
             //保持布局状态
             int uiOptions = View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
                     //布局位于状态栏下方
@@ -14337,7 +16124,10 @@ public class GT {
     public static class GT_Activity implements SaveObject.SaveBean {
 
         /**
-         * 封装普通的 Activity 管理器
+         * 封装第一代 Activity
+         * 封装特点：
+         * 1.出现添加布局、初始化布局、加载数据方法
+         * 2.获取组件还是使用原始的 findViewById
          */
         public abstract static class BaseActivity extends AppCompatActivity {
 
@@ -14369,7 +16159,6 @@ public class GT {
                 this.closeAnim = closeAnim;
                 cutIndex = -1;
             }
-
 
             protected GT_Fragment gt_fragment;
 
@@ -14417,34 +16206,7 @@ public class GT {
              * @param context
              */
             protected void build(Context context) {
-                getGT().build(context);
-            }
-
-            /**
-             * @param dialogFragment
-             * @跳转其他的 DialogFragment
-             */
-            protected void startDialogFragment(DialogFragment dialogFragment) {
-                dialogFragment.show(getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
-            }
-
-            /**
-             * @param dialogFragment
-             * @跳转其他的 DialogFragment
-             */
-            protected void startDialogFragment(Class<?> dialogFragmentClass) {
-
-                DialogFragment fragment = null;
-
-                try {
-                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                } catch (java.lang.InstantiationException e) {
-                    e.printStackTrace();
-                }
-
-                fragment.show(getSupportFragmentManager(), fragment.getClass().toString());// 弹出退出提示
+                GT.build(context);
             }
 
             /**
@@ -14475,6 +16237,41 @@ public class GT {
                         }
                         break;
                 }
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(DialogFragment dialogFragment) {
+                dialogFragment.show(getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * @param dialogFragment
+             * @跳转其他的 DialogFragment
+             */
+            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+
+                DialogFragment fragment = null;
+
+                try {
+                    fragment = (DialogFragment) dialogFragmentClass.newInstance();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (InstantiationException e) {
+                    e.printStackTrace();
+                }
+
+                fragment.show(getSupportFragmentManager(), fragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * @param supportFragmentManager
+             * @param dialogFragment         跳转其他的
+             */
+            public void startDialogFragment(FragmentManager supportFragmentManager, DialogFragment dialogFragment) {
+                dialogFragment.show(supportFragmentManager, dialogFragment.getClass().toString());// 弹出退出提示
             }
 
             /**
@@ -14636,9 +16433,8 @@ public class GT {
             }
 
             protected GT_Fragment getGT_Fragment() {
-                return GT.GT_Fragment.gt_fragment;
+                return GT_Fragment.gt_fragment;
             }
-
 
             //反馈数据
             @Override
@@ -14686,7 +16482,10 @@ public class GT {
         }
 
         /**
-         * 封装注解的 Activity 管理器
+         * 封装第二代 Activity
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以使用注解的方式进行获取
          */
         public abstract static class AnnotationActivity extends BaseActivity {
 
@@ -14696,14 +16495,28 @@ public class GT {
                 initDrawView();// 设置绘制前的数据
                 initView(savedInstanceState);// 初始化 UI
                 loadData();// 功能方法
-
             }
 
             @Override
             protected void initView(Bundle savedInstanceState) {
                 build(this);
             }
+
+
         }
+
+        /**
+         * 封装第三代 Activity
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以直接无需获取，直接使用。
+         *
+         * @param <T>
+         */
+        public abstract static class DataBindingActivity extends AnnotationActivity {
+
+        }
+
 
         /**
          * 获取Activity
@@ -14758,7 +16571,6 @@ public class GT {
                 return null;
             }
         }
-
 
     }
 
@@ -14834,8 +16646,8 @@ public class GT {
                 }
 
                 //采取第2号紧急措施，如果有绑定 Activity 那就直接使用绑定的 Activity
-                if (activity == null) {
-                    activity = (Activity) getGT().activity;
+                if (activity == null && context != null && context != null) {
+                    activity = (Activity) context;
                 }
 
                 //如果还是没有 Activity 那就没法了...
@@ -15029,7 +16841,6 @@ public class GT {
 
         }
 
-
         /**
          * 22种切换样式：
          * 0    默认切换、       transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);//当前默认使用这一个动画 淡入淡出
@@ -15055,7 +16866,6 @@ public class GT {
          * 20   左角落放大、		transaction.setCustomAnimations(R.animator.zoom_from_left_corner_right_in, R.animator.zoom_from_left_corner_left_out, R.animator.zoom_from_left_corner_left_in, R.animator.zoom_from_left_corner_right_out);
          * 21   右角落放大、		transaction.setCustomAnimations(R.animator.zoom_from_right_corner_right_in, R.animator.zoom_from_right_corner_left_out, R.animator.zoom_from_right_corner_left_in, R.animator.zoom_from_right_corner_right_out);
          */
-
 
         private static int cutEffectsIndex = 0;//默认为标准切换特效
         private static int enter = 0, exit = 0, popEnter = 0, popExit = 0;//设置自定义Fragment 切换
@@ -15837,7 +17647,6 @@ public class GT {
             return this;
         }
 
-
         /**
          * 启动新的 Fragment 使用 Home 容器
          *
@@ -16012,7 +17821,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
             }
 
             if (fragmentManager != null) {
@@ -16033,7 +17842,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
             }
 
             if (fragmentManager != null) {
@@ -16061,7 +17870,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
             }
 
             if (fragmentManager != null) {
@@ -16082,7 +17891,7 @@ public class GT {
 
             //如果传递的值不为null 那就传递
             if (intent != null && activity != null) {
-                ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
             }
 
             if (fragmentManager != null) {
@@ -16175,7 +17984,7 @@ public class GT {
         //=========================================== GT_Fragment 基类 ====================================
 
         /**
-         * 用于辅助 Fragment
+         * 封装第一代 Fragment
          */
         public abstract static class BaseFragment extends Fragment {
 
@@ -16187,7 +17996,7 @@ public class GT {
             }
 
             // 定义 Activity
-            protected Activity activity;
+            public Activity activity;
 
             // 如果重写该方法了的话就需要自己写 接收 Activity
             @Override
@@ -16226,6 +18035,11 @@ public class GT {
              * @param view
              */
             protected void createView(View view) {
+            }
+
+            protected View findViewById(int id) {
+                if (view == null) return null;
+                return view.findViewById(id);
             }
 
             /**
@@ -16312,6 +18126,15 @@ public class GT {
 
                 dialogFragment.setTargetFragment(this, 1);
                 dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
+            }
+
+            /**
+             * @param supportFragmentManager
+             * @param dialogFragment         跳转其他的
+             */
+            public void startDialogFragment(FragmentManager supportFragmentManager, DialogFragment dialogFragment) {
+                dialogFragment.setTargetFragment(this, 1);
+                dialogFragment.show(supportFragmentManager, dialogFragment.getClass().toString());// 弹出退出提示
             }
 
             /**
@@ -16550,7 +18373,7 @@ public class GT {
                 initView(view, savedInstanceState);// 主要方法
                 loadData();
                 // 如果切换方式是 Fragment 那就注册返回事件 如果是 Activity 请自行去注册 返回按钮事件
-                GT.GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
+                GT_Fragment.onKeyDown(view, new View.OnKeyListener() {
                     @Override
                     public boolean onKey(View v, int keyCode, KeyEvent event) {
                         if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
@@ -16563,7 +18386,7 @@ public class GT {
                 //是否解决EditText bug
                 if (isSolveEditTextBug) {
                     //给EditText 组件设置返回事件
-                    GT.Thread.runJava(new Runnable() {
+                    Thread.runJava(new Runnable() {
                         @Override
                         public void run() {
                             setViewBackListener(view);
@@ -16588,10 +18411,10 @@ public class GT {
                 if (viewLayout instanceof EditText) {
 
                     if (activity != null) {
-                        GT.Thread.runAndroid(activity, new Runnable() {
+                        Thread.runAndroid(activity, new Runnable() {
                             @Override
                             public void run() {
-                                GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
+                                GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
                                     @Override
                                     public boolean onKey(View v, int keyCode, KeyEvent event) {
                                         if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
@@ -16634,7 +18457,7 @@ public class GT {
                 //如果是Edit类型的那就监听返回事件
                 if (viewLayout instanceof EditText) {
                     if (activity != null) {
-                        GT.Thread.runAndroid(activity, new Runnable() {
+                        Thread.runAndroid(activity, new Runnable() {
                             @Override
                             public void run() {
                                 viewLayout.requestFocus();
@@ -16689,7 +18512,7 @@ public class GT {
         }
 
         /**
-         * 用于辅助 Fragment
+         * 封装第二代 Fragment
          */
         public abstract static class AnnotationFragment extends BaseFragment {
 
@@ -16702,7 +18525,7 @@ public class GT {
 
             @Override
             public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                getGT().build(this);// 注解赋值布局ID值
+                GT.build(this);// 注解赋值布局ID值
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
@@ -16710,11 +18533,22 @@ public class GT {
 
             @Override
             protected void initView(View view, Bundle savedInstanceState) {
-                getGT().build(this);
+                GT.build(this);
 
             }
         }
 
+        /**
+         * 封装第三代 Fragment
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以直接无需获取，直接使用。
+         *
+         * @param <T>
+         */
+        public abstract static class DataBindingFragment extends AnnotationFragment {
+
+        }
 
         //=========================================== GT_Fragment 释放资源方法 ====================================
 
@@ -16960,7 +18794,7 @@ public class GT {
                 progressDialog.setCancelable(isCancelable);
                 progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
 
-                GT.Thread.runJava(new Runnable() {
+                Thread.runJava(new Runnable() {
                     @Override
                     public void run() {
                         boolean isStart = false;        //是否开始加载
@@ -17207,7 +19041,7 @@ public class GT {
                         dialog.getWindow().setDimAmount(transparency);//设置昏暗度为0 则表示为透明， 如果是 -1 则是默认
 
                     //修改 自定义对话框的显示位置
-                    android.view.Window dialogWindowUtils = dialog.getWindow();//随意定义个Dialog
+                    Window dialogWindowUtils = dialog.getWindow();//随意定义个Dialog
                     WindowManager.LayoutParams lp = dialogWindowUtils.getAttributes();//实例化WindowUtils
                     //实例化WindowUtils操作者
                     lp.x = X; // 新位置X坐标
@@ -17226,8 +19060,9 @@ public class GT {
          */
         public abstract static class BaseDialogFragment extends DialogFragment {
 
-            protected Activity activity;
-            protected GT_Fragment gt_fragment;
+            public Activity activity;
+            public GT_Fragment gt_fragment;
+            public View view;
 
             @Override
             public void onAttach(Context context) {
@@ -17317,11 +19152,28 @@ public class GT {
             }
 
             /**
+             * 初始化 DialogFragment 必备配置
+             *
+             * @param isClickExternalNoHideDialog 设置单击外部不隐藏对话框 true:单击不消失 false:单击消失
+             */
+            protected void initDialogFragmentFunction(boolean isClickExternalNoHideDialog) {
+                setHideBackground();//设置隐藏背景
+                setHideBottomNav();//设置弹出对话框时是否隐藏虚拟按键
+                if (isClickExternalNoHideDialog)
+                    setClickExternalNoHideDialog();//设置单击外部不隐藏对话框
+            }
+
+            /**
              * 用户在初始化布局前设置必要的参数 当前方法可不重写
              *
              * @param view
              */
             public void createView(View view) {
+            }
+
+            protected View findViewById(int id) {
+                if (view == null) return null;
+                return view.findViewById(id);
             }
 
             /**
@@ -17358,7 +19210,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                            ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
                         }
                     }
                 }
@@ -17395,7 +19247,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
+                            ((GT_Activity.BaseActivity) activity).onActivityResult(1, 1, intent);
                         }
                     }
                 }
@@ -17431,7 +19283,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                            ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
                         }
                     }
                 }
@@ -17468,7 +19320,7 @@ public class GT {
 
                         //如果传递的值不为null 那就传递
                         if (activity != null) {
-                            ((GT.GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
+                            ((GT_Activity.BaseActivity) activity).onActivityResult(requestCode, resultCode, intent);
                         }
                     }
                 }
@@ -17508,7 +19360,7 @@ public class GT {
             @Nullable
             @Override
             public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                View view = inflater.inflate(loadLayout(), container, false);
+                view = inflater.inflate(loadLayout(), container, false);
                 createView(view);
                 return view;
             }
@@ -17602,7 +19454,7 @@ public class GT {
                     context = GT_Fragment.gt_fragment.getActivity();
                 }
                 if (context != null) {
-                    if (android.os.Build.VERSION.SDK_INT >= 23) {
+                    if (Build.VERSION.SDK_INT >= 23) {
                         if (!Settings.canDrawOverlays(context)) {
                             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.getPackageName()));
                             startActivityForResult(intent, 0);
@@ -17627,7 +19479,7 @@ public class GT {
                 }
 
                 if (activity != null) {
-                    if (android.os.Build.VERSION.SDK_INT >= 23) {
+                    if (Build.VERSION.SDK_INT >= 23) {
                         if (!Settings.canDrawOverlays(activity)) {
                             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + activity.getPackageName()));
                             startActivityForResult(intent, 0);
@@ -17677,7 +19529,7 @@ public class GT {
                 //是否解决 EditText bug
                 if (isSolveEditTextBug) {
                     //给EditText 组件设置返回事件
-                    GT.Thread.runJava(new Runnable() {
+                    Thread.runJava(new Runnable() {
                         @Override
                         public void run() {
                             setViewBackListener(view);
@@ -17700,10 +19552,10 @@ public class GT {
                 //如果是Edit类型的那就监听返回事件
                 if (viewLayout instanceof EditText) {
                     if (activity != null)
-                        GT.Thread.runAndroid(activity, new Runnable() {
+                        Thread.runAndroid(activity, new Runnable() {
                             @Override
                             public void run() {
-                                GT.GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
+                                GT_Fragment.onKeyDown(viewLayout, new View.OnKeyListener() {
                                     @Override
                                     public boolean onKey(View v, int keyCode, KeyEvent event) {
                                         if (event.getAction() == KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
@@ -17745,7 +19597,7 @@ public class GT {
                 //如果是Edit类型的那就监听返回事件
                 if (viewLayout instanceof EditText) {
                     if (activity != null) {
-                        GT.Thread.runAndroid(activity, new Runnable() {
+                        Thread.runAndroid(activity, new Runnable() {
                             @Override
                             public void run() {
                                 viewLayout.requestFocus();
@@ -17796,7 +19648,7 @@ public class GT {
 
             @Override
             public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-                getGT().build(this);// 注解赋值布局ID值
+                GT.build(this);// 注解赋值布局ID值
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
@@ -17805,7 +19657,341 @@ public class GT {
 
             @Override
             protected void initView(View view, @Nullable Bundle savedInstanceState) {
-                getGT().build(this);
+                GT.build(this);
+            }
+        }
+
+        /**
+         * 封装第三代 DialogFragment
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以直接无需获取，直接使用。
+         *
+         * @param <T>
+         */
+        public abstract static class DataBindingDialogFragment extends AnnotationDialogFragment {
+
+        }
+
+    }
+
+    /**
+     * GT 适配器
+     */
+    public static class Adapters {
+
+        /**
+         * 用于旧版继承的 适配器基类
+         *
+         * @param <T>
+         */
+        public static abstract class BaseArrayAdapters<T> extends ArrayAdapter<T> implements BaseViewHolder<T> {
+
+            private int position = 0;
+
+            public int getPosition() {
+                return position;
+            }
+
+            public BaseArrayAdapters(Context context, int resource, List<T> objects) {
+                super(context, resource, objects);
+            }
+
+            /**
+             * 加载布局
+             *
+             * @return
+             */
+            protected abstract int loadLayout();
+
+            public View getView(int position, View convertView, ViewGroup parent) {
+                this.position = position;
+                View layout = LayoutInflater.from(getContext()).inflate(loadLayout(), parent, false);
+                initView(layout, getItem(position));
+                initView(layout, getItem(position), convertView, parent);
+                return layout;
+            }
+
+            protected View initView(View view, T bean) {
+                function(view, bean);
+                return view;
+            }
+
+            protected View initView(View view, T bean, View convertView, ViewGroup parent) {
+                function(view, bean);
+                return view;
+            }
+
+        }
+
+        private static abstract interface BaseViewHolder<T> {
+            void function(final View view, final T bean);
+        }
+
+        /**
+         * 用于继承新版的适配器
+         */
+        public abstract static class BaseAdapter<T, K extends RecyclerView.ViewHolder> extends RecyclerView.Adapter<K> {
+
+            protected Context context;
+            private List<T> beanList;
+            private LinearLayoutManager linearLayoutManager;
+            private int layout = -1;//布局
+            private View itemView;
+
+            public BaseAdapter() {
+
+            }
+
+            public BaseAdapter(Context context) {
+                this.context = context;
+            }
+
+            /**
+             * @param context
+             * @param beanList 展示内容
+             */
+            @SuppressLint("NotifyDataSetChanged")
+            public BaseAdapter(Context context, List<T> beanList) {
+                this.context = context;
+                this.beanList = beanList;
+                notifyDataSetChanged();
+            }
+
+            @SuppressLint("NotifyDataSetChanged")
+            public BaseAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H) {
+                this.context = context;
+                linearLayoutManager = new LinearLayoutManager(context, layout_V_OR_H, false);
+                rv.setAdapter(this);
+                rv.setLayoutManager(linearLayoutManager);
+                this.beanList = beanList;
+                notifyDataSetChanged();
+            }
+
+            /**
+             * @param context
+             * @param rv
+             * @param beanList      展示内容
+             * @param layout_V_OR_H LinearLayoutManager.VERTICAL OR LinearLayoutManager.HORIZONTAL OR 瀑布流
+             * @param layout        加载的布局
+             */
+            public BaseAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
+                this.context = context;
+                if (layout != -1) {
+                    this.layout = layout;
+                }
+                linearLayoutManager = new LinearLayoutManager(context, layout_V_OR_H, false);
+                rv.setAdapter(this);
+                rv.setLayoutManager(linearLayoutManager);
+                this.beanList = beanList;
+                notifyDataSetChanged();
+            }
+
+            public Context getContext() {
+                return context;
+            }
+
+            public void setContext(Context context) {
+                this.context = context;
+            }
+
+            public LinearLayoutManager getLinearLayoutManager() {
+                return linearLayoutManager;
+            }
+
+            public void setLinearLayoutManager(LinearLayoutManager linearLayoutManager) {
+                this.linearLayoutManager = linearLayoutManager;
+            }
+
+            public List<T> getBeanList() {
+                return beanList;
+            }
+
+            /**
+             * 用于一次性刷新加载数据
+             *
+             * @param beanList
+             */
+            public void setBeanList(List<T> beanList) {
+                this.beanList = beanList;
+                notifyDataSetChanged();
+            }
+
+            /**
+             * 用于累计刷新加载数据 (常用)
+             *
+             * @param beanList
+             */
+            public void setBeanLists(List<T> beanList) {
+                if (this.beanList == null) {
+                    this.beanList = beanList;
+                } else {
+                    this.beanList.addAll(this.beanList.size(), beanList);
+                }
+                notifyDataSetChanged();
+            }
+
+            /**
+             * @param rv
+             * @return
+             */
+            public LinearLayoutManager setLinearLayoutManager_V(RecyclerView rv) {
+                LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
+                rv.setAdapter(this);
+                rv.setLayoutManager(llm);
+                return llm;
+            }
+
+            /**
+             * @param rv
+             * @return
+             */
+            public LinearLayoutManager setLinearLayoutManager_H(RecyclerView rv) {
+                LinearLayoutManager llm = new LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false);
+                rv.setAdapter(this);
+                rv.setLayoutManager(llm);
+                return llm;
+            }
+
+            protected abstract K onCreateViewHolder(View itemView);
+
+            @Override
+            public K onCreateViewHolder(ViewGroup parent, int viewType) {
+                if (layout == -1) {
+                    layout = loadLayout();
+                }
+                return onCreateViewHolder(LayoutInflater.from(context).inflate(layout, parent, false));
+            }
+
+            @Override
+            public void onBindViewHolder(@NonNull K holder, int position) {
+                T t = beanList.get(position);
+                this.itemView = holder.itemView;
+                initView(holder, holder.itemView, position, t);
+                loadData(holder, holder.itemView, position, t);
+            }
+
+
+            protected int loadLayout() {
+                return layout;
+            }
+
+            protected void loadData(K holder, View itemView, int position, T t) {
+            }
+
+            protected abstract void initView(K holder, View itemView, int position, T t);
+
+            @Override
+            public int getItemCount() {
+                return beanList == null ? 0 : beanList.size();
+            }
+
+            public abstract static class BaseHolder extends RecyclerView.ViewHolder {
+                protected View itemView;
+
+                public BaseHolder(@NonNull View itemView) {
+                    super(itemView);
+                    this.itemView = itemView;
+                    GT.build(this, itemView);
+                }
+
+                protected View findViewById(int id) {
+                    if (itemView == null) return null;
+                    return itemView.findViewById(id);
+                }
+
+            }
+
+        }
+
+        /**
+         * 封装第二代 Adapter
+         *
+         * @param <T>
+         */
+        public static abstract class AnnotationAdapter<T, K extends RecyclerView.ViewHolder> extends BaseAdapter<T, K> {
+
+            public AnnotationAdapter() {
+
+            }
+
+            public AnnotationAdapter(Context context) {
+                super(context);
+                GT.build(this);
+            }
+
+            public AnnotationAdapter(Context context, List<T> beanList) {
+                super(context, beanList);
+                GT.build(this);
+            }
+
+            public AnnotationAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H) {
+                super(context, rv, beanList, layout_V_OR_H);
+                GT.build(this);
+            }
+
+            public AnnotationAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
+                super(context, rv, beanList, layout_V_OR_H, layout);
+                GT.build(this);
+            }
+
+            @Override
+            protected void initView(K holder, View itemView, int position, T t) {
+
+            }
+
+            //布局ID
+            private int resLayout = -1;
+
+            public void setLayout(int resLayout) {
+                this.resLayout = resLayout;
+            }
+
+            @Override
+            protected int loadLayout() {
+                return resLayout;
+            }
+
+        }
+
+        /**
+         * 封装第三代 Adapter
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以直接无需获取，直接使用。
+         * <p>
+         * 使用如下 ：注意，适配器暂不支持 ViewModel ，暂时感觉没必要支持
+         *
+         * @param <T>
+         * @GT_DataBinding(setLayout = "item_title",setBindingType = GT_DataBinding.Adapter)
+         * @GT.Annotations.GT_AnnotationAdapter(R.layout.item_title) public class DemoAdapter extends DemoAdapterBinding<DemoBean> {
+         */
+        public abstract static class DataBindingAdapter<T, K extends RecyclerView.ViewHolder> extends AnnotationAdapter<T, K> {
+
+            public DataBindingAdapter() {
+            }
+
+            public DataBindingAdapter(Context context) {
+                super(context);
+
+            }
+
+            public DataBindingAdapter(Context context, List<T> beanList) {
+                super(context, beanList);
+            }
+
+            public DataBindingAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H) {
+                super(context, rv, beanList, layout_V_OR_H);
+            }
+
+            public DataBindingAdapter(Context context, RecyclerView rv, List<T> beanList, int layout_V_OR_H, int layout) {
+                super(context, rv, beanList, layout_V_OR_H, layout);
+            }
+
+            @Override
+            protected void initView(K holder, View itemView, int position, T t) {
+                super.initView(holder, itemView, position, t);
+
             }
         }
 
@@ -17844,14 +20030,14 @@ public class GT {
          */
         public abstract static class BaseFloatingWindow extends Service {
 
-            protected Context context;                           //上下活动
+            public Context context;                           //上下活动
             private WindowManager windowManager;
             private WindowManager.LayoutParams layoutParams;
             private int width = -1;                            //屏幕宽度
             private int height = -1;                           //屏幕高度
             private View view;                                 //当前加载的布局
 
-            private Timer timer;                                 //定时器来检测是否绑定APP
+            protected Timer timer;                                 //定时器来检测是否绑定APP
             private boolean isDrag = false;                      //是否可拖动
             private static boolean isShow = true;                //是否显示
 
@@ -17864,6 +20050,10 @@ public class GT {
 
             private static double screenSizeCoefficient = 2;     //屏幕大小系数,系数越大，创建屏幕越小 注意：该系数不能 <= 0
 
+            public View findViewById(int id) {
+                if (view == null) return null;
+                return view.findViewById(id);
+            }
 
             public WindowManager getWindowManager() {
                 return windowManager;
@@ -17950,7 +20140,6 @@ public class GT {
             public static void setType_screenType(int type_screenType) {
                 BaseFloatingWindow.type_screenType = type_screenType;
             }
-
 
             public boolean isDrag() {
                 return isDrag;
@@ -18178,7 +20367,7 @@ public class GT {
              * 是否显示悬浮窗
              */
             protected void isShow(boolean tf) {
-                GT.Thread.runAndroid(new Runnable() {
+                Thread.runAndroid(new Runnable() {
                     @Override
                     public void run() {
                         if (tf) {
@@ -18239,15 +20428,19 @@ public class GT {
 
 
             /**
-             * 退出当前 Fragment 并传递数据
+             * 退出当前 悬浮窗 并传递数据
              */
-            protected void finish() {
-                windowManager.removeView(view);
+            public void finish() {
+                if (windowManager != null) {
+                    windowManager.removeView(view);
+                    windowManager = null;
+                }
+                onDestroy();
                 stopSelf();
             }
 
             /**
-             * 退出当前 Fragment 并传递数据
+             * 退出当前 悬浮窗 并传递数据
              *
              * @param intent
              */
@@ -18330,19 +20523,243 @@ public class GT {
 
             @Override
             public void onCreate() {
-                getGT().build(this);
+                GT.build(this);
+                if (resLayout == -1) {
+                    resLayout = loadLayout();
+                }
                 View view = LayoutInflater.from(this).inflate(resLayout, null);
                 setView(view);
                 super.onCreate();
+
             }
 
             @Override
             protected void initView(View view) {
-                getGT().build(this);
+                GT.build(this);
             }
 
         }
 
+        /**
+         * 封装第三代 FloatingWindow
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以直接无需获取，直接使用。
+         *
+         * @param <T>
+         */
+        public abstract static class DataBindingFloatingWindow extends AnnotationFloatingWindow {
+
+        }
+
+    }
+
+    /**
+     * 封装了 PopupWindow 集合类
+     */
+    public static class GT_PopupWindow implements SaveObject.SaveBean {
+
+        //封装第一代 PopupWindow
+        public static abstract class BasePopupWindow {
+
+            private PopupWindow popWindow;
+            private View view;
+            protected int layout;
+            public Context context;
+
+            protected void buildData() {
+            }
+
+            ;
+
+            protected View findViewById(int id) {
+                if (view == null) return null;
+                return view.findViewById(id);
+            }
+
+            public int loadLayout() {
+                return layout;
+            }
+
+            public BasePopupWindow() {
+
+            }
+
+            public BasePopupWindow(Context context) {
+                buildData();
+                if (layout <= 0) {
+                    layout = loadLayout();
+                }
+                this.context = context;
+                view = LayoutInflater.from(context).inflate(layout, null, false);
+                popWindow = new PopupWindow(view, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+                initView(view, popWindow);
+                loadData(view, popWindow);
+            }
+
+            protected void initView(View view, PopupWindow popWindow) {
+                //1.构造一个PopupWindow，参数依次是加载的View，宽高
+//        popWindow.showAtLocation(view, Gravity.BOTTOM, 0, 0);
+                popWindow.setOutsideTouchable(false);
+                popWindow.setTouchable(true);
+                popWindow.setTouchInterceptor(new View.OnTouchListener() {
+                    @Override
+                    public boolean onTouch(View v, MotionEvent event) {
+                        return onBackPressed();//党纪外面会自动消失
+                    }
+                });
+
+                popWindow.setFocusable(true);
+                popWindow.setBackgroundDrawable(new ColorDrawable(0x00000000));    //要为popWindow设置一个背景才有效
+            }
+
+            protected void loadData(View view, PopupWindow popWindow) {
+            }
+
+            //按下其他地方是否销毁
+            public boolean onBackPressed() {
+                return false;
+            }
+
+            /**
+             * 显示在 参照View的下方
+             *
+             * @param v    参照View
+             * @param xyga 最多四个参数: int xoff, int yoff, int gravity, int Animation
+             */
+            public void showBelow(View v, int... xyga) {
+
+                if (popWindow != null && !popWindow.isShowing()) {
+                    //设置popupWindow显示的位置，参数依次是参照View，x轴的偏移量，y轴的偏移量
+                    switch (xyga.length) {
+                        case 1:
+                            popWindow.showAsDropDown(v, xyga[0], 0);//显示
+                            break;
+                        case 2:
+                            popWindow.showAsDropDown(v, xyga[0], xyga[1]);//显示
+                            break;
+                        case 3:
+                            popWindow.showAsDropDown(v, xyga[0], xyga[1], xyga[2]);//显示
+                            break;
+                        case 4:
+                            popWindow.setAnimationStyle(xyga[3]);
+                            popWindow.showAsDropDown(v, xyga[0], xyga[1], xyga[2]);//显示
+                            break;
+                        default:
+                            popWindow.showAsDropDown(v);//显示
+                            break;
+                    }
+                }
+            }
+
+            /**
+             * 显示在 参照View的绝对位置
+             *
+             * @param v
+             * @param xyga 最多四个参数: int xoff, int yoff, int gravity, int Animation
+             */
+            public void showAbsolute(View v, int... xyga) {
+                if (popWindow != null && !popWindow.isShowing()) {
+                    //设置popupWindow显示的位置，参数依次是参照View，x轴的偏移量，y轴的偏移量
+                    switch (xyga.length) {
+                        case 1:
+                            popWindow.showAtLocation(v, xyga[0], 0, 0);
+                            break;
+                        case 2:
+                            popWindow.showAtLocation(v, xyga[0], xyga[1], 0);//显示
+                            break;
+                        case 3:
+                            popWindow.showAtLocation(v, xyga[0], xyga[1], xyga[2]);//显示
+                            break;
+                        case 4:
+                            popWindow.setAnimationStyle(xyga[3]);
+                            popWindow.showAtLocation(v, xyga[0], xyga[1], xyga[2]);//显示
+                            break;
+                        default:
+                            popWindow.showAtLocation(v, 0, 0, 0);//显示
+                            break;
+                    }
+
+                }
+            }
+
+            /**
+             * 显示在 参照View的绝对位置
+             *
+             * @param v
+             * @param xyga 最多四个参数: int xoff, int yoff, int gravity, int Animation
+             */
+            public void startPopupWindowBelow(View v, int... xyga) {
+                showBelow(v, xyga);
+            }
+
+            /**
+             * 显示在 参照View的绝对位置
+             *
+             * @param v
+             * @param xyga 最多四个参数: int xoff, int yoff, int gravity, int Animation
+             */
+            public void startPopupWindowAbsolute(View v, int... xyga) {
+                showAbsolute(v, xyga);
+            }
+
+            //销毁当前对象
+            public void finish() {
+                if (popWindow != null && popWindow.isShowing()) {
+                    popWindow.dismiss();
+                    popWindow = null;
+                    view = null;
+                }
+            }
+
+        }
+
+        //封装第二代 PopupWindow
+        public static abstract class AnnotationPopupWindow extends BasePopupWindow {
+
+            @Override
+            protected void buildData() {
+                GT.build(this);
+            }
+
+            public AnnotationPopupWindow() {
+            }
+
+            public AnnotationPopupWindow(Context context) {
+                super(context);
+            }
+
+            public void setLayout(int resLayout) {
+                layout = resLayout;
+            }
+
+            @Override
+            protected void initView(View view, PopupWindow popWindow) {
+                super.initView(view, popWindow);
+                GT.build(this, view);
+            }
+
+        }
+
+        /**
+         * 封装第三代 PopupWindow
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以直接无需获取，直接使用。
+         *
+         * @param <T>
+         */
+        public abstract static class DataBindingPopupWindow extends AnnotationPopupWindow {
+
+            public DataBindingPopupWindow() {
+
+            }
+
+            public DataBindingPopupWindow(Context context) {
+                super(context);
+            }
+
+        }
 
     }
 
@@ -18351,45 +20768,457 @@ public class GT {
      */
     public static class GT_View implements SaveObject.SaveBean {
 
+        /**
+         * 封装第一代 View 实例View 有两种方法，2种构造方法
+         */
         public static abstract class BaseView {
 
-            protected View view;
-            protected Context activity;
+            private View view;
+            protected int layout;
+            public Context context;
 
-            public BaseView(View view) {
-                if (view != null) {
-                    Context context = view.getContext();
-                    if (context != null) {
-                        activity = context;
-                    }
-                }
+            public View getView() {
+                return view;
+            }
+
+            public void setView(View view) {
                 this.view = view;
-                loadLayout(view);
+            }
+
+            public void setLayout(int resLayout) {
+                layout = resLayout;
+            }
+
+            protected int loadLayout() {
+                return 0;
+            }
+
+            protected View findViewById(int id) {
+                if (view == null) return null;
+                return view.findViewById(id);
+            }
+
+            protected void bingData() {
+            }
+
+            public BaseView() {
+
+            }
+
+            public BaseView(Context context) {
+                bingData();
+                this.context = context;
+
+                if (layout <= 0) {
+                    layout = loadLayout();
+                }
+                view = LayoutInflater.from(context).inflate(layout, null, false);
+                initView(view);
                 loadData(view);
             }
 
-            protected abstract void loadLayout(View view);
+            protected void initView(View view) {
+
+            }
 
             protected void loadData(View view) {
             }
 
+            //按下其他地方是否销毁
+            public boolean onBackPressed() {
+                return false;
+            }
+
+            //销毁当前对象
+            public void finish() {
+                try {
+                    if (view != null) {
+                        ((ViewGroup) view.getParent()).removeView(view);
+                        view = null;
+                    }
+                } catch (Exception e) {
+
+                }
+            }
 
         }
 
+        /**
+         * 封装第二代 View 实现注解
+         */
         public static abstract class AnnotationView extends BaseView {
-            public AnnotationView(View view) {
-                super(view);
+
+            public AnnotationView() {
             }
 
             @Override
-            protected void loadLayout(View view) {
-                initView(view);
+            protected void bingData() {
+                super.bingData();
+                GT.build(this);
             }
 
+            /**
+             * 构造方法
+             *
+             * @param context
+             */
+            public AnnotationView(Context context) {
+                super(context);
+            }
+
+            @Override
+            public void setLayout(int resLayout) {
+                super.setLayout(resLayout);
+            }
+
+            @Override
             protected void initView(View view) {
                 GT.build(this);
             }
+
         }
+
+        /**
+         * 封装第三代 View
+         * 封装特点：
+         * 1.继承上代所有优点
+         * 2.获取组件可以直接无需获取，直接使用。
+         *
+         * @param <T>
+         */
+        public abstract static class DataBindingView extends AnnotationView {
+
+            public DataBindingView() {
+            }
+
+            public DataBindingView(Context context) {
+                super(context);
+            }
+        }
+
+    }
+
+    //DataBinding xml 布局解析并赋值
+    public static class DataBindingUtil<T> {
+
+        //DataBinding 实体类
+        public static class ViewBean<T> {
+
+            private Class<T> tClass;
+            private String viewName;
+            private int viewId;
+            private View view;
+
+            public ViewBean() {
+                super();
+            }
+
+            public ViewBean(Class<T> tClass, String viewName, int viewId, View view) {
+                this.tClass = tClass;
+                this.viewName = viewName;
+                this.viewId = viewId;
+                this.view = view;
+            }
+
+            public Class<T> gettClass() {
+                return tClass;
+            }
+
+            public void settClass(Class<T> tClass) {
+                this.tClass = tClass;
+            }
+
+            public String getViewName() {
+                return viewName;
+            }
+
+            public void setViewName(String viewName) {
+                this.viewName = viewName;
+            }
+
+            public int getViewId() {
+                return viewId;
+            }
+
+            public void setViewId(int viewId) {
+                this.viewId = viewId;
+            }
+
+            public View getView() {
+                return view;
+            }
+
+            public void setView(View view) {
+                this.view = view;
+            }
+
+            @Override
+            public String toString() {
+                return "ViewBean{" +
+                        "tClass=" + tClass +
+                        ", viewName='" + viewName + '\'' +
+                        ", viewId=" + viewId +
+                        ", view=" + view +
+                        '}';
+            }
+        }
+
+        //解析 xml 布局后的信息
+        private final static Map<String, ViewBean> viewBeanList = new HashMap<>();
+
+        /**
+         * 给 Activity 进行绑定的
+         *
+         * @param activity
+         * @param <T>
+         * @return
+         */
+        public static <T> T setContentView(Object bindingView) {
+            if (bindingView == null) return null;
+            //获取 Context 与 View
+            Object[] objects = AnnotationAssist.returnActivityOrView(bindingView);
+            Context context = (Context) objects[0];
+            View view = (View) objects[1];
+            if (context == null) context = getActivity();
+            if (view == null) view = getActivityLayout((Activity) context);
+
+
+            //清空 xml 布局信息
+            viewBeanList.clear();
+            //第一步：取布局中所有设置了ID的组件名与ID值
+            analysisLayout(context, view);
+            //第二部：获取代码自动生成的 DataBinding
+            T bean = getDataBindingBean(bindingView.getClass().getName());//1
+            //第三步：绑定类的数据
+            bindClassData(bean, (Activity) context);
+            return bean;
+        }
+
+        /**
+         * 给 View 页面进行绑定的
+         *
+         * @param <T>
+         * @param obj
+         * @return
+         */
+        public static <T> T setContentView(Object bindingView, View view) {
+            if (bindingView == null || view == null) return null;
+
+            Context context = null;
+
+            if (context == null) {
+
+                context = (Context) AnnotationAssist.returnActivityOrView(bindingView)[0];
+
+                if (context == null && bindingView instanceof Context) {
+                    context = (Context) bindingView;
+                }
+
+                if (context == null) {
+                    context = view.getContext();
+                }
+
+                if (context == null) {
+                    context = GT.getActivity();
+                }
+            }
+
+            //清空 xml 布局信息
+            viewBeanList.clear();
+            //第一步：取布局中所有设置了ID的组件名与ID值
+            analysisLayout(context, view);
+            //第二部：获取代码自动生成的 DataBinding
+            T bean = getDataBindingBean(bindingView.getClass().getName());//2
+            //第三步：绑定类的数据
+            bindClassData(bean, (Activity) context);
+            return bean;
+        }
+
+        /**
+         * 设置 绑定 View
+         *
+         * @param bindingView
+         * @param view
+         * @param context
+         * @param <T>
+         * @return
+         */
+        public static <T> T setContentView(Object bindingView, View view, Context context) {
+            if (bindingView == null || view == null) return null;
+
+            if (context == null) {
+
+                context = (Context) AnnotationAssist.returnActivityOrView(bindingView)[0];
+
+                if (context == null && bindingView instanceof Context) {
+                    context = (Context) bindingView;
+                }
+
+                if (context == null) {
+                    context = view.getContext();
+                }
+
+                if (context == null) {
+                    context = GT.getActivity();
+                }
+            }
+
+            //清空 xml 布局信息
+            viewBeanList.clear();
+            //第一步：取布局中所有设置了ID的组件名与ID值
+            analysisLayout(context, view);
+            //第二部：获取代码自动生成的 DataBinding
+            T bean = getDataBindingBean(bindingView.getClass().getName());//3
+            //第三步：绑定类的数据
+            bindClassData(bean, view);
+            return bean;
+        }
+
+        //绑定 ViewModel
+        public static <T> T dataBinding(Object thisObj) {
+            if (thisObj == null) return null;
+            T obj = null;
+            try {
+                //如果没有手动设置Model 那就从ViewModel类中智能取泛型model
+                Type[] actualTypeArguments = AnnotationAssist.getClassGenericType(thisObj);
+                if (actualTypeArguments == null || actualTypeArguments.length == 0) return null;
+                Type actualTypeArgument = actualTypeArguments[actualTypeArguments.length - 1];
+
+                String classStr = actualTypeArgument.toString();
+
+                if (classStr.indexOf("<") != -1) {
+                    classStr = classStr.substring(0, classStr.indexOf("<"));
+                }
+
+                //根据 class 反射出实体类
+                obj = (T) new AnnotationAssist().classToObject(classStr);
+
+                //将当前的 ViewModel 设置进入 Model中
+                Object state = GT.AnnotationAssist.setReflectMethodValue(obj, "setBindingData", null, Object.class, thisObj);
+                if ("false".equals(state)) {
+                    GT.errs("View 与 ViewMode 自动绑定失败，请手动绑定");
+                }
+            } catch (Exception e) {
+                GT.errs("View 与 ViewMode 自动绑定失败，请手动绑定:" + e);
+            }
+            return obj;
+        }
+
+        /**
+         * 绑定类数据
+         *
+         * @param bean
+         * @param activity
+         * @param <T>
+         * @return
+         */
+        private static <T> T bindClassData(T bean, Object mView1) {
+            if (bean == null) return null;
+            Field[] fields = bean.getClass().getDeclaredFields();
+            for (Field field : fields) {
+                View view = null;
+                String name = field.getName();
+                field.setAccessible(true);
+                ViewBean viewBean = viewBeanList.get(name);
+                if (viewBean != null) {
+
+                    View mView2 = null;
+
+                    if (mView1 instanceof Activity) {
+                        view = ((Activity) mView1).findViewById(viewBean.getViewId());
+                    }
+
+                    if (mView1 instanceof View) {
+                        view = ((View) mView1).findViewById(viewBean.getViewId());
+                    }
+
+
+                    try {
+                        if (mView1 != null && view != null) field.set(bean, view);
+                    } catch (Exception e) {
+                        GT.log("e:" + e);
+                    }
+                }
+            }
+            return bean;
+        }
+
+        /**
+         * 获取数据绑定的类
+         *
+         * @param activity
+         * @param <T>
+         * @return
+         */
+        private static <T> T getDataBindingBean(String className) {
+            Class<T> cla = null;
+            try {
+                cla = (Class<T>) Class.forName(className + "Binding");
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+            if (cla == null) return null;
+            //第二步:获取数据绑定的具体类
+            T bean = null;//定义泛型
+            try {
+                bean = cla.newInstance();//实体化
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (InstantiationException e) {
+                e.printStackTrace();
+            }
+            return bean;
+        }
+
+        /**
+         * 获取 Activity 布局
+         *
+         * @param activity
+         * @return
+         */
+        private static View getActivityLayout(Activity activity) {
+            View decorView = activity.getWindow().getDecorView();
+            ViewGroup parent = decorView.findViewById(android.R.id.content);
+            if (parent.getChildCount() > 0) {
+                return parent.getChildAt(parent.getChildCount() - 1);
+            }
+            return null;
+        }
+
+        /**
+         * 解析布局
+         *
+         * @param view
+         */
+        private static void analysisLayout(Context context, View view) {
+            if (view == null) return;
+            ViewBean viewBean = new ViewBean();
+            if (view instanceof ViewGroup) {
+                ViewGroup viewGroup = (ViewGroup) view;
+                viewBean.setView(viewGroup);
+                viewBean.settClass(viewGroup.getClass());
+                if (viewGroup.getId() != -1) {
+                    viewBean.setViewId(viewGroup.getId());
+                    String idName = context.getResources().getResourceEntryName(viewGroup.getId());
+                    viewBean.setViewName(idName);
+                }
+                viewBeanList.put(viewBean.getViewName(), viewBean);
+                for (int index = 0; index < viewGroup.getChildCount(); index++) {
+                    analysisLayout(context, viewGroup.getChildAt(index));//回调解析
+                }
+            } else {
+                viewBean.setView(view);
+                viewBean.settClass(view.getClass());
+                if (view.getId() != -1) {
+                    viewBean.setViewId(view.getId());
+                    String idName = context.getResources().getResourceEntryName(view.getId());
+                    viewBean.setViewName(idName);
+                }
+                viewBeanList.put(viewBean.getViewName(), viewBean);
+            }
+        }
+
+
     }
 
     //自定义组工具集合
@@ -18433,6 +21262,41 @@ public class GT {
          * 使用教程请查看官网：https://github.com/1079374315/GT
          */
         public static class RockerView extends View {
+
+            //返回字符串方向
+            public static String getDirection(Direction direction) {
+                String message = null;
+                switch (direction) {
+                    case DIRECTION_LEFT:
+                        message = "左";
+                        break;
+                    case DIRECTION_RIGHT:
+                        message = "右";
+                        break;
+                    case DIRECTION_UP:
+                        message = "上";
+                        break;
+                    case DIRECTION_DOWN:
+                        message = "下";
+                        break;
+                    case DIRECTION_UP_LEFT:
+                        message = "左上";
+                        break;
+                    case DIRECTION_UP_RIGHT:
+                        message = "右上";
+                        break;
+                    case DIRECTION_DOWN_LEFT:
+                        message = "左下";
+                        break;
+                    case DIRECTION_DOWN_RIGHT:
+                        message = "右下";
+                        break;
+                    default:
+                        break;
+                }
+                return message;
+            }
+
             private static final int DEFAULT_SIZE = 400;
             private static final int DEFAULT_ROCKER_RADIUS = 50;
             private Paint mAreaBackgroundPaint;
@@ -19177,8 +22041,14 @@ public class GT {
              * 设置View可拖动
              *
              * @param view
+             * @param isDrag 是否可拖动
              */
-            public static void setDrag(View view) {
+            public static void setDrag(View view, boolean isDrag) {
+                if (!isDrag) {
+                    view.setOnTouchListener(null);
+                    return;
+                }
+
                 final double[] lastX = new double[1];
                 final double[] lastY = new double[1];
                 view.setOnTouchListener(new View.OnTouchListener() {
@@ -19268,43 +22138,455 @@ public class GT {
 
         }
 
+        /**
+         * 延迟触发(如：EditText输入完后再触发)
+         */
+        public static class DelayTrigger {
+
+            private OnTriggerValue onTriggerValue;
+            private EditText et;
+
+            public void EditText(EditText et, int sleep, OnTriggerValue onTriggerValue) {
+                this.et = et;
+                this.onTriggerValue = onTriggerValue;
+                et.addTextChangedListener(new TextWatcher() {
+                    @Override
+                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                        //在文本之前改变
+                    }
+
+                    @Override
+                    public void onTextChanged(CharSequence s, int start, int before, int count) {
+                        //正在改变中
+                    }
+
+                    @Override
+                    public void afterTextChanged(Editable s) {
+                        //文本之后改变了
+                        if (delayRun != null) {
+                            //每次editText有变化的时候，则移除上次发出的延迟线程
+                            handler.removeCallbacks(delayRun);
+                        }
+                        //延迟800ms，如果不再输入字符，则执行该线程的run方法
+                        handler.postDelayed(delayRun, sleep);
+                    }
+                });
+
+            }
+
+            private static Handler handler = new Handler();
+            /**
+             * 延迟线程，看是否还有下一个字符输入
+             */
+            private Runnable delayRun = new Runnable() {
+                @Override
+                public void run() {
+                    //在这里调用服务器的接口，获取数据
+                    if (onTriggerValue != null && et != null)
+                        onTriggerValue.onTriggerValue(et.getText().toString());
+                }
+            };
+
+
+            public interface OnTriggerValue {
+                void onTriggerValue(String str);
+            }
+        }
+
+        /**
+         * 用于获取输入法高度
+         */
+        public static class KeyboardLayout extends FrameLayout {
+
+            private KeyboardLayoutListener mListener;
+            private int delayTime;
+            private boolean mIsKeyboardActive = false; //　输入法是否激活
+            private int mKeyboardHeight = 0; // 输入法高度
+            private Context context;
+            private boolean isActive;
+            private int keyboardHeight;
+
+            public KeyboardLayout(Context context) {
+                this(context, null, 0);
+            }
+
+            public KeyboardLayout(Context context, AttributeSet attrs) {
+                this(context, attrs, 0);
+            }
+
+            public KeyboardLayout(Context context, AttributeSet attrs, int defStyleAttr) {
+                super(context, attrs, defStyleAttr);// 监听布局变化
+                getViewTreeObserver().addOnGlobalLayoutListener(new KeyboardOnGlobalChangeListener());
+            }
+
+            private class KeyboardOnGlobalChangeListener implements ViewTreeObserver.OnGlobalLayoutListener {
+                private int mScreenHeight = 0;
+
+                @Override
+                public void onGlobalLayout() {
+                    keyboardHeight = 0;
+                    final Rect rect = new Rect();
+                    // 获取当前页面窗口的显示范围
+                    ((Activity) getContext()).getWindow().getDecorView().getWindowVisibleDisplayFrame(rect);
+                    int screenHeight = getScreenHeight();
+                    keyboardHeight = screenHeight - rect.bottom; // 输入法的高度
+                    isActive = false;
+                    if (Math.abs(keyboardHeight) > screenHeight / 5) {
+                        isActive = true; // 超过屏幕五分之一则表示弹出了输入法
+                        mKeyboardHeight = keyboardHeight;
+                    }
+                    mIsKeyboardActive = isActive;
+                    if (mListener != null) {
+                        if (delayRun != null) {
+                            //每次editText有变化的时候，则移除上次发出的延迟线程
+                            handler.removeCallbacks(delayRun);
+                        }
+                        //延迟触发，如果不再有反馈则触发，则执行该线程的run方法
+                        handler.postDelayed(delayRun, delayTime);
+                    }
+                }
+
+                private int getScreenHeight() {
+                    if (mScreenHeight > 0) {
+                        return mScreenHeight;
+                    }
+                    mScreenHeight = ((WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE))
+                            .getDefaultDisplay().getHeight();
+                    return mScreenHeight;
+                }
+            }
+
+
+            private Handler handler = new Handler();
+            /**
+             * 延迟线程，看是否还有下一个字符输入
+             */
+            private Runnable delayRun = new Runnable() {
+                @Override
+                public void run() {
+                    //在这里调用服务器的接口，获取数据
+                    mListener.onKeyboardStateChanged(isActive, keyboardHeight);
+                }
+            };
+
+            /**
+             * @param listener
+             * @param delayTime 灵敏度，灵敏度越小，检测反馈时间越短，但有可能会出现反馈多次的情况,推荐值 100毫秒
+             */
+            public void setKeyboardListener(KeyboardLayoutListener listener, int delayTime) {
+                mListener = listener;
+                if (delayTime < 0) {
+                    delayTime = 0;
+                }
+                this.delayTime = delayTime;
+            }
+
+            public KeyboardLayoutListener getKeyboardListener() {
+                return mListener;
+            }
+
+            public boolean isKeyboardActive() {
+                return mIsKeyboardActive;
+            }
+
+            /**
+             * 获取输入法高度
+             *
+             * @return
+             */
+            public int getKeyboardHeight() {
+                return mKeyboardHeight;
+            }
+
+            public interface KeyboardLayoutListener {
+                /**
+                 * @param isActive       输入法是否激活
+                 * @param keyboardHeight 输入法面板高度
+                 */
+                void onKeyboardStateChanged(boolean isActive, int keyboardHeight);
+            }
+
+
+        }
+
+
+    }
+
+    //============================================= 编程思想辅助 ======================================
+
+    //MVC MVP MVVM 框架类
+    public static class Frame {
+
+        /**
+         * 作者推荐：根据项目模块的不同，选择相适应的框架进行实现
+         */
+
+        /**
+         * MVC模式
+         * Model:继承自 MVC_Model (模型/数据处理):是应用程序中用于处理应用程序数据逻辑的部分。通常模型对象负责在数据库中存取数据
+         * View: xml布局文件 (视图/UI描述):是应用程序中处理数据显示的部分。通常视图是依据模型数据创建的
+         * Controller: Activity/Fragment (控制器/用户交互):是应用程序中处理用户交互的部分。通常控制器负责从视图读取数据，控制用户输入，并向模型发送数据
+         * 关系图：View -> Controller -> Model -> View
+         *
+         * @param <T>
+         */
+        public abstract static class MVC_Model<T> {
+            protected T bindingView;//持有的 Controller/View 对象
+
+            public MVC_Model() {
+
+            }
+
+            public void setBindingView(T bindingView) {
+                this.bindingView = bindingView;
+            }
+
+            public MVC_Model(T t) {
+                bindingView = t;
+            }
+        }
+
+        /**
+         * MVP模式
+         * Model:继承自 MVP_Model (模型/数据处理):主要提供数据存取功能
+         * View: Activity/Fragment (视图/UI事件):初始化View,处理用户事件和视图
+         * Presenter:继承自 MVP_Presenter (展示层/衔接):负责通过Model存取数据，连接View和Model，从Model中取出数据交给View
+         * 关系图：View ←→ Presenter , Presenter ←→ Model (View与Model完全隔离)
+         *
+         * @param <T>
+         */
+        public abstract static class MVP_Presenter<T> extends MVC_Model<T> {
+            private Activity activity;
+            private View view;
+
+            public MVP_Presenter() {
+
+            }
+
+            public MVP_Presenter(T t) {
+                super(t);
+                Object[] objects = AnnotationAssist.returnActivityOrView(t);
+                activity = (Activity) objects[0];
+                view = (View) objects[1];
+                initView();
+            }
+
+
+            //初始化View
+            protected void initView() {
+            }
+
+            //加载数据
+            protected void loadData() {
+            }
+
+            protected <K extends View> K findViewById(int id) {
+                try {
+                    if (activity != null) {
+                        return activity.findViewById(id);
+                    } else if (view != null) {
+                        return view.findViewById(id);
+                    } else {
+                        errt("activity add view null");
+                        return null;
+                    }
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+
+
+        }
+
+        public abstract static class MVP_Model<T> extends MVC_Model<T> {
+            public MVP_Model(T t) {
+                super(t);
+            }
+
+            public MVP_Model() {
+            }
+        }
+
+        /**
+         * MVVM模式
+         * Model:继承自 MVVM_Model (模型/数据处理):主要提供数据存取功能
+         * View: Activity/Fragment (视图/UI事件):初始化View,处理用户事件和视图
+         * ViewModel:继承自 MVVM_ViewModel (展示层/衔接):负责通过Model存取数据，连接View和Model，从Model中取出数据交给View
+         * 关系图：View ←→ ViewModel , ViewModel ←→ Model (View与Model完全隔离)
+         *
+         * @param <T>
+         */
+        public abstract static class MVVM_ViewModel<T> extends MVP_Presenter<T> {
+
+            public MVVM_ViewModel() {
+            }
+
+            public MVVM_ViewModel(T bindingView) {
+                super(bindingView);
+            }
+
+            @Override
+            public void setBindingView(T bindingView) {
+                super.setBindingView(bindingView);
+            }
+        }
+
+        public abstract static class MVVM_Model<T> extends MVP_Model<T> {
+            public MVVM_Model(T t) {
+                super(t);
+            }
+
+            public MVVM_Model() {
+            }
+        }
+
+        /**
+         * GT模式
+         * Model:继承自 GT_Model (模型/数据处理):主要提供数据存取功能
+         * View: Activity/Fragment (视图/UI事件):初始化View,处理用户事件和视图
+         * ViewModel:继承自 GT_ViewModel (展示层/衔接):负责通过Model存取数据，连接View和Model，从Model中取出数据交给View
+         * 关系图：View ←→ GT_ViewModel , GT_ViewModel ←→ GT_Model (View与Model完全隔离)
+         *
+         * @param <T>
+         */
+        public abstract static class GT_ViewModel<V, VM, M> extends MVVM_ViewModel<VM> {
+
+            protected V bindingData;
+            protected M bindingModel;
+
+            public void setBindingData(V bindingData) {
+                this.bindingData = bindingData;
+                setModel(bindingData);
+                initView();
+                loadData();
+            }
+
+            public GT_ViewModel() {
+            }
+
+
+            /**
+             * 特别重要的回调
+             * 设置 Model、View、ViewModel的值
+             *
+             * @param bindingData
+             */
+            public GT_ViewModel(V bindingData) {
+                //如果是接受过 GT绑定 的就不进行再次绑定了
+                super((
+                        bindingData.getClass().getSuperclass().getSuperclass().toString().contains("class com.gsls.gt.GT$") &&
+                                bindingData.getClass().getSuperclass().getSuperclass().toString().contains("$DataBinding") ?
+                                (VM) bindingData : DataBindingUtil.setContentView(bindingData)
+                ));
+                bindingModel(bindingData);
+            }
+
+            protected void setModel(V bindingData) {
+                bindingView = bindingData.getClass().getSuperclass().getSuperclass().toString().contains("class com.gsls.gt.GT$") &&
+                        bindingData.getClass().getSuperclass().getSuperclass().toString().contains("$DataBinding") ?
+                        (VM) bindingData : DataBindingUtil.setContentView(bindingData);
+                bindingModel(bindingData);
+            }
+
+            private void bindingModel(V bindingData) {
+                this.bindingData = bindingData;
+                bindingModel = setBindingModel();//获取手动设置的Model
+                if (bindingModel != null) return;//如果没有手动设置Model那就智能生成Model
+                try {
+                    //如果没有手动设置Model 那就从ViewModel类中智能取泛型model
+                    Type[] actualTypeArguments = AnnotationAssist.getClassGenericType(this);
+                    Type actualTypeArgument = actualTypeArguments[actualTypeArguments.length - 1];
+
+                    String classStr = "";
+
+                    //在 jdk 1.7 的情况，编译会报错 不支持 getTypeName 方法
+                    /*try{
+                        classStr = actualTypeArgument.getTypeName();
+                    }catch (Exception e){
+                        classStr = actualTypeArgument.toString();
+                    }*/
+
+                    classStr = actualTypeArgument.toString();
+
+                    if (classStr.indexOf("<") != -1) {
+                        classStr = classStr.substring(0, classStr.indexOf("<"));
+                    }
+
+                    //根据 class 反射出实体类
+                    M obj = (M) new AnnotationAssist().classToObject(classStr);
+
+                    //将当前的 ViewModel 设置进入 Model中
+                    Object state = AnnotationAssist.setReflectMethodValue(obj, "setBindingView", null, Object.class, this);
+                    if ("false".equals(state)) {
+                        GT.err("ViewMode 与 Model 自动绑定失败，请手动绑定");
+                    }
+                    bindingModel = obj;
+
+                } catch (Exception e) {
+                    GT.err("ViewMode 与 Model 自动绑定失败，请手动绑定:" + e);
+                }
+            }
+
+            protected M setBindingModel() {
+                return bindingModel;
+            }
+
+        }
+
+        public abstract static class GT_Model<T> extends MVVM_Model<T> {
+
+            public GT_Model() {
+            }
+
+            public GT_Model(T t) {
+                super(t);
+            }
+
+
+        }
+
+        /**
+         * GT_Binding模式
+         * Model:继承自 GT_BindingModel (模型/数据处理):主要提供数据存取功能
+         * View: Activity/Fragment (视图/UI事件):初始化View,处理用户事件和视图
+         * ViewModel:继承自 GT_BindingViewModel (展示层/衔接):负责通过Model存取数据，连接View和Model，从Model中取出数据交给View
+         * 关系图：View ←→ GT_BindingViewModel , GT_BindingViewModel ←→ GT_BindingModel (View与Model完全隔离)
+         * <p>
+         * //TODO 有两种方式 初始化 ViewModel:
+         * 1.通过泛类进行 映射实例化 实例化的ViewModel 需要有无参构造方法 或 有参与无参构造方法可同在
+         * 如：public class MainActivity extends MainActivityBinding<MainViewModel> {
+         * <p>
+         * 2.通过 new 来实例化，如： new MainViewModel(this);
+         * 如果需要绑定 ViewModel 可使用 bindingViewModel(new MainViewModel(this));
+         * 这样就可以在 View 中使用 viewModel 变量来进行操作
+         *
+         * @param <T>
+         */
+        public abstract static class GT_BindingViewModel<V, M> extends GT_ViewModel<V, V, M> {
+
+            // 使用 ViewModel 泛类型绑定
+            public GT_BindingViewModel() {
+            }
+
+            /**
+             * 使用 new 实例化 时使用 设置 Model、View、ViewModel的值
+             *
+             * @param bindingData
+             */
+            public GT_BindingViewModel(V bindingData) {
+                super(bindingData);
+                bindingView = bindingData;//将普通页面类与对应的Binding类相对等
+                loadData();
+            }
+
+        }
+
+
     }
 
 //============================================= 设备监听类 ======================================
 
     public static class DeviceListening {
-
-        //获取当前手机信息
-        public static class MobilePhoneAttribute {
-
-            /**
-             * 获取手机型号
-             *
-             * @return
-             */
-            public String getModel() {
-                return Build.MODEL;
-            }
-
-            /**
-             * 获取手机SDK版本号
-             *
-             * @return
-             */
-            public String getSDK() {
-                return Build.VERSION.SDK;
-            }
-
-            /**
-             * 获取手机系统版本号
-             *
-             * @return
-             */
-            public String getRELEASE() {
-                return Build.VERSION.RELEASE;
-            }
-
-        }
 
         //AudioManager 安卓手机音量类
         public static class GT_AudioManager {
@@ -20314,7 +23596,6 @@ public class GT {
      */
     public static class Annotations {
 
-
         /**
          * 为给 Activity 类 标的注解 用法如下：
          *
@@ -20344,15 +23625,39 @@ public class GT {
             int value();
         }
 
+        /**
+         * 为悬浮窗注解
+         */
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface GT_AnnotationFloatingWindow {
             int value();
         }
 
+        /**
+         * 为 PopupWindow 注解
+         */
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_AnnotationPopupWindow {
+            int value();
+        }
+
+        /**
+         * 为 适配器 注解
+         */
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
         public @interface GT_AnnotationAdapter {
+            int value();
+        }
+
+        /**
+         * 为 自定义 View 给需要 特别复杂的View 给与页面的操作方式
+         */
+        @Target(ElementType.TYPE)
+        @Retention(RetentionPolicy.RUNTIME)
+        public @interface GT_AnnotationView {
             int value();
         }
 
@@ -20374,7 +23679,7 @@ public class GT {
          */
         @Target(ElementType.TYPE)
         @Retention(RetentionPolicy.RUNTIME)
-        public @interface GT_AnnotationGT_Window {
+        public @interface GT_AnnotationWindow {
             int value();
         }
 
@@ -20702,8 +24007,8 @@ public class GT {
         //================================   下面是 初始化 注解内容   ==============================
         //主要用于注解 Activity 与 Fragment 共有的
         public static void initAll(Object object) {
-            if (getGT().activity == null) {
-                getGT().activity = getActivity();
+            if (context == null) {
+                context = getActivity();
             }
 
             // SQL 注解
@@ -20721,11 +24026,13 @@ public class GT {
             initSerialPortUtils(object);             //串口框架注解
             initTCP(object);                         //TCP框架注解
 
+            initAnnotationFloatingWindow(object);    //注解悬浮窗
+            initAnnotationView(object);             //注解 View
+            initAnnotationPopupWindow(object);      //注解弹出式窗 PopupWindow
+
             //这两个需要重点照顾需要
             initView(object);                        //为加载 组件 初始化
             initClick(object);                       //注解单击事件
-
-            initAnnotationWindow(object);           //注解悬浮窗
 
             // Java 注解部分
             initObject(object);                    //为加载 Object 成员变量初始化
@@ -20742,7 +24049,6 @@ public class GT {
             initIntArray(object);             //为加载 IntArray 资源初始化
             initStringArray(object);          //为加载 StringArray 资源初始化
             initLayout(object);               //为加载 Layout 资源初始化
-
 
         }
 
@@ -20779,7 +24085,7 @@ public class GT {
                     if (IsThread) {
                         //使用线程的方式创建
 
-                        GT.Thread.runJava(new Runnable() {
+                        Thread.runJava(new Runnable() {
                             @Override
                             public void run() {
 
@@ -21211,7 +24517,6 @@ public class GT {
 
         //================================   下面是 通用 的注解内容   ==========================
 
-
         private static void initView(Object obj) {
             if (obj == null) return;
             Class<?> clazz = obj.getClass();//获取该类信息
@@ -21222,33 +24527,17 @@ public class GT {
                     int viewId = initView.value();
                     try {
                         field.setAccessible(true);
-                        if (obj instanceof Activity) {
-                            Activity activity = (Activity) obj;
+                        //匹配是 Activity 还是 View
+                        Object[] objects = returnActivityOrView(obj);
+                        Activity activity = (Activity) objects[0];
+                        View view = (View) objects[1];
+                        if (activity != null) {
                             field.set(obj, activity.findViewById(viewId));
-                        } else if (obj instanceof Fragment) {
-                            Fragment fragment = (Fragment) obj;
-                            View view = fragment.getView();
-                            if (view != null)
-                                field.set(obj, view.findViewById(viewId));
-                        } else if (obj instanceof View) {
-                            View view = (View) obj;
-                            if (view != null)
-                                field.set(obj, view.findViewById(viewId));
-                        } else if (obj instanceof GT_FloatingWindow.BaseFloatingWindow) {
-                            GT_FloatingWindow.BaseFloatingWindow fwb = (GT_FloatingWindow.BaseFloatingWindow) obj;
-                            View view = fwb.getView();
-                            if (view != null)
-                                field.set(obj, view.findViewById(viewId));
-                        } else if (obj instanceof GT_View.BaseView) {
-                            GT_View.BaseView baseView = (GT_View.BaseView) obj;
-                            View view = baseView.view;
-                            if (view != null)
-                                field.set(obj, view.findViewById(viewId));
-                        } else {
-                            GT.err("暂不支持该类型的注解：" + obj);
-                            //完蛋蛋
+                        } else if (view != null) {
+                            field.set(obj, view.findViewById(viewId));
                         }
                     } catch (Exception e) {
+                        GT.logs("e:" + e);
                         e.printStackTrace();
                     }
                 }
@@ -21278,7 +24567,6 @@ public class GT {
                 }
             }
         }
-
 
         /**
          * 注入点击事件
@@ -21313,7 +24601,6 @@ public class GT {
             }
         }
 
-
         /**
          * 注入点击事件
          */
@@ -21335,53 +24622,26 @@ public class GT {
                             handler.setMethodMap(methodName, method);//设置方法及设置方法
                             Object object2 = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[]{listenerType}, handler);//创建动态代理对象类
 
-                            if (obj instanceof Activity) {
-                                Activity activity = (Activity) obj;
+                            //匹配是 Activity 还是 View
+                            Object[] objects = returnActivityOrView(obj);
+                            Activity activity = (Activity) objects[0];
+                            View view = (View) objects[1];
+
+                            if (activity != null) {
                                 for (int viewId : viewIds) {//遍历要设置监听的控件
                                     View view2 = activity.findViewById(viewId);//获取该控件
                                     Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
                                     m.invoke(view2, object2);//调用方法
                                 }
-                            } else if (obj instanceof Fragment) {
-                                Fragment fragment = (Fragment) obj;
-                                View view = fragment.getView();
-                                if (view != null) {
-                                    for (int viewId : viewIds) {//遍历要设置监听的控件
-                                        View view2 = view.findViewById(viewId);//获取该控件
-                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                        m.invoke(view2, object2);//调用方法
-                                    }
+                            } else if (view != null) {
+                                for (int viewId : viewIds) {//遍历要设置监听的控件
+                                    View view2 = view.findViewById(viewId);//获取该控件
+                                    Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
+                                    m.invoke(view2, object2);//调用方法
                                 }
-
-                            } else if (obj instanceof View) {
-                                View view = (View) obj;
-                                if (view != null)
-                                    for (int viewId : viewIds) {//遍历要设置监听的控件
-                                        View view2 = view.findViewById(viewId);//获取该控件
-                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                        m.invoke(view2, object2);//调用方法
-                                    }
-                            } else if (obj instanceof GT_FloatingWindow.BaseFloatingWindow) {
-                                GT_FloatingWindow.BaseFloatingWindow fwb = (GT_FloatingWindow.BaseFloatingWindow) obj;
-                                View view = fwb.getView();
-                                if (view != null)
-                                    for (int viewId : viewIds) {//遍历要设置监听的控件
-                                        View view2 = view.findViewById(viewId);//获取该控件
-                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                        m.invoke(view2, object2);//调用方法
-                                    }
-                            } else if (obj instanceof GT_View.BaseView) {
-                                GT_View.BaseView baseView = (GT_View.BaseView) obj;
-                                View view = baseView.view;
-                                if (view != null)
-                                    for (int viewId : viewIds) {//遍历要设置监听的控件
-                                        View view2 = view.findViewById(viewId);//获取该控件
-                                        Method m = view2.getClass().getMethod(listenerSetter, listenerType);//获取方法
-                                        m.invoke(view2, object2);//调用方法
-                                    }
-                            } else {
-                                GT.err("暂不支持该组件注解：" + obj);
                             }
+
+
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -21399,7 +24659,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Context context = getGT().activity;
+                        Context context = GT.context;
                         if (context != null) {
                             Animation animation = AnimationUtils.loadAnimation(context, viewRes);
                             field.setAccessible(true);
@@ -21422,7 +24682,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        float dimension = getGT().activity.getResources().getDimension(viewRes);
+                        float dimension = GT.context.getResources().getDimension(viewRes);
                         field.setAccessible(true);
                         field.set(object, dimension);
                     } catch (Exception e) {
@@ -21442,7 +24702,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Drawable drawable = getGT().activity.getResources().getDrawable(viewRes);
+                        Drawable drawable = GT.context.getResources().getDrawable(viewRes);
                         field.setAccessible(true);
                         field.set(object, drawable);
                     } catch (Exception e) {
@@ -21462,7 +24722,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        int color = getGT().activity.getResources().getColor(viewRes);
+                        int color = GT.context.getResources().getColor(viewRes);
                         field.setAccessible(true);
                         field.set(object, color);
                     } catch (Exception e) {
@@ -21482,7 +24742,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        String string = getGT().activity.getResources().getString(viewRes);
+                        String string = GT.context.getResources().getString(viewRes);
                         field.setAccessible(true);
                         field.set(object, string);
                     } catch (Exception e) {
@@ -21503,7 +24763,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        int[] intArray = getGT().activity.getResources().getIntArray(viewRes);
+                        int[] intArray = GT.context.getResources().getIntArray(viewRes);
                         field.setAccessible(true);
                         field.set(object, intArray);
                     } catch (Exception e) {
@@ -21524,7 +24784,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        String[] stringArray = getGT().activity.getResources().getStringArray(viewRes);
+                        String[] stringArray = GT.context.getResources().getStringArray(viewRes);
                         field.setAccessible(true);
                         field.set(object, stringArray);
                     } catch (Exception e) {
@@ -21545,7 +24805,7 @@ public class GT {
                 if (initView != null) {
                     int viewRes = initView.value();
                     try {
-                        Context context = getGT().activity;
+                        Context context = GT.context;
                         if (context != null) {
                             View viewLayout = LayoutInflater.from(context).inflate(viewRes, null);
                             field.setAccessible(true);
@@ -21750,7 +25010,7 @@ public class GT {
                         //获取注解的值
                         String spName = initView_GT_SharedPreferences.setSpName();
                         boolean iSCommit = initView_GT_SharedPreferences.setISCommit();
-                        gt_sharedPreferences = new GT_SharedPreferences(getGT().activity, spName, iSCommit);
+                        gt_sharedPreferences = new GT_SharedPreferences(GT.context, spName, iSCommit);
                     }
                     //实例注入
                     try {
@@ -21783,13 +25043,13 @@ public class GT {
                 if (initBuild != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
                     Activity activity = (Activity) getActivity();
-                    GT.SerialPortUtils serialPortUtils = null;
+                    SerialPortUtils serialPortUtils = null;
                     if (activity != null) {
                         //获取注解的值
                         String comAll = initBuild.setComAll();
                         int baudRate = initBuild.setBaudRate();
                         boolean iSLog = initBuild.setISLog();
-                        serialPortUtils = new GT.SerialPortUtils(getGT().activity, comAll, baudRate, iSLog);
+                        serialPortUtils = new SerialPortUtils(GT.context, comAll, baudRate, iSLog);
                     }
                     //实例注入
                     try {
@@ -21804,7 +25064,6 @@ public class GT {
             }
         }
 
-
         /**
          * 注解 TCP
          *
@@ -21817,22 +25076,22 @@ public class GT {
                 Object classObject = null;//最终注入的值
 
                 //带参数的
-                GT.GT_Socket.TCP.Build initBuild = field.getAnnotation(GT.GT_Socket.TCP.Build.class);
+                GT_Socket.TCP.Build initBuild = field.getAnnotation(GT_Socket.TCP.Build.class);
 
                 //GT_Fragment 注解不为null
                 if (initBuild != null) {
                     //如果注解的Activity不为null 那就直接构建注解的GT_Fragment并注入
                     Activity activity = (Activity) getActivity();
-                    GT.GT_Socket.TCP tcp = null;
+                    GT_Socket.TCP tcp = null;
                     if (activity != null) {
                         //获取注解的值
                         String iP = initBuild.setIP();
                         int port = initBuild.setPort();
-                        GT.GT_Socket.isLog = initBuild.isLog();
+                        GT_Socket.isLog = initBuild.isLog();
                         if (iP == null || "null".equals(iP)) {
-                            tcp = new GT.GT_Socket.TCP(port);
+                            tcp = new GT_Socket.TCP(port);
                         } else {
-                            tcp = new GT.GT_Socket.TCP(iP, port);
+                            tcp = new GT_Socket.TCP(iP, port);
                         }
                     }
                     //实例注入
@@ -21854,8 +25113,58 @@ public class GT {
          * @param object
          * @param mClass
          */
-        private static void initAnnotationWindow(Object object) {
+        private static void initAnnotationFloatingWindow(Object object) {
             Annotations.GT_AnnotationFloatingWindow contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationFloatingWindow.class);// 获取该类 ContextView 的注解类
+            // 如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();// 获取注解类参数
+                try {
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
+                    method.setAccessible(true);// 获取该方法的访问权限
+                    method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
+                } catch (NoSuchMethodException e) {
+                    GT.errs("e:" + e);//e.printStackTrace();
+                } catch (IllegalAccessException e) {
+                    GT.errs("e:" + e);//e.printStackTrace();
+                } catch (InvocationTargetException e) {
+                    GT.errs("e:" + e);//e.printStackTrace();
+                }
+            }
+        }
+
+        /**
+         * 注入 View 注解
+         *
+         * @param object
+         */
+        private static void initAnnotationView(Object object) {
+            Annotations.GT_AnnotationView contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationView.class);// 获取该类 ContextView 的注解类
+            // 如果有注解
+            if (contentView != null) {
+                int viewId = contentView.value();// 获取注解类参数
+                try {
+                    Method method = object.getClass().getMethod("setLayout", int.class);// 获取该方法的信息
+                    method.setAccessible(true);// 获取该方法的访问权限
+                    method.invoke(object, viewId);// 调用该方法的，并设置该方法参数
+                } catch (NoSuchMethodException e) {
+                    GT.errs("e:" + e);//e.printStackTrace();
+                } catch (IllegalAccessException e) {
+                    GT.errs("e:" + e);//e.printStackTrace();
+                } catch (InvocationTargetException e) {
+                    GT.errs("e:" + e);//e.printStackTrace();
+                }
+            }
+        }
+
+
+        /**
+         * 注入 PopupWindow
+         *
+         * @param object
+         * @param mClass
+         */
+        private static void initAnnotationPopupWindow(Object object) {
+            Annotations.GT_AnnotationPopupWindow contentView = object.getClass().getAnnotation(Annotations.GT_AnnotationPopupWindow.class);// 获取该类 ContextView 的注解类
             // 如果有注解
             if (contentView != null) {
                 int viewId = contentView.value();// 获取注解类参数
@@ -22101,7 +25410,6 @@ public class GT {
 
         }
 
-
         /**
          * 初始化注解帮助类
          */
@@ -22130,6 +25438,9 @@ public class GT {
                 return null;
             }
 
+        }
+
+        public AnnotationAssist() {
         }
 
         /**
@@ -22163,28 +25474,288 @@ public class GT {
         }
 
         /**
+         * 返回 Activity 或 View
+         *
+         * @param obj
+         * @return
+         */
+        public static Object[] returnActivityOrView(Object obj) {
+
+            Activity activity = null;
+            View view = null;
+            if (obj instanceof Activity) {
+                activity = (Activity) obj;
+            } else if (obj instanceof Fragment) {
+                Fragment fragment = (Fragment) obj;
+                view = fragment.getView();
+            } else if (obj instanceof DialogFragment) {
+                DialogFragment fragment = (DialogFragment) obj;
+                view = fragment.getView();
+            } else if (obj instanceof View) {
+                view = (View) obj;
+            } else if (obj instanceof GT_FloatingWindow.BaseFloatingWindow) {
+                GT_FloatingWindow.BaseFloatingWindow fwb = (GT_FloatingWindow.BaseFloatingWindow) obj;
+                view = fwb.getView();
+            } else if (obj instanceof GT_View.BaseView) {
+                GT_View.BaseView baseView = (GT_View.BaseView) obj;
+                view = baseView.view;
+            } else if (obj instanceof Adapters.BaseAdapter) {
+                Adapters.BaseAdapter baseView = (Adapters.BaseAdapter) obj;
+                view = baseView.itemView;
+            } else if (obj instanceof GT_PopupWindow.BasePopupWindow) {
+                GT_PopupWindow.BasePopupWindow baseView = (GT_PopupWindow.BasePopupWindow) obj;
+                view = baseView.view;
+            } else if (obj instanceof RecyclerView.ViewHolder) {
+                RecyclerView.ViewHolder baseView = (RecyclerView.ViewHolder) obj;
+                view = baseView.itemView;
+            } else {
+                GT.err("暂不支持该组件注解：" + obj);
+            }
+
+            Object[] objArray = new Object[2];
+            objArray[0] = activity;
+            objArray[1] = view;
+            return objArray;
+        }
+
+        /**
          * 解析文件 反射 Object
          *
          * @param obj
          * @return
          */
-        private Object classToObject(Object obj) {
+        public Object classToObject(Object obj) {
             String[] strs = obj.toString().split(" ");
-            String str = strs[1];
+            String str = "";
+            if (strs.length == 2) {
+                str = strs[1];
+            } else {
+                str = obj.toString();
+            }
             Class<?> clazz = getClass();
             try {
                 clazz = Class.forName(str);
-            } catch (ClassNotFoundException e1) {
-                e1.printStackTrace();
+            } catch (ClassNotFoundException e) {
+                GT.err("e:" + e);
+                e.printStackTrace();
             }
             try {
                 obj = clazz.newInstance();
             } catch (IllegalAccessException e) {
+                GT.err("e:" + e);
                 e.printStackTrace();
             } catch (InstantiationException e) {
+                GT.err("e:" + e);
                 e.printStackTrace();
             }
             return obj;
+        }
+
+
+        /**
+         * 获取类的泛类型
+         *
+         * @param obj 需要获取的类
+         * @return
+         */
+        public static Type[] getClassGenericType(Object obj) {
+            Type[] actualTypeArguments = null;
+            try {
+                Class clazz = obj.getClass();
+                Type type = clazz.getGenericSuperclass();
+                ParameterizedType p = (ParameterizedType) type;
+                actualTypeArguments = p.getActualTypeArguments();
+            } catch (Exception e) {
+//                GT.errs("e:" + e);
+            }
+            return actualTypeArguments;
+        }
+
+        /**
+         * 利用反射给类中方法进行赋值
+         *
+         * @param setObj            被设置操作的类
+         * @param setMethodName     被调用的方法名
+         * @param returnType        该方法返回值的类型,若没有返回值填入null即可
+         * @param setValueTypeClass 设置值的类型
+         * @param setValue          设置的值
+         * @param <T>               自适应返回值类型
+         * @return 如果返回值类型为null则默认返回 true:设置值成功 false:设置值失败
+         */
+        public static <T> T setReflectMethodValue(Object setObj, String setMethodName, Class<T> returnType, Class<?> setValueTypeClass, Object... setValue) {
+            Method m = null;
+            try {
+                m = setObj.getClass().getMethod(setMethodName, setValueTypeClass);
+                m.setAccessible(true);
+                T invoke = (T) m.invoke(setObj, setValue);//调用方法
+                if (returnType != null) {
+                    return invoke;
+                } else {
+                    return (T) "true";
+                }
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                GT.err("e:" + e);
+                e.printStackTrace();
+            }
+            if (returnType != null) {
+                return null;
+            } else {
+                return (T) "false";
+            }
+        }
+
+
+        /**
+         * 获取反射方法的返回值
+         *
+         * @param setObj        被设置操作的类
+         * @param setMethodName 被调用的方法名
+         * @param returnType    该方法返回值的类型
+         * @param <T>           自适应返回值类型
+         * @return
+         */
+        public static <T> T runMethod(Object setObj, String setMethodName, Class<T> returnType) {
+            if (returnType == null) return null;
+            Method m = null;
+            try {
+                m = setObj.getClass().getMethod(setMethodName);
+                T invoke = (T) m.invoke(setObj);//调用方法
+                return invoke;
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                GT.err("e:" + e);
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+
+        /**
+         * 获取反射方法的返回值
+         *
+         * @param setObj        被设置操作的类
+         * @param setMethodName 被调用的方法名
+         * @param returnType    该方法返回值的类型
+         * @param <T>           自适应返回值类型
+         * @return
+         */
+        public static <T> T getReflectMethodValue(Object setObj, String setMethodName, Class<T> returnType) {
+            if (returnType == null) return null;
+            Method m = null;
+            try {
+                m = setObj.getClass().getMethod(setMethodName);
+                T invoke = (T) m.invoke(setObj);//调用方法
+                return invoke;
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                GT.err("e:" + e);
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        /**
+         * 获取反射变量的值
+         *
+         * @param classz          反射的类(可接受类型 class、String(类包名)、实体类)
+         * @param valueType       反射变量的类型
+         * @param returnValueName 反射变量的变量名
+         * @param <T>
+         * @return
+         */
+        public static <T> T getReflectVariateValue(Object classz, Class<T> valueType, String returnValueName) {
+            T t = null;
+            Class aClass = null;
+            if (classz instanceof Class) {//class 类
+                aClass = (Class) classz;
+            } else if (classz instanceof String) {//类包名
+                aClass = stringToClass(classz.toString());
+            } else {//实体类
+                aClass = classz.getClass();
+            }
+            if (aClass == null) return null;
+            Field[] f = aClass.getDeclaredFields();
+            for (Field field : f) {
+                field.setAccessible(true);//设置可以读取 private 值
+                try {
+                    if (field.getName().equals(returnValueName)) {//如果是自己想要的值，那就直接返回
+                        t = (T) field.get(aClass.newInstance());
+                        return t;
+                    }
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (InstantiationException e) {
+                    e.printStackTrace();
+                }
+            }
+            return null;
+        }
+
+        /**
+         * 利用反射给变量设置值
+         *
+         * @param obj       反射的类
+         * @param valueName 赋值的变量名
+         * @param value     值
+         * @return 返回反射后的对象
+         */
+        public static <T> T setReflectVariateValue(T obj, String valueName, Object value) {
+            Class aClass = obj.getClass();
+            try {
+                Field name = aClass.getDeclaredField(valueName);
+                name.setAccessible(true);
+                name.set(obj, value);
+                return obj;
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                GT.err("e:" + e);
+                e.printStackTrace();
+            }
+            return obj;
+        }
+
+        /**
+         * 反射该类所有的变量值 (可接受类型 class、String(类包名)、实体类)
+         *
+         * @param classz
+         * @return
+         */
+        public static Map<String, Object> getReflectVariateValueAll(Object classz) {
+            Map<String, Object> map = new HashMap<>();
+            Class aClass = null;
+            if (classz instanceof Class) {//class 类
+                aClass = (Class) classz;
+            } else if (classz instanceof String) {//类包名
+                aClass = stringToClass(classz.toString());
+            } else {//实体类
+                aClass = classz.getClass();
+            }
+            if (aClass == null) return null;
+            Field[] f = aClass.getDeclaredFields();
+            for (Field field : f) {
+                field.setAccessible(true);//设置可以读取 private 值
+                try {
+                    map.put(field.getName(), field.get(aClass.newInstance()));
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (InstantiationException e) {
+                    e.printStackTrace();
+                }
+            }
+            return map;
+        }
+
+        /**
+         * 字符串转Class
+         *
+         * @param className 包名 如："com.gsls.gt.Person"
+         * @param T
+         * @return
+         */
+        public static Class<?> stringToClass(String className) {
+            try {
+                return Class.forName(className);
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+                return null;
+            }
         }
 
     }
@@ -23119,11 +26690,11 @@ public class GT {
                         return returnInfo;
                     case 1://id或text数量为1，先查出对应的id或text，然后再查其他条件
                         if (tfs.length == 1) {
-                            AccessibilityNodeInfo returnInfo2 = ((AccessibilityServiceUtils.IdTextTF) tfs[idTextIndex]).findFirst(rootInfo);
+                            AccessibilityNodeInfo returnInfo2 = ((IdTextTF) tfs[idTextIndex]).findFirst(rootInfo);
                             rootInfo.recycle();
                             return returnInfo2;
                         } else {
-                            List<AccessibilityNodeInfo> listIdText = ((AccessibilityServiceUtils.IdTextTF) tfs[idTextIndex]).findAll(rootInfo);
+                            List<AccessibilityNodeInfo> listIdText = ((IdTextTF) tfs[idTextIndex]).findAll(rootInfo);
                             if (isEmptyArray(listIdText)) {
                                 break;
                             }
@@ -23212,7 +26783,7 @@ public class GT {
                         findAllRecursive(list, rootInfo, tfs);
                         break;
                     case 1://id或text数量为1，先查出对应的id或text，然后再循环
-                        List<AccessibilityNodeInfo> listIdText = ((AccessibilityServiceUtils.IdTextTF) tfs[idTextIndex]).findAll(rootInfo);
+                        List<AccessibilityNodeInfo> listIdText = ((IdTextTF) tfs[idTextIndex]).findAll(rootInfo);
                         if (isEmptyArray(listIdText)) {
                             break;
                         }
@@ -23303,20 +26874,6 @@ public class GT {
 
     // 定义 GT 包 简易使用教程
     public interface CMD {
-
-        /**
-         * 关于 GT 包中的功能使用教程请参考官网详细教程
-         * 官网教程：https://blog.csdn.net/qq_39799899/article/details/98891256
-         *
-         * 竖屏
-         *     android:launchMode="singleTask"
-         *     android:screenOrientation="portrait"
-         *
-         * 切换横竖不进行生命周期的调换
-         * android:configChanges="orientation|keyboardHidden|screenSize"
-         *
-         */
-
 
     }
 

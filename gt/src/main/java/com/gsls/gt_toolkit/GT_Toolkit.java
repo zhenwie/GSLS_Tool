@@ -1,4 +1,4 @@
-package com.gsls.gtlibrary.util;
+package com.gsls.gt_toolkit;
 
 
 import android.annotation.SuppressLint;
@@ -35,7 +35,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.blankj.utilcode.util.AppUtils;
 import com.blankj.utilcode.util.DeviceUtils;
 import com.gsls.gt.GT;
-import com.gsls.gtlibrary.R;
+import com.gsls.gt.R;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -44,51 +44,37 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
-@GT.Annotations.GT_AnnotationFloatingWindow(R.layout.floating_main)
-public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow implements View.OnClickListener {
+/**
+ * 启动代码：
+ * * GT_Toolkit.setType_screenType(-1);
+ * * startFloatingWindow(GT_Toolkit.class);
+ */
+public class GT_Toolkit extends GT.GT_FloatingWindow.BaseFloatingWindow implements View.OnClickListener {
     public static boolean isOpenLog = false;//有日志时判断是否发送广播
     //组件加载
-    @GT.Annotations.GT_View(R.id.tv_shutdown)
     protected TextView tv_shutdown;//开关机提示
-    @GT.Annotations.GT_View(R.id.cl_close)
     private View cl_close;//开关机整体页面
-    @GT.Annotations.GT_View(R.id.cb_expansion)
     protected CheckBox cb_expansion;//放大缩小按钮
-    @GT.Annotations.GT_View(R.id.cl_title)
     private View cl_title;//缩小状态栏
-    @GT.Annotations.GT_View(R.id.ll_bottom)
     private View ll_bottom;//下面按钮
-    @GT.Annotations.GT_View(R.id.ll_StatusBar_titleAll)
     private View ll_StatusBar_titleAll;//展开状态栏
-    @GT.Annotations.GT_View(R.id.sv_StatusBar_titleData)
     private ScrollView sv_StatusBar_titleData;//状态栏最顶端容器
-    @GT.Annotations.GT_View(R.id.ll_statusBar_set)
     private View ll_statusBar_set;//状态栏内装功能的容器
-    @GT.Annotations.GT_View(R.id.view_bg_floating_title)
     private View view_bg_floating_title;//展开状态栏后显示的背景黑色
-    @GT.Annotations.GT_View(R.id.tv_statusBar_message)
     private TextView tv_statusBar_message;//状态栏内的消息提示
-    @GT.Annotations.GT_View(R.id.sb_diaphaneity)
     private SeekBar sb_diaphaneity;//状态栏内的透明度调节拖动条
-    @GT.Annotations.GT_View(R.id.sb_width)
     private SeekBar sb_width;//宽度拖动条
-    @GT.Annotations.GT_View(R.id.sb_height)
     private SeekBar sb_height;//高度拖动条
-    @GT.Annotations.GT_View(R.id.flowLayout)
     private GT.ViewUtils.FlowLayout flowLayout;//装APP容器
-    @GT.Annotations.GT_View(R.id.sv)
     private View sv;//APP图标滑动组件
-    @GT.Annotations.GT_View(R.id.sv_find)
     private SearchView sv_find;//搜索组件
-    @GT.Annotations.GT_View(R.id.fl_main)
     private ViewGroup fl_main; //界面容器
-    @GT.Annotations.GT_View(R.id.iv_fillTop)
     private ImageView iv_fillTop;//全屏最顶部
 
     //创建内置APP工具
-    private GT_Floating.UtilsGTApp utilsGTApp = new GT_Floating.UtilsGTApp();
+    private UtilsGTApp utilsGTApp = new UtilsGTApp();
     //创建工具
-    private GT_Floating.Utils utils = new GT_Floating.Utils();
+    private Utils utils = new Utils();
     //创建动画库
     public final GT.GT_Animation animation = new GT.GT_Animation();
     //内置APP
@@ -101,22 +87,60 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
     private int originalWidth = 0;
     private int originalHeight = 0;
 
+    @Override
+    protected int loadLayout() {
+        return R.layout.floating_main;
+    }
 
     @Override
     protected void initView(View view) {
-        super.initView(view);
         setDrag(true);//设置可拖动
+
+        //组件初始化
+        tv_shutdown = view.findViewById(R.id.tv_shutdown);
+        cl_close = view.findViewById(R.id.cl_close);
+        cb_expansion = view.findViewById(R.id.cb_expansion);
+        cl_title = view.findViewById(R.id.cl_title);
+        ll_bottom = view.findViewById(R.id.ll_bottom);
+        ll_StatusBar_titleAll = view.findViewById(R.id.ll_StatusBar_titleAll);
+        sv_StatusBar_titleData = view.findViewById(R.id.sv_StatusBar_titleData);
+        ll_statusBar_set = view.findViewById(R.id.ll_statusBar_set);
+        view_bg_floating_title = view.findViewById(R.id.view_bg_floating_title);
+        tv_statusBar_message = view.findViewById(R.id.tv_statusBar_message);
+        sb_diaphaneity = view.findViewById(R.id.sb_diaphaneity);
+        sb_width = view.findViewById(R.id.sb_width);
+        sb_height = view.findViewById(R.id.sb_height);
+        flowLayout = view.findViewById(R.id.flowLayout);
+        sv = view.findViewById(R.id.sv);
+        sv_find = view.findViewById(R.id.sv_find);
+        fl_main = view.findViewById(R.id.fl_main);
+        iv_fillTop = view.findViewById(R.id.iv_fillTop);
+
+        //组件单击事件注册
+        int[] viewIds = {
+                R.id.tv_hide, R.id.cb_expansion, R.id.tv_close, R.id.cl_title, //上面
+                R.id.tv_statusBar_message, R.id.iv_cut, R.id.iv_reset, R.id.iv_fill, R.id.iv_fillTop, //状态栏内的
+                R.id.tv_back, R.id.tv_home, R.id.tv_task,       //下面
+        };
+
+        //遍历注册单击事件
+        for (int viewId : viewIds) {
+            onClickView(view.findViewById(viewId));
+        }
+
         utils.loadApp();//加载安装系统内部APP
         //记录原始宽高
         originalWidth = getLayoutParams().width;
         originalHeight = getLayoutParams().height;
+
     }
+
 
     @SuppressLint({"NewApi", "UseCompatLoadingForDrawables"})
     @Override
     protected void loadData(Context context, Intent intent, View view) {
         super.loadData(context, intent, view);
-        registerReceiver(utils.mBroadcastReceiver, new IntentFilter(GT_Floating.Utils.ACTION));//单击事件 注册广播
+        registerReceiver(utils.mBroadcastReceiver, new IntentFilter(Utils.ACTION));//单击事件 注册广播
         utils.setTitleListener(sv_find); //设置状态栏事件
         animation.translateY_T(0, -getHeight(), 1, 0, false, ll_StatusBar_titleAll);//状态栏默认收起来
         utils.setStatusBarShrinkListener(tv_statusBar_message, true);//设置状态栏内部上滑收缩事件
@@ -131,7 +155,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
         utils.setStatusBarWidthDrag(sb_width);//设置状态栏宽度拖动事件
         utils.setStatusBarHeightDrag(sb_height);//设置状态栏高度拖动事件
 
-        cl_close.setOnTouchListener(new GT_Floating.FloatingOnTouchListener_Close());//开关机界面可拖动界面
+        cl_close.setOnTouchListener(new FloatingOnTouchListener_Close());//开关机界面可拖动界面
         utils.setSearchEvent(sv_find);//设置搜索框事件
         flowLayout.removeAllViews();//清空所有组件
         fl_main.removeAllViews();//清空所有组件
@@ -155,7 +179,6 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
     }
 
     //内置APP功能
-    @Override
     public void onClick(View v) {
         TextView tv_appName = v.findViewById(R.id.tv_appName);
         String appName = tv_appName.getText().toString();
@@ -183,109 +206,91 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
     }
 
     //小手机事件
-    @SuppressLint("ResourceType")
-    @GT.Annotations.GT_Click({
-            R.id.tv_hide, R.id.cb_expansion, R.id.tv_close, R.id.cl_title, //上面
-
-            R.id.tv_statusBar_message, R.id.iv_cut, R.id.iv_reset, R.id.iv_fill, R.id.iv_fillTop, //状态栏内的
-
-            R.id.tv_back, R.id.tv_home, R.id.tv_task,       //下面
-    })
     public void onClickView(View view) {
-        switch (view.getId()) {
-            //上面
-            case R.id.cl_title://状态栏
-                if (utils.operationType == 2) return;//屏蔽掉长按事件的冲突
-                utils.isUnfold = true;
-                utils.setStatusBarBgHide(true);
-                animation.translateY_T(-getHeight(), 0, 500, 0, false, ll_StatusBar_titleAll);
+
+        view.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                int id = v.getId();//上面
+//充满全屏
+                if (id == R.id.cl_title) {//状态栏
+                    if (utils.operationType == 2) return;//屏蔽掉长按事件的冲突
+                    utils.isUnfold = true;
+                    utils.setStatusBarBgHide(true);
+                    animation.translateY_T(-getHeight(), 0, 500, 0, false, ll_StatusBar_titleAll);
 //                GT.log("单击 状态栏");
-                break;
-            case R.id.tv_hide://隐藏按钮
-                utils.sendCustomViewNotification();//发送通知
-                hide();//隐藏GT小白
-                break;
-            case R.id.cb_expansion://切换屏幕大小
-                utils.changeSize();
-                break;
-            case R.id.tv_close://关机
-                utils.shutdown(false, 100);//关机且设置持续时间
-                break;
+                } else if (id == R.id.tv_hide) {//隐藏按钮
+                    utils.sendCustomViewNotification();//发送通知
+                    hide();//隐藏GT小白
+                } else if (id == R.id.cb_expansion) {//切换屏幕大小
+                    utils.changeSize();
+                } else if (id == R.id.tv_close) {//关机
+                    utils.shutdown(false, 100);//关机且设置持续时间
 
 
-            //状态栏内
-            case R.id.tv_statusBar_message://状态栏内的消息提示
-                animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
-                utils.setStatusBarBgHide(false);
-                utils.isUnfold = false;
-                tv_statusBar_message.setText("暂无通知");
-//                GT.log("单击 暂无通知");
-                break;
-            case R.id.iv_cut://切换竖屏横屏
-//                GT.log("切换");
-                int tmp_w = getLayoutParams().width;
-                int tmp_h = getLayoutParams().height;
-                getLayoutParams().width = tmp_h;
-                getLayoutParams().height = tmp_w;
-                updateView();
-                break;
-            case R.id.iv_reset://重置窗体属性
-                sb_diaphaneity.setProgress(0);
-                sb_width.setProgress(originalWidth);
-                sb_height.setProgress(originalHeight);
-                view.setAlpha(1);
-                getLayoutParams().width = originalWidth;
-                getLayoutParams().height = originalHeight;
-                updateView();
-                break;
-            case R.id.iv_fill://充满全屏
-            case R.id.iv_fillTop:
-                //执行双击全屏操作
-                utils.isFullScreen = !utils.isFullScreen;
-                utils.setIsFullScreen(utils.isFullScreen);
-                break;
-
-
-            //下面三个按钮
-            case R.id.tv_back:
-//                GT.log("返回上级");
-                GT.toast(context, "返回上级");
-                if (utils.isUnfold) {
-//                    GT.log("进入返回上级");
-                    utils.isUnfold = false;
-                    utils.setStatusBarBgHide(false);
+                    //状态栏内
+                } else if (id == R.id.tv_statusBar_message) {//状态栏内的消息提示
                     animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
-                    return;
-                }
+                    utils.setStatusBarBgHide(false);
+                    utils.isUnfold = false;
+                    tv_statusBar_message.setText("暂无通知");
+//                GT.log("单击 暂无通知");
+                } else if (id == R.id.iv_cut) {//切换竖屏横屏
+//                GT.log("切换");
+                    int tmp_w = getLayoutParams().width;
+                    int tmp_h = getLayoutParams().height;
+                    getLayoutParams().width = tmp_h;
+                    getLayoutParams().height = tmp_w;
+                    updateView();
+                } else if (id == R.id.iv_reset) {//重置窗体属性
+                    sb_diaphaneity.setProgress(0);
+                    sb_width.setProgress(originalWidth);
+                    sb_height.setProgress(originalHeight);
+                    view.setAlpha(1);
+                    getLayoutParams().width = originalWidth;
+                    getLayoutParams().height = originalHeight;
+                    updateView();
+                } else if (id == R.id.iv_fill || id == R.id.iv_fillTop) {//执行双击全屏操作
+                    utils.isFullScreen = !utils.isFullScreen;
+                    utils.setIsFullScreen(utils.isFullScreen);
 
-                if (utilsGTApp.hierarchyNumber > 0) {
-                    utilsGTApp.hierarchyNumber--;
-                }
 
-                //退出栈顶界面
-                onBackPressed();
-                break;
-            case R.id.tv_home:
-//                GT.log("返回桌面");
+                    //下面三个按钮
+                } else if (id == R.id.tv_back) {//                GT.log("返回上级");
+                    GT.toast(context, "返回上级");
+                    if (utils.isUnfold) {
+//                    GT.log("进入返回上级");
+                        utils.isUnfold = false;
+                        utils.setStatusBarBgHide(false);
+                        animation.translateY_T(0, -getHeight(), 500, 0, false, ll_StatusBar_titleAll);
+                        return;
+                    }
+
+                    if (utilsGTApp.hierarchyNumber > 0) {
+                        utilsGTApp.hierarchyNumber--;
+                    }
+
+                    //退出栈顶界面
+                    onBackPressed();
+                } else if (id == R.id.tv_home) {//                GT.log("返回桌面");
 //                GT.toast(context, "返回桌面");
-                utils.backAllFrame();//退出所有内置APP
-                break;
-            case R.id.tv_task:
-//                GT.log("浏览任务");
+                    utils.backAllFrame();//退出所有内置APP
+                } else if (id == R.id.tv_task) {//                GT.log("浏览任务");
 //                GT.toast(context, "浏览任务");
-                for (int i = 0; i < fl_main.getChildCount(); i++) {
-                    View childAt = fl_main.getChildAt(i);
+                    for (int i = 0; i < fl_main.getChildCount(); i++) {
+                        View childAt = fl_main.getChildAt(i);
 //                    GT.log("TAG:" + childAt);
+                    }
                 }
-                break;
+
+            }
+        });
 
 
-        }
     }
 
-    /**
-     * 设置开关机界面的窗体拖动事件
-     */
+    //设置开关机界面的窗体拖动事件
     public class FloatingOnTouchListener_Close implements View.OnTouchListener {
         private int x;
         private int y;
@@ -315,9 +320,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
         }
     }
 
-    /**
-     * 工具类
-     */
+
     class Utils {
 
         //记录旧的宽高
@@ -348,11 +351,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
         public Utils() {
         }
 
-        /**
-         * 提示吐司
-         *
-         * @param msg
-         */
+        //提示吐司
         public void toast(Object msg) {
             GT.Thread.runAndroid(new Runnable() {
                 @Override
@@ -362,9 +361,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 切换屏幕大小
-         */
+        //切换屏幕大小
         private void changeSize() {
             if (cb_expansion.isChecked()) {
                 //记录原始大小
@@ -381,12 +378,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             updateView();//更新界面
         }
 
-        /**
-         * 开关机
-         *
-         * @param startOrClose 是否开关机
-         * @param time         设置关机等待时间
-         */
+        //开关机
         private void shutdown(boolean startOrClose, int time) {
             GT.Thread.runJava(new Runnable() {
                 @Override
@@ -420,9 +412,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 发送通知栏
-         */
+        //发送通知栏
         private NotificationManagerCompat notificationManagerCompat;
 
         public void sendCustomViewNotification() {
@@ -498,11 +488,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
         };
 
 
-        /**
-         * 设置状态栏下滑展开
-         *
-         * @param cl_view
-         */
+        //设置状态栏下滑展开
         @RequiresApi(api = Build.VERSION_CODES.N)
         @SuppressLint("ClickableViewAccessibility")
         public void setTitleListener(View cl_view) {
@@ -618,11 +604,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 设置点击无法穿透
-         *
-         * @param view
-         */
+        //设置点击无法穿透
         public View setNotClickPenetrate(View view) {
             view.setOnTouchListener(new View.OnTouchListener() {
 
@@ -634,9 +616,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             return view;
         }
 
-        /**
-         * 隐藏状态栏背景
-         */
+        //隐藏状态栏背景
         public void setStatusBarBgHide(boolean tf) {
 
             view_bg_floating_title.setVisibility(View.VISIBLE);
@@ -687,11 +667,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
 
         }
 
-        /**
-         * 设置状态栏内部的收缩事件
-         *
-         * @param view
-         */
+        //设置状态栏内部的收缩事件
         @SuppressLint("ClickableViewAccessibility")
         public void setStatusBarShrinkListener(View view, boolean isClick) {
             //设置状态栏上滑事件
@@ -733,11 +709,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 设置状态栏中的 透明度拖动条
-         *
-         * @param seekBar
-         */
+        //设置状态栏中的 透明度拖动条
         public void setStatusBarDiaphaneityDrag(SeekBar seekBar) {
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
@@ -760,11 +732,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 设置状态栏中宽度拖动条事件
-         *
-         * @param seekBar
-         */
+        //设置状态栏中宽度拖动条事件
         public void setStatusBarWidthDrag(SeekBar seekBar) {
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
@@ -786,11 +754,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 设置状态栏中高度拖动条事件
-         *
-         * @param seekBar
-         */
+        //设置状态栏中高度拖动条事件
         public void setStatusBarHeightDrag(SeekBar seekBar) {
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
@@ -813,11 +777,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 设置全图
-         *
-         * @param isFullScreen
-         */
+        //设置全图
         public void setIsFullScreen(boolean isFullScreen) {
             if (isFullScreen) {
                 cl_title.setVisibility(View.GONE);
@@ -830,9 +790,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             }
         }
 
-        /**
-         * 设置双击全屏
-         */
+        //设置双击全屏
         @SuppressLint("ClickableViewAccessibility")
         public View setDoubleClickFullScreen(View flowLayout) {
             flowLayout.setOnTouchListener((v, event) -> {
@@ -858,9 +816,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             return flowLayout;
         }
 
-        /**
-         * 加载APP
-         */
+        //加载APP
         public void loadApp() {
 
             cl_close.setVisibility(View.VISIBLE);//显示开关机组件
@@ -929,9 +885,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
         private Timer timer = new Timer();
         private final long DELAY = 1000; // in ms
 
-        /**
-         * 设置搜索事件
-         */
+        //设置搜索事件
         public void setSearchEvent(SearchView sv_find) {
 
             //搜索框展开时后面叉叉按钮的点击事件
@@ -988,11 +942,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
 
         }
 
-        /**
-         * 搜索方法
-         *
-         * @param keyValue
-         */
+        //搜索方法
         public void search(String keyValue) {
             GT.Thread.runAndroid(new Runnable() {
                 @Override
@@ -1020,112 +970,97 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
                         });
                     } else {
                         View childAt = fl_main.getChildAt(fl_main.getChildCount() - 1);
-                        switch (childAt.getId()) {
-                            case R.layout.frame_log:
+                        int id = childAt.getId();//                                GT.log("默认的过滤");
+                        if (id == R.layout.frame_log) {
+                            GT.Thread.runJava(new Runnable() {
+                                @Override
+                                public void run() {
 
-                                GT.Thread.runJava(new Runnable() {
-                                    @Override
-                                    public void run() {
+                                    List<LogBean> logBeans = utilsGTApp.getLogBeans();
+                                    List<LogBean> logBeans2 = new ArrayList<>();
+                                    for (LogBean logBean : logBeans) {
 
-                                        List<LogBean> logBeans = utilsGTApp.getLogBeans();
-                                        List<LogBean> logBeans2 = new ArrayList<>();
-                                        for (LogBean logBean : logBeans) {
-
-                                            if (keyValue.length() != 0) {
-                                                if (logBean.getValue().toLowerCase().contains(keyValue.toLowerCase())) {
-                                                    logBeans2.add(new LogBean(logBean.getValue()));
-                                                }
-                                            } else {
+                                        if (keyValue.length() != 0) {
+                                            if (logBean.getValue().toLowerCase().contains(keyValue.toLowerCase())) {
                                                 logBeans2.add(new LogBean(logBean.getValue()));
                                             }
-                                        }
-
-                                        GT.Thread.runAndroid(new Runnable() {
-                                            @Override
-                                            public void run() {
-                                                //更新数据
-                                                utilsGTApp.getLogAdapter().setBeanList(logBeans2);
-                                            }
-                                        });
-
-                                    }
-                                });
-
-
-                                break;
-                            case R.layout.frame_sql:
-//                                GT.log("搜索进入 SQL页面:" + keyValue);
-                                List<String> sqlValues = utilsGTApp.getSQLValues();
-                                sqlValues.clear();
-
-                                switch (utilsGTApp.hierarchyNumber) {
-                                    case 1:
-//                                        GT.log("数据库过滤:" + keyValue);
-                                        List<String> sqlAllNames = utilsGTApp.hibernate.getSqlAllName();//获取数据库所有名称
-//                                        GT.log("sqlAllNames:" + sqlAllNames);
-                                        if (sqlAllNames == null || sqlAllNames.size() == 0) {
-//                                            GT.log("进入 if");
-                                            sqlValues.add("暂无数据，\n请通过搜索框搜索！");
                                         } else {
+                                            logBeans2.add(new LogBean(logBean.getValue()));
+                                        }
+                                    }
+
+                                    GT.Thread.runAndroid(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            //更新数据
+                                            utilsGTApp.getLogAdapter().setBeanList(logBeans2);
+                                        }
+                                    });
+
+                                }
+                            });
+                        } else if (id == R.layout.frame_sql) {//                                GT.log("搜索进入 SQL页面:" + keyValue);
+                            List<String> sqlValues = utilsGTApp.getSQLValues();
+                            sqlValues.clear();
+
+                            switch (utilsGTApp.hierarchyNumber) {
+                                case 1:
+//                                        GT.log("数据库过滤:" + keyValue);
+                                    List<String> sqlAllNames = utilsGTApp.hibernate.getSqlAllName();//获取数据库所有名称
+//                                        GT.log("sqlAllNames:" + sqlAllNames);
+                                    if (sqlAllNames == null || sqlAllNames.size() == 0) {
+//                                            GT.log("进入 if");
+                                        sqlValues.add("暂无数据，\n请通过搜索框搜索！");
+                                    } else {
 //                                            GT.log("进入 else:" + keyValue.length());
 //                                            GT.log("sqlValues:" + sqlValues);
-                                            if (keyValue.length() == 0) {
-                                                sqlValues.addAll(sqlAllNames);
-                                            } else {
-                                                for (String sqlName : sqlAllNames) {
-                                                    if (sqlName.split("\\.")[0].toLowerCase().contains(keyValue.toLowerCase())) {
-//                                                        GT.log("单个添加:" + sqlName);
-                                                        sqlValues.add(sqlName);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        utilsGTApp.getSqlAdapter().setBeanList(sqlValues);
-                                        break;
-                                    case 2:
-//                                        GT.log("表过滤:" + keyValue);
-                                        List<String> sqlAllTableName = utilsGTApp.hibernate.getSqlAllTableName();
-                                        if (sqlAllTableName == null || sqlAllTableName.size() == 0) {
-                                            sqlValues.add("暂无数据，\n请通过搜索框搜索！");
+                                        if (keyValue.length() == 0) {
+                                            sqlValues.addAll(sqlAllNames);
                                         } else {
-                                            if (keyValue.length() == 0) {
-                                                sqlValues.addAll(sqlAllTableName);
-                                            } else {
-                                                for (String sqlTableName : sqlAllTableName) {
-                                                    if (sqlTableName.toLowerCase().contains(keyValue.toLowerCase())) {
-                                                        sqlValues.add(sqlTableName);
-                                                    }
+                                            for (String sqlName : sqlAllNames) {
+                                                if (sqlName.split("\\.")[0].toLowerCase().contains(keyValue.toLowerCase())) {
+//                                                        GT.log("单个添加:" + sqlName);
+                                                    sqlValues.add(sqlName);
                                                 }
                                             }
                                         }
-                                        utilsGTApp.getTableAdapter().setBeanList(sqlValues);
-                                        break;
-
-                                }
-
-                                //刷新数据
-//                                GT.log("刷新适配器", sqlValues);
-                                break;
-
-                            case R.layout.frame_sql_table:
-//                                GT.log("表字段过滤");
-                                break;
-                            case R.layout.frame_fragment_stack:
-//                                GT.log("搜索进入 FStack页面:" + keyValue);
-                                LinearLayout ll_fragmentStack = utilsGTApp.getLl_fragmentStack();
-                                if (ll_fragmentStack != null) {
-                                    for (int i = 0; i < ll_fragmentStack.getChildCount(); i++) {
-                                        View childAtView = ll_fragmentStack.getChildAt(i);
-                                        TextView tv_showStack = childAtView.findViewById(R.id.tv_showStack);
-                                        String showStackData = tv_showStack.getText().toString();
-//                                        GT.log("showStackData:" + showStackData);
                                     }
-                                }
+                                    utilsGTApp.getSqlAdapter().setBeanList(sqlValues);
+                                    break;
+                                case 2:
+//                                        GT.log("表过滤:" + keyValue);
+                                    List<String> sqlAllTableName = utilsGTApp.hibernate.getSqlAllTableName();
+                                    if (sqlAllTableName == null || sqlAllTableName.size() == 0) {
+                                        sqlValues.add("暂无数据，\n请通过搜索框搜索！");
+                                    } else {
+                                        if (keyValue.length() == 0) {
+                                            sqlValues.addAll(sqlAllTableName);
+                                        } else {
+                                            for (String sqlTableName : sqlAllTableName) {
+                                                if (sqlTableName.toLowerCase().contains(keyValue.toLowerCase())) {
+                                                    sqlValues.add(sqlTableName);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    utilsGTApp.getTableAdapter().setBeanList(sqlValues);
+                                    break;
 
-                                break;
-                            default:
-//                                GT.log("默认的过滤");
-                                break;
+                            }
+
+                            //刷新数据
+//                                GT.log("刷新适配器", sqlValues);
+                        } else if (id == R.layout.frame_sql_table) {//                                GT.log("表字段过滤");
+                        } else if (id == R.layout.frame_fragment_stack) {//                                GT.log("搜索进入 FStack页面:" + keyValue);
+                            LinearLayout ll_fragmentStack = utilsGTApp.getLl_fragmentStack();
+                            if (ll_fragmentStack != null) {
+                                for (int i = 0; i < ll_fragmentStack.getChildCount(); i++) {
+                                    View childAtView = ll_fragmentStack.getChildAt(i);
+                                    TextView tv_showStack = childAtView.findViewById(R.id.tv_showStack);
+                                    String showStackData = tv_showStack.getText().toString();
+//                                        GT.log("showStackData:" + showStackData);
+                                }
+                            }
                         }
 
                     }
@@ -1133,18 +1068,14 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             });
         }
 
-        /**
-         * 退出栈顶界面
-         */
+        //退出栈顶界面
         public void backStackTopFrame() {
             if (fl_main.getChildCount() != 0) {
                 fl_main.removeViewAt(fl_main.getChildCount() - 1);//退出栈顶的页面
             }
         }
 
-        /**
-         * 退出指定的 Frame
-         */
+        //退出指定的 Frame
         public void backAssignFrame(int backFrameID) {
             int childCount = fl_main.getChildCount();
             if (backFrameID == -1) {
@@ -1163,9 +1094,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             }
         }
 
-        /**
-         * 退出栈顶界面
-         */
+        //退出栈顶界面
         public void backAllFrame() {
             int childCount = fl_main.getChildCount();
             for (int i = 0; i < childCount; i++) {
@@ -1175,11 +1104,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             }
         }
 
-        /**
-         * 获取最顶端的Frame
-         *
-         * @return
-         */
+        //获取最顶端的Frame
         public View getTopFrame() {
             int childCount = fl_main.getChildCount();
             if (childCount != 0) {
@@ -1193,9 +1118,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
 
     public class UtilsGTApp implements SQLAdapter.ClickSqlTable {
 
-        /**
-         * 定义一个接收到消息后刷新UI的内部类广播
-         */
+        //定义一个接收到消息后刷新UI的内部类广播
         private class UiReceiver extends BroadcastReceiver {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -1213,7 +1136,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
 
         private LogAdapter logAdapter;
         private List<LogBean> logBeans = new ArrayList<>();
-        private GT_Floating.UtilsGTApp.UiReceiver uiReceiver;
+        private UiReceiver uiReceiver;
         private CheckBox cb_dynamicRefresh;
         private LinearLayoutManager linearLayoutManager_log;
 
@@ -1243,7 +1166,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
             linearLayoutManager_log = logAdapter.setLinearLayoutManager_V(recyclerView);
 
             //实例化过滤器并设置要过滤的广播
-            uiReceiver = new GT_Floating.UtilsGTApp.UiReceiver();
+            uiReceiver = new UiReceiver();
             IntentFilter intentFilter = new IntentFilter();
             intentFilter.addAction(getClass().getName());
             context.registerReceiver(uiReceiver, intentFilter); //注册广播
@@ -1385,12 +1308,7 @@ public class GT_Floating extends GT.GT_FloatingWindow.AnnotationFloatingWindow i
         private TableDataAdapter tableDataAdapter;
         private List<String> tableVaues;
 
-        /**
-         * 初始化 表名称
-         * tableName
-         *
-         * @return
-         */
+        //初始化 表名称
         @SuppressLint("ResourceType")
         public View initTable(String tableName) {
             //初始化UI

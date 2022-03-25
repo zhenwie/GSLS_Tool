@@ -1,0 +1,20 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="#72DFDBB4"
+    android:gravity="center"
+    android:orientation="vertical">
+
+  <View
+      android:id="@+id/view_bg"
+      android:layout_width="200dp"
+      android:layout_height="300dp"/>
+
+   <Button
+       android:id="@+id/btn_back"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"
+       android:text="单击关闭"
+       />
+
+</LinearLayout>

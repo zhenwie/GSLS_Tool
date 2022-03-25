@@ -8,7 +8,7 @@ android {
         minSdkVersion 16
         targetSdkVersion 30
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-
+        multiDexEnabled true
     }
 
     //这里是配置JNI的引用地址，也就是引用.so文件
@@ -23,6 +23,10 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
 }
@@ -40,5 +44,13 @@ dependencies {
     //GT全部功能 需要添加的包
     implementation 'com.lzy.net:okgo:3.0.4' //OkGo 网络框架
     implementation 'com.squareup.okhttp3:okhttp:3.12.0'//OkHttp 网络框架
+    implementation 'me.jahnen:libaums:0.8.0'//U盘操作
     implementation 'com.blankj:utilcodex:1.30.6'//集成 AndroidUtilCode 工具包
+
+    //注册本地库 gt-DataBinding
+    implementation files('libs/gt-DataBinding.jar')
+    annotationProcessor files('libs/gt-DataBinding.jar')
+//    annotationProcessor project(':gt-DataBinding')
+//    implementation project(':gt-DataBinding')
+
 }
