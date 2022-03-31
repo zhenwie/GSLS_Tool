@@ -18,6 +18,9 @@ import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.Name;
 import javax.lang.model.element.TypeElement;
 import javax.tools.JavaFileObject;
 
@@ -47,15 +50,15 @@ public class MainCodeGeneration extends AbstractProcessor {
 //        DataBindingUtils.log("filtrationListSize:" + filtrationList.size());
 
         for (Element element : roundEnv.getElementsAnnotatedWith(GT_DataBinding.class)) {
-//            DataBindingUtils.log("element:" + element);
-//            DataBindingUtils.log("elementGet1:" + element.getEnclosedElements());
-//            DataBindingUtils.log("elementGet2:" + element.getSimpleName());
-//            DataBindingUtils.log("elementGet3:" + element.getKind());
-//            DataBindingUtils.log("elementGet4:" + element.getModifiers());
-//            DataBindingUtils.log("elementGet6:" + element.getEnclosingElement());
+           /* DataBindingUtils.log("element:" + element);
+            DataBindingUtils.log("elementGet1:" + element.getEnclosedElements());
+            DataBindingUtils.log("elementGet2:" + element.getSimpleName());
+            DataBindingUtils.log("elementGet3:" + element.getKind());
+            DataBindingUtils.log("elementGet4:" + element.getModifiers());
+            DataBindingUtils.log("elementGet6:" + element.getEnclosingElement());*/
+
 
             BindingBean bindingBean = new BindingBean();
-
             bindingBean.setPackClassPath(element.toString());
             bindingBean.setPackName(element.getEnclosingElement().toString());
             bindingBean.setClassName(element.getSimpleName().toString());//获取类名
@@ -175,8 +178,9 @@ public class MainCodeGeneration extends AbstractProcessor {
                     case GT_DataBinding.FloatingWindow:
                         break;
                     case GT_DataBinding.Adapter:
+//                        DataBindingUtils.log("bindingBean:" + bindingBean);
                         builder.append("import android.content.Context;\n")
-                                .append("import com.gsls.gtlibrary.R;\n")
+                                .append("import " + DataBindingUtils.pageName(bindingBean.getPackName()) + ".R;\n")
                                 .append("import java.util.List;\n")
                                 .append("import androidx.recyclerview.widget.RecyclerView;\n");
                         break;

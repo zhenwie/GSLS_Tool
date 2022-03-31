@@ -2,14 +2,14 @@ package com.gsls.gtlibrary;
 
 import android.os.Bundle;
 
-import com.gsls.gt.GT;
+import androidx.appcompat.app.AppCompatActivity;
 
-@GT.Annotations.GT_AnnotationActivity(R.layout.activity_main)
-public class MainActivity extends GT.GT_Activity.AnnotationActivity {
+public class MainActivity extends AppCompatActivity {
 
     @Override
-    protected void initView(Bundle savedInstanceState) {
-        super.initView(savedInstanceState);
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
     }
 

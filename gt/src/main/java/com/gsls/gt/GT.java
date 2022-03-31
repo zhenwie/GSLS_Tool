@@ -177,6 +177,7 @@ import java.io.PrintStream;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
+import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -213,6 +214,7 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.GregorianCalendar;
@@ -228,6 +230,9 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -257,27 +262,13 @@ import okhttp3.Response;
  * <p>
  * <p>
  * <p>
- * 更新时间:2022.3.25
+ * 更新时间:2022.4.1
  * CSDN 博客/官网教程:https://blog.csdn.net/qq_39799899
  * GitHub https://github.com/1079374315/GT
- * 更新内容：（1.3.6.9 版本 大爆料：新增 MVC、MVP、MVVM 辅助框架）
+ * 更新内容：（v1.3.7 版本 大爆料：新增 GT.EventBus 框架）
  * 内容如下：
- * 1.新增 GT_PopupWindow 类
- * 2.LOG 类新增 GT.logt("标记日志"); GT.errt("标记日志");
- * 3.优化 时间与时间戳互转的方法 GT.GT_Date.timeToTimestampToTime(String timeOrTimestamp, String timeFormat)
- * 4.新增 编程辅助框架 MVC/MVP/MVVM/GT/GT_Binding模式
- * 5.增强 AnnotationAssist 反射、注解工具类,新增以下功能方法
- * 1.获取类的泛类型
- * 2.反射类中方法进行赋值
- * 3.获取反射方法的返回值
- * 4.获取反射变量的值(可私用变量)
- * 5.利用反射给变量设置值(可私有变量)
- * 6.反射该类所有的变量值 (可接受类型 class、String(类包名)、实体类)
- * 7.字符串转Class
- * 6.增强分享功能
- * 7.优化所有的 DataBinding自动生成类 ，增强 GT_BindingViewModel 并支持 通过泛类映射实例化 ，增加了 适配器的 DataBinding
- * 8.增加 WebViewUtils 类
- * 9.
+ * 1.GT.Thread 增加线程池管理功能
+ * 2.新增 GT.EventBus 类，具体使用教程清参考官网教程
  * <p>
  * <p>
  * 小提示：(用于 AndroidStudio )
@@ -1468,6 +1459,599 @@ public class GT {
     }
 
     //============================================= 数据类 =====================================
+
+    /**
+     * 观察者与订阅者
+     */
+    public static class EventBus {
+        /**
+         * TODO 注意:在自定义 evenKey 时请不要写入 "_GT_" 字符,该字符为关键字
+         * TODO 彩蛋 发布事件后可接收到订阅者返回值,但如果订阅者与发布者不在同一线程中或发布的事件中有两个订阅者,将无法在发布事件的线程接收到订阅者的返回值
+         * 发布事件 方式一:纯 eventData
+         * 将该事件发布到整个 订阅者管理器
+         * <p>
+         * 发布事件 方式二:纯 String
+         * 单个 String表示,在所有注册的区域里匹配到这 eventKey 唯一标识,并发布事件
+         * 多个 String表示,在所有注册的区域里匹配这 多个eventKey 唯一标识,并发布事件
+         * <p>
+         * 发布事件 方式三:纯 Class
+         * 单个 Class表示,在当前Class类中找到被 Subscribe注解标识 过的所有方法进行"参数匹配试"发布事件
+         * 多个 Class表示,在这些Class类中找到被 Subscribe注解标识 过的所有方法进行"参数匹配试"发布事件
+         * <p>
+         * 发布事件 方式四:String 与 Class 混合类型,混合的顺序可顺便(但在删除粘性事件时的key必须与发布事件的key一模一样,包括字母顺序)
+         * 单组 混合类型表示,在这 class 中 寻找到 该 eventKey 名称的方法进行发布事件
+         * 多组 混合类型表示,在这些 class 中 寻找到 这些 eventKey 名称的方法进行发布事件
+         * <p>
+         */
+
+        //订阅者事件总线管理器
+        private static final Map<String, EventBusBean> eventBusMap = new HashMap<>();//普通事件
+        private static final Map<String, Object> eventBusStickyMap = new HashMap<>();//粘性事件
+        //用于注销订阅者
+        private volatile List<String> deleteList = new ArrayList<>();
+        //用于订阅者优先级
+        private volatile List<EventBusBean> eventBusList = new ArrayList<>();
+        //用于发布指定key的
+        private volatile List<String> keyStringList = new ArrayList<>();
+        private volatile List<Class<?>> keyClassList = new ArrayList<>();
+
+        private final String SEPARATOR = "_GT_";//分隔符
+        private static volatile EventBus defaultInstance;
+
+        public static EventBus getDefault() {
+            if (defaultInstance == null) {
+                synchronized (EventBus.class) {
+                    if (defaultInstance == null) {
+                        defaultInstance = new EventBus();
+                    }
+                }
+            }
+            return defaultInstance;
+        }
+
+        /**
+         * 查看普通事件
+         */
+        public void showEventBusMap() {
+            GT.logt("eventBusSize:" + eventBusMap.keySet().size());
+            for (String s : eventBusMap.keySet()) {
+                GT.logt("eventBus:" + eventBusMap.get(s));
+            }
+        }
+
+        /**
+         * 查看粘性事件
+         */
+        public void showEventBusStickyMap() {
+            GT.logt("eventBusStickySize:" + eventBusStickyMap.keySet().size());
+            for (String key : eventBusStickyMap.keySet()) {
+                GT.logt(key + ":" + eventBusStickyMap.get(key));
+            }
+        }
+
+        /**
+         * 删除单个 粘性事件
+         *
+         * @param eventKeys 填写的 key 必须要与发布事件的 key 一模一样,包括字母顺序
+         */
+        public boolean deleteEventBusSticky(Object... eventKeys) {
+            String key = "";
+            if (eventKeys.length != 0) {
+                for (Object obj : eventKeys) {
+                    if (obj instanceof Class<?>) {
+                        Class<?> aclass = (Class<?>) obj;
+                        key += aclass.getName() + SEPARATOR;
+                    } else {
+                        key += obj.toString() + SEPARATOR;
+                    }
+                }
+                if (key.contains(SEPARATOR)) {
+                    if (SEPARATOR.equals(key.substring(key.length() - 1))) {
+                        key = key.substring(0, key.length() - 1);
+                    }
+                }
+            }
+            //删除单个粘性事件
+            if (eventBusStickyMap.containsKey(key)) {
+                eventBusStickyMap.remove(key);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        /**
+         * 清空粘性事件
+         */
+        public void clearEventBusStickyMap() {
+            eventBusStickyMap.clear();
+        }
+
+        /**
+         * 注册被观察者
+         *
+         * @param subscriber
+         */
+        public void register(Object subscriber) {
+            Class<?> aClass = subscriber.getClass();
+            Method[] methods;
+            try {
+                methods = aClass.getDeclaredMethods();
+            } catch (Throwable th) {
+                methods = aClass.getMethods();
+            }
+
+            for (Method method : methods) {
+                //过滤掉不需要方法
+                Subscribe subscribeAnnotation = method.getAnnotation(Subscribe.class);
+                if (subscribeAnnotation == null) continue;
+                Class<?>[] parameterTypes = method.getParameterTypes();
+                String methodName = method.getName();
+
+                //如果参数不是一个,那就进行精准提示
+                if (parameterTypes.length != 1) {
+                    String str = "";
+                    try {
+                        for (Class<?> parameterType : parameterTypes) {
+                            String parameterStr = parameterType.toString();
+                            if (parameterStr.contains(".")) {
+                                str += parameterStr.substring(parameterStr.lastIndexOf(".") + 1) + " xxx,";
+                            } else {
+                                str += parameterStr + " xxx,";
+                            }
+                        }
+                        if (str.contains(",")) {
+                            if (",".equals(str.substring(str.length() - 1))) {
+                                str = str.substring(0, str.length() - 1);
+                            }
+                        }
+                    } catch (Exception e) {
+
+                    }
+
+                    try {
+                        GT.err("GT.EventBus 参数仅支持一个,若需要传多参数可传递 Bundle,List,Map,实体类Bean等等:  " + methodName + "(" + str + ")" + GT.getLineInfo(2));
+                    } catch (Exception e) {
+                        GT.errt("GT.EventBus 参数仅支持一个,若需要传多参数可传递 Bundle,List,Map,实体类Bean等等:  " + methodName + "(" + str + ")");
+                    }
+                    continue;
+                }
+
+                Class<?> returnType = method.getReturnType();
+                String eventKey = subscribeAnnotation.eventKey().length() == 0 ? methodName : subscribeAnnotation.eventKey();//订阅者唯一名称,若没有填订阅者名称那就默认使用当前方法名
+                String threadMode = subscribeAnnotation.threadMode();//线程类型
+                int priority = subscribeAnnotation.priority();//优先级
+                boolean sticky = subscribeAnnotation.sticky();//是否支持粘性事件
+
+                //class + 唯一标识(方法名) + 参数类型 生成订阅者唯一标识
+                eventKey = aClass + SEPARATOR + eventKey + SEPARATOR + parameterTypes[0];
+
+                //如果订阅者没有被注册,那就进行注册
+                if (!eventBusMap.containsKey(eventKey))
+                    eventBusMap.put(eventKey, new EventBusBean(subscriber, aClass, parameterTypes, returnType, eventKey, methodName, threadMode, priority, sticky));
+
+                //---------------------------------------------------------------  粘性事件处理 ----------------------------------------------
+                //粘性事件处理
+                if (sticky) {
+                    //进行粘性事件处理
+                    for (String key : eventBusStickyMap.keySet()) {
+                        Object eventData = eventBusStickyMap.get(key);
+                        GT.logt(key + ":" + eventData);
+                        if (key.length() == 0) {//为空的key
+                            try {
+                                AnnotationAssist.setReflectMethodValue(subscriber, methodName, returnType, parameterTypes, eventData);
+                            } catch (Exception e) {
+                                if (GT.LOG.GT_LOG_TF) {
+                                    GT.errs("类型有不匹配的 e:" + e);
+                                }
+                            }
+                        } else {//不为空的key
+                            if (!key.contains(SEPARATOR)) continue;
+                            String[] split = key.split(SEPARATOR);
+                            keyClassList.clear();
+                            keyStringList.clear();
+                            for (String str : split) {
+                                Class<?> aClass1 = GT.AnnotationAssist.stringToClass(str);
+                                if (aClass1 != null) {
+                                    keyClassList.add(aClass);
+                                } else {
+                                    keyStringList.add(str);
+                                }
+                            }
+
+                            String[] split2 = eventKey.split(SEPARATOR);
+                            if (split2.length < 3) continue;
+                            String keyStr = split2[1];
+                            if (keyStringList.size() != 0 && !keyStringList.contains(keyStr)) {
+                                continue;
+                            }
+
+                            if (keyClassList.size() != 0 && !keyClassList.contains(aClass)) {
+                                continue;
+                            }
+
+                            try {
+                                AnnotationAssist.setReflectMethodValue(subscriber, methodName, returnType, parameterTypes, eventData);
+                            } catch (Exception e) {
+                                if (GT.LOG.GT_LOG_TF) {
+                                    GT.errs("类型有不匹配的 e:" + e);
+                                }
+                            }
+
+                        }
+                    }
+                }
+            }
+
+        }
+
+        /**
+         * 取消被观察者
+         *
+         * @param subscriber
+         */
+        public synchronized void unregister(Object subscriber) {
+            Class<?> aClass = subscriber.getClass();
+            Method[] methods;
+            try {
+                methods = aClass.getDeclaredMethods();
+            } catch (Throwable th) {
+                methods = aClass.getMethods();
+            }
+
+            for (Method method : methods) {
+                //过滤掉不需要方法
+                Subscribe subscribeAnnotation = method.getAnnotation(Subscribe.class);
+                if (subscribeAnnotation == null) continue;
+                Class<?>[] parameterTypes = method.getParameterTypes();
+                String methodName = method.getName();
+
+                //如果参数不是一个,那就进行精准提示
+                if (parameterTypes.length != 1) {
+                    String str = "";
+                    try {
+                        for (Class<?> parameterType : parameterTypes) {
+                            String parameterStr = parameterType.toString();
+                            if (parameterStr.contains(".")) {
+                                str += parameterStr.substring(parameterStr.lastIndexOf(".") + 1) + " xxx,";
+                            } else {
+                                str += parameterStr + " xxx,";
+                            }
+                        }
+                        if (str.contains(",")) {
+                            if (",".equals(str.substring(str.length() - 1))) {
+                                str = str.substring(0, str.length() - 1);
+                            }
+                        }
+                    } catch (Exception e) {
+
+                    }
+
+                    try {
+                        GT.err("GT.EventBus 参数仅支持一个,若需要传多参数可传递 Bundle,List,Map,实体类Bean等等:  " + methodName + "(" + str + ")" + GT.getLineInfo(2));
+                    } catch (Exception e) {
+                        GT.errt("GT.EventBus 参数仅支持一个,若需要传多参数可传递 Bundle,List,Map,实体类Bean等等:  " + methodName + "(" + str + ")");
+                    }
+                    continue;
+                }
+
+                //获取方法名
+                String eventKey = subscribeAnnotation.eventKey().length() == 0 ? methodName : subscribeAnnotation.eventKey();//订阅者唯一名称,若没有填订阅者名称那就默认使用当前方法名
+
+                eventKey = aClass + SEPARATOR + eventKey + SEPARATOR + parameterTypes[0];
+
+                deleteList.clear();
+                for (String key : eventBusMap.keySet()) {
+                    if (!key.equals(eventKey)) continue;
+                    EventBusBean eventBusBean = eventBusMap.get(key);
+                    if (eventBusBean.object == subscriber) {
+                        deleteList.add(eventBusBean.eventKey);
+                    }
+                }
+
+                for (String key : deleteList) {
+                    eventBusMap.remove(key);
+                }
+            }
+        }
+
+        /**
+         * 发布事件
+         * TODO 注意:在自定义 evenKey 时请不要写入 "_GT_" 字符,该字符为关键字
+         *
+         * @param <T>       返回类型 (发布事件后可接收到订阅者返回值,但如果订阅者与发布者不在同一线程中或发布的事件中有两个订阅者,将无法在发布事件的线程接收到订阅者的返回值)
+         * @param eventData 发布的事件 (参数仅支持一个,若需要传多参数可传递 Bundle,List,Map,实体类Bean等等)
+         * @param eventKeys 指定发送的区域 (如果不填则默认向所有订阅者发布事件)
+         * @return
+         */
+        @SuppressLint("NewApi")
+        public <T> T post(Object eventData, Object... eventKeys) {
+
+            eventBusList.clear();
+            //订阅方法的优先级
+            for (String key : eventBusMap.keySet()) {
+                eventBusList.add(eventBusMap.get(key));
+            }
+
+            //按照订阅者实体类中的线程大小进行从小到大排序
+            eventBusList.sort(Comparator.comparing(EventBusBean::getPriority));
+
+            //如果有指定订阅者类型,那就进行分类
+            if (eventKeys != null && eventKeys.length != 0) {
+                //给指定或筛选后的订阅者发布该事件
+                keyClassList.clear();
+                keyStringList.clear();
+
+                for (Object eventKey : eventKeys) {
+                    if (eventKey instanceof Class<?>) {
+                        Class<?> aClass = (Class<?>) eventKey;
+                        keyClassList.add(aClass);
+                    } else {
+                        keyStringList.add(eventKey.toString());
+                    }
+                }
+
+
+            }
+
+            T t = null;
+
+            //类型匹配后进行向订阅者按照线程优先级进行遍历 发布事件
+            for (EventBusBean eventBusBean : eventBusList) {
+                //如果有指定订阅者类型,那就进行过滤筛选
+                if (eventKeys != null && eventKeys.length != 0) {
+                    if (!eventBusBean.eventKey.contains(SEPARATOR)) continue;
+                    String[] split = eventBusBean.eventKey.split(SEPARATOR);
+                    if (split.length < 3) continue;
+                    String keyStr = split[1];
+                    if (keyStringList.size() != 0 && !keyStringList.contains(keyStr)) continue;
+                    if (keyClassList.size() != 0 && !keyClassList.contains(eventBusBean.aClass))
+                        continue;
+                }
+
+                //按照订阅者的线程类型进行处理
+                switch (eventBusBean.threadMode) {
+                    case EventBus.ThreadMode.POSTING://默认使用发布事件的当前线程
+                        t = setMethodValue(eventBusBean, eventData);
+                        break;
+                    case EventBus.ThreadMode.MAIN://使用UI主线程
+                        if (Thread.isMainThread()) { //主线程
+                            t = setMethodValue(eventBusBean, eventData);
+                        } else {//子线程
+                            Thread.getUiThread().post(() -> setMethodValue(eventBusBean, eventData));
+                        }
+                        break;
+                    case EventBus.ThreadMode.MAIN_ORDERED://new一个主线程处理
+                        Thread.getUiThread().post(() -> setMethodValue(eventBusBean, eventData));
+                        break;
+                    case EventBus.ThreadMode.BACKGROUND://在本子线程或新new子线程处理
+                        if (!Thread.isMainThread()) {//子线程
+                            t = setMethodValue(eventBusBean, eventData);
+                        } else {//主线程
+                            Thread.getInstance(0).execute(() -> setMethodValue(eventBusBean, eventData));
+                        }
+                        break;
+                    case EventBus.ThreadMode.ASYNC://在新new子线程处理
+                        Thread.getInstance(0).execute(() -> setMethodValue(eventBusBean, eventData));
+                        break;
+                }
+            }
+
+            //获取本次发布事件订阅者数量
+            int count = 0;
+            if (eventKeys != null && eventKeys.length != 0) {
+                for (String key : eventBusMap.keySet()) {
+                    EventBusBean eventBusBean = eventBusMap.get(key);
+                    if (!eventBusBean.eventKey.contains(SEPARATOR)) continue;
+                    String[] split = eventBusBean.eventKey.split(SEPARATOR);
+                    if (split.length < 3) continue;
+                    String keyStr = split[1];
+                    if (keyStringList.size() != 0 && !keyStringList.contains(keyStr)) continue;
+                    if (keyClassList.size() != 0 && !keyClassList.contains(eventBusBean.aClass))
+                        continue;
+                    count++;
+                }
+            } else {
+                count = eventBusMap.keySet().size();
+            }
+
+            //如果只有一个发布的那就进行返回数据
+            if (count == 1) return t;
+            return null;
+        }
+
+        /**
+         * 发布粘性事件
+         * TODO 注意:在自定义 evenKey 时请不要写入 "_GT_" 字符,该字符为关键字
+         *
+         * @param <T>       返回类型 (发布事件后可接收到订阅者返回值,但如果订阅者与发布者不在同一线程中或发布的事件中有两个订阅者,将无法在发布事件的线程接收到订阅者的返回值)
+         * @param eventData 发布的事件 (参数仅支持一个,若需要传多参数可传递 Bundle,List,Map,实体类Bean等等)
+         * @param eventKeys 指定发送的区域 (如果不填则默认向所有订阅者发布事件)
+         * @return
+         */
+        public <T> T postSticky(Object eventData, Object... eventKeys) {
+            String key = "";
+            if (eventKeys.length != 0) {
+                for (Object obj : eventKeys) {
+                    if (obj instanceof Class<?>) {
+                        Class<?> aclass = (Class<?>) obj;
+                        key += aclass.getName() + SEPARATOR;
+                    } else {
+                        key += obj.toString() + SEPARATOR;
+                    }
+                }
+                if (key.contains(SEPARATOR)) {
+                    if (SEPARATOR.equals(key.substring(key.length() - 1))) {
+                        key = key.substring(0, key.length() - 1);
+                    }
+                }
+            }
+            //记录粘性事件
+            eventBusStickyMap.put(key, eventData);
+            //正常发布事件
+            return post(eventData, eventKeys);
+        }
+
+        /**
+         * 设置方法值
+         *
+         * @param eventBusBean
+         */
+        private <T> T setMethodValue(EventBusBean eventBusBean, Object eventData) {
+            try {
+                return (T) AnnotationAssist.setReflectMethodValue(eventBusBean.object, eventBusBean.methodName, eventBusBean.returnType, eventBusBean.parameterTypes, eventData == null ? "null" : eventData);
+            } catch (Exception e) {
+                if (GT.LOG.GT_LOG_TF) {
+                    GT.errs("类型有不匹配的 e:" + e);
+                }
+            }
+            return null;
+        }
+
+        @Documented
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.METHOD})
+        public @interface Subscribe {
+            //指定订阅者key标签,若不指定则默认为该方法名为订阅者key标签
+            String eventKey() default "";
+
+            // 指定事件订阅方法的线程模式，即在那个线程执行事件订阅方法处理事件，默认为POSTING
+            String threadMode() default EventBus.ThreadMode.POSTING;
+
+            // 是否支持粘性事件，默认为false
+            boolean sticky() default false;
+
+            // 订阅方法优先级默认为0，多个事件订阅方法可以接收相同的事件，在发布事件后,订阅者无需切换线程的情况下,优先级高的先接收到事件,若发布事件时订阅者会切换线程 则不会保证 优先级高的先接收到事件
+            int priority() default 0;
+        }
+
+        //设置在那个线程执行事件
+        public interface ThreadMode {
+            String POSTING = "POSTING";//在当前线程
+            String MAIN = "MAIN";//若发布事件时为(UI)主线程,那就在发布事件的主线程上处理,否则新new一个主线程处理
+            String MAIN_ORDERED = "MAIN_ORDERED";//new一个主线程处理
+            String BACKGROUND = "BACKGROUND";//若发布事件时为子线程,那就在发布事件的子线程上处理,否则新new一个子线程处理
+            String ASYNC = "ASYNC";//new一个子线程处理
+        }
+
+        //订阅者信息实体类
+        private class EventBusBean {
+
+            private Object object;                  //订阅者对象
+            private Class<?> aClass;                //订阅者class
+            private Class<?>[] parameterTypes;      //订阅者参数类型
+            private Class<?> returnType;            //订阅者返回类型
+            private String eventKey;                //订阅者唯一标识
+            private String methodName;              //订阅者方法名
+            private String threadMode;              //订阅者需要线程
+            private int priority;                   //订阅者线程优先级
+            private boolean sticky;                 //订阅者是否支持粘性事件
+
+            public EventBusBean() {
+                super();
+            }
+
+            public EventBusBean(Object object, Class<?> aClass, Class<?>[] parameterTypes, Class<?> returnType, String eventKey, String methodName, String threadMode, int priority, boolean sticky) {
+                this.object = object;
+                this.aClass = aClass;
+                this.parameterTypes = parameterTypes;
+                this.returnType = returnType;
+                this.eventKey = eventKey;
+                this.methodName = methodName;
+                this.threadMode = threadMode;
+                this.priority = priority;
+                this.sticky = sticky;
+            }
+
+
+            public Class<?> getReturnType() {
+                return returnType;
+            }
+
+            public void setReturnType(Class<?> returnType) {
+                this.returnType = returnType;
+            }
+
+            public Class<?>[] getParameterTypes() {
+                return parameterTypes;
+            }
+
+            public void setParameterTypes(Class<?>[] parameterTypes) {
+                this.parameterTypes = parameterTypes;
+            }
+
+            public String getMethodName() {
+                return methodName;
+            }
+
+            public void setMethodName(String methodName) {
+                this.methodName = methodName;
+            }
+
+            public Object getObject() {
+                return object;
+            }
+
+            public void setObject(Object object) {
+                this.object = object;
+            }
+
+            public Class<?> getaClass() {
+                return aClass;
+            }
+
+            public void setaClass(Class<?> aClass) {
+                this.aClass = aClass;
+            }
+
+            public String getEventKey() {
+                return eventKey;
+            }
+
+            public void setEventKey(String eventKey) {
+                this.eventKey = eventKey;
+            }
+
+            public String getThreadMode() {
+                return threadMode;
+            }
+
+            public void setThreadMode(String threadMode) {
+                this.threadMode = threadMode;
+            }
+
+            public int getPriority() {
+                return priority;
+            }
+
+            public void setPriority(int priority) {
+                this.priority = priority;
+            }
+
+            public boolean isSticky() {
+                return sticky;
+            }
+
+            public void setSticky(boolean sticky) {
+                this.sticky = sticky;
+            }
+
+            @Override
+            public String toString() {
+                return "EventBusBean{" +
+//                    "object=" + object +
+//                    ", aClass=" + aClass +
+//                    ", parameterTypes=" + Arrays.toString(parameterTypes) +
+                        ", eventKey='" + eventKey + '\'' +
+//                    ", methodName='" + methodName + '\'' +
+//                    ", threadMode='" + threadMode + '\'' +
+//                    ", priority=" + priority +
+//                    ", sticky=" + sticky +
+                        '}';
+            }
+        }
+
+    }
 
     /**
      * 数据发送与接收类(支持跨进出跨APP发送接收数据)
@@ -10874,6 +11458,7 @@ public class GT {
 
         /**
          * 加载一个 html源码
+         *
          * @param webView
          * @param htmlCode
          * @return
@@ -16214,7 +16799,7 @@ public class GT {
              *
              * @param activityClass
              */
-            protected void startActivity(Class activityClass) {
+            public void startActivity(Class activityClass) {
 
                 Context activity = getActivity();
                 if (activity == null) return;
@@ -16243,7 +16828,7 @@ public class GT {
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
-            protected void startDialogFragment(DialogFragment dialogFragment) {
+            public void startDialogFragment(DialogFragment dialogFragment) {
                 dialogFragment.show(getSupportFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
             }
 
@@ -16251,7 +16836,7 @@ public class GT {
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
-            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+            public void startDialogFragment(Class<?> dialogFragmentClass) {
 
                 DialogFragment fragment = null;
 
@@ -16278,7 +16863,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragment(Fragment toFragment) {
+            public void startFragment(Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(toFragment);
                 }
@@ -16288,7 +16873,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragment(Class<?> toFragment) {
+            public void startFragment(Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(toFragment);
                 }
@@ -16300,7 +16885,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragment(int fragmentId, Fragment toFragment) {
+            public void startFragment(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
@@ -16312,7 +16897,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragment(int fragmentId, Class<?> toFragment) {
+            public void startFragment(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
@@ -16324,7 +16909,7 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  启动模式
              */
-            protected void startFragment(Fragment toFragment, int startMode) {
+            public void startFragment(Fragment toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
                 }
@@ -16336,7 +16921,7 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  启动模式
              */
-            protected void startFragment(Class<?> toFragment, int startMode) {
+            public void startFragment(Class<?> toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
                 }
@@ -16349,7 +16934,7 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  启动模式
              */
-            protected void startFragment(int fragmentId, Fragment toFragment, int startMode) {
+            public void startFragment(int fragmentId, Fragment toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
                 }
@@ -16362,7 +16947,7 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  启动模式
              */
-            protected void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
+            public void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
                 }
@@ -16372,7 +16957,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragmentHome(Fragment toFragment) {
+            public void startFragmentHome(Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragmentHome(toFragment);
                 }
@@ -16382,7 +16967,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragmentHome(Class<?> toFragment) {
+            public void startFragmentHome(Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragmentHome(toFragment);
                 }
@@ -16394,7 +16979,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+            public void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
@@ -16407,7 +16992,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+            public void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
@@ -16419,7 +17004,7 @@ public class GT {
              *
              * @param toFragment
              */
-            protected void startFloatingWindow(Class<?> toFragment) {
+            public void startFloatingWindow(Class<?> toFragment) {
                 if (Build.VERSION.SDK_INT >= 23) {
                     if (!Settings.canDrawOverlays(this)) {
                         Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
@@ -16432,7 +17017,7 @@ public class GT {
                 }
             }
 
-            protected GT_Fragment getGT_Fragment() {
+            public GT_Fragment getGT_Fragment() {
                 return GT_Fragment.gt_fragment;
             }
 
@@ -16492,6 +17077,7 @@ public class GT {
             @Override
             protected void onCreate(Bundle savedInstanceState) {
                 super.onCreate(savedInstanceState);
+                GT.EventBus.getDefault().register(this);//注册订阅者
                 initDrawView();// 设置绘制前的数据
                 initView(savedInstanceState);// 初始化 UI
                 loadData();// 功能方法
@@ -16502,7 +17088,11 @@ public class GT {
                 build(this);
             }
 
-
+            @Override
+            protected void onDestroy() {
+                super.onDestroy();
+                GT.EventBus.getDefault().unregister(this);//取消订阅者
+            }
         }
 
         /**
@@ -18105,7 +18695,7 @@ public class GT {
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
-            protected void startDialogFragment(DialogFragment dialogFragment) {
+            public void startDialogFragment(DialogFragment dialogFragment) {
                 dialogFragment.setTargetFragment(this, 1);
                 dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
             }
@@ -18114,7 +18704,7 @@ public class GT {
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
-            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+            public void startDialogFragment(Class<?> dialogFragmentClass) {
                 DialogFragment dialogFragment = null;
                 try {
                     dialogFragment = (DialogFragment) dialogFragmentClass.newInstance();
@@ -18141,7 +18731,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragment(Fragment toFragment) {
+            public void startFragment(Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(toFragment);
                 }
@@ -18151,7 +18741,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragment(Class<?> toFragment) {
+            public void startFragment(Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(toFragment);
                 }
@@ -18163,7 +18753,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragment(int fragmentId, Fragment toFragment) {
+            public void startFragment(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
@@ -18175,12 +18765,11 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragment(int fragmentId, Class<?> toFragment) {
+            public void startFragment(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
-
 
             /**
              * 跳转Fragment
@@ -18188,7 +18777,7 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  跳转该Fragment的启动模式
              */
-            protected void startFragment(Fragment toFragment, int startMode) {
+            public void startFragment(Fragment toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
                 }
@@ -18198,7 +18787,7 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  跳转该Fragment的启动模式
              */
-            protected void startFragment(Class<?> toFragment, int startMode) {
+            public void startFragment(Class<?> toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(toFragment);
                 }
@@ -18211,7 +18800,7 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  跳转该Fragment的启动模式
              */
-            protected void startFragment(int fragmentId, Fragment toFragment, int startMode) {
+            public void startFragment(int fragmentId, Fragment toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
                 }
@@ -18222,18 +18811,17 @@ public class GT {
              * @param toFragment 跳转的Fragment
              * @param startMode  跳转该Fragment的启动模式
              */
-            protected void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
+            public void startFragment(int fragmentId, Class<?> toFragment, int startMode) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(startMode).startFragment(fragmentId, toFragment);
                 }
             }
 
-
             /**
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragmentHome(Fragment toFragment) {
+            public void startFragmentHome(Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragmentHome(toFragment);
                 }
@@ -18243,7 +18831,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragmentHome(Class<?> toFragment) {
+            public void startFragmentHome(Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragmentHome(toFragment);
                 }
@@ -18255,7 +18843,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+            public void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
@@ -18268,7 +18856,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+            public void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
@@ -18281,7 +18869,7 @@ public class GT {
              * @param context
              * @param toFragment
              */
-            protected void startFloatingWindow(Context context, Class<?> toFragment) {
+            public void startFloatingWindow(Context context, Class<?> toFragment) {
                 if (context == null) {
                     context = GT_Fragment.gt_fragment.getActivity();
                 }
@@ -18305,7 +18893,7 @@ public class GT {
              *
              * @param toFragment
              */
-            protected void startFloatingWindow(Class<?> toFragment) {
+            public void startFloatingWindow(Class<?> toFragment) {
                 if (activity == null) {
                     activity = GT_Fragment.gt_fragment.getActivity();
                 }
@@ -18526,6 +19114,7 @@ public class GT {
             @Override
             public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
                 GT.build(this);// 注解赋值布局ID值
+                GT.EventBus.getDefault().register(this);//注册订阅者
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
@@ -18535,6 +19124,12 @@ public class GT {
             protected void initView(View view, Bundle savedInstanceState) {
                 GT.build(this);
 
+            }
+
+            @Override
+            public void onDestroy() {
+                super.onDestroy();
+                GT.EventBus.getDefault().unregister(this);//取消订阅者
             }
         }
 
@@ -19334,7 +19929,7 @@ public class GT {
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
-            protected void startDialogFragment(DialogFragment dialogFragment) {
+            public void startDialogFragment(DialogFragment dialogFragment) {
                 dialogFragment.show(getFragmentManager(), dialogFragment.getClass().toString());// 弹出退出提示
             }
 
@@ -19342,7 +19937,7 @@ public class GT {
              * @param dialogFragment
              * @跳转其他的 DialogFragment
              */
-            protected void startDialogFragment(Class<?> dialogFragmentClass) {
+            public void startDialogFragment(Class<?> dialogFragmentClass) {
 
                 DialogFragment fragment = null;
 
@@ -19369,7 +19964,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragment(Fragment toFragment) {
+            public void startFragment(Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(toFragment);
                 }
@@ -19379,19 +19974,19 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragment(Class<?> toFragment) {
+            public void startFragment(Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(toFragment);
                 }
             }
 
-            protected void startFragment(int fragmentId, Fragment toFragment) {
+            public void startFragment(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
             }
 
-            protected void startFragment(int fragmentId, Class<?> toFragment) {
+            public void startFragment(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
                 }
@@ -19401,7 +19996,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragmentHome(Fragment toFragment) {
+            public void startFragmentHome(Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragmentHome(toFragment);
                 }
@@ -19411,7 +20006,7 @@ public class GT {
              * @param toFragment
              * @跳转 Fragment
              */
-            protected void startFragmentHome(Class<?> toFragment) {
+            public void startFragmentHome(Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startFragmentHome(toFragment);
                 }
@@ -19423,7 +20018,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragmentHome(int fragmentId, Fragment toFragment) {
+            public void startFragmentHome(int fragmentId, Fragment toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
@@ -19436,7 +20031,7 @@ public class GT {
              * @param fragmentId
              * @param toFragment
              */
-            protected void startFragmentHome(int fragmentId, Class<?> toFragment) {
+            public void startFragmentHome(int fragmentId, Class<?> toFragment) {
                 if (GT_Fragment.gt_fragment != null) {
                     GT_Fragment.gt_fragment.startMode(GT_Fragment.MODE_HOME);
                     GT_Fragment.gt_fragment.startFragment(fragmentId, toFragment);
@@ -19449,7 +20044,7 @@ public class GT {
              * @param context
              * @param toFragment
              */
-            protected void startFloatingWindow(Context context, Class<?> toFragment) {
+            public void startFloatingWindow(Context context, Class<?> toFragment) {
                 if (context == null) {
                     context = GT_Fragment.gt_fragment.getActivity();
                 }
@@ -19473,7 +20068,7 @@ public class GT {
              *
              * @param toFragment
              */
-            protected void startFloatingWindow(Class<?> toFragment) {
+            public void startFloatingWindow(Class<?> toFragment) {
                 if (activity == null) {
                     activity = GT_Fragment.gt_fragment.getActivity();
                 }
@@ -19538,7 +20133,6 @@ public class GT {
                     });
                 }
             }
-
 
             /**
              * 给EditText 组件设置返回事件
@@ -19623,7 +20217,6 @@ public class GT {
                 return false;
             }
 
-
             /**
              * 返回 true 则劫持返回事件
              *
@@ -19649,6 +20242,7 @@ public class GT {
             @Override
             public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
                 GT.build(this);// 注解赋值布局ID值
+                GT.EventBus.getDefault().register(this);//注册订阅者
                 View view = inflater.inflate(resLayout, container, false);
                 createView(view);
                 return view;
@@ -19658,6 +20252,12 @@ public class GT {
             @Override
             protected void initView(View view, @Nullable Bundle savedInstanceState) {
                 GT.build(this);
+            }
+
+            @Override
+            public void onDestroy() {
+                super.onDestroy();
+                GT.EventBus.getDefault().unregister(this);//取消订阅者
             }
         }
 
@@ -20413,7 +21013,7 @@ public class GT {
              * @param context
              * @param toFragment
              */
-            protected void startFloatingWindow(Context context, Class<?> toFragment) {
+            public void startFloatingWindow(Context context, Class<?> toFragment) {
                 startService(new Intent(context, toFragment));
             }
 
@@ -20422,7 +21022,7 @@ public class GT {
              *
              * @param toFragment
              */
-            protected void startFloatingWindow(Class<?> toFragment) {
+            public void startFloatingWindow(Class<?> toFragment) {
                 startService(new Intent(this, toFragment));
             }
 
@@ -20524,6 +21124,7 @@ public class GT {
             @Override
             public void onCreate() {
                 GT.build(this);
+                GT.EventBus.getDefault().register(this);//注册订阅者
                 if (resLayout == -1) {
                     resLayout = loadLayout();
                 }
@@ -20538,6 +21139,11 @@ public class GT {
                 GT.build(this);
             }
 
+            @Override
+            public void onDestroy() {
+                super.onDestroy();
+                GT.EventBus.getDefault().unregister(this);//取消订阅者
+            }
         }
 
         /**
@@ -20737,8 +21343,14 @@ public class GT {
             protected void initView(View view, PopupWindow popWindow) {
                 super.initView(view, popWindow);
                 GT.build(this, view);
+                GT.EventBus.getDefault().register(this);//注册订阅者
             }
 
+            @Override
+            public void finish() {
+                super.finish();
+                GT.EventBus.getDefault().unregister(this);//取消订阅者
+            }
         }
 
         /**
@@ -20874,8 +21486,14 @@ public class GT {
             @Override
             protected void initView(View view) {
                 GT.build(this);
+                GT.EventBus.getDefault().register(this);//注册订阅者
             }
 
+            @Override
+            public void finish() {
+                super.finish();
+                GT.EventBus.getDefault().unregister(this);//取消订阅者
+            }
         }
 
         /**
@@ -25604,6 +26222,39 @@ public class GT {
             }
         }
 
+        /**
+         * 设置反射方法值
+         * setReflectMethodValue(subscriber, "onDemo", returnType, parameterTypes, "姓名", 5);
+         *
+         * @param setObj         被反射操作的类
+         * @param setMethodName  反射的方法名
+         * @param returnType     返回类型 (可填null,默认返回 true 与 false)
+         * @param parameterTypes 方法类型数组
+         * @param setValue       设置反射的值
+         * @param <T>            返回类型
+         * @return
+         */
+        public static <T> T setReflectMethodValue(Object setObj, String setMethodName, Class<T> returnType, Class<?>[] parameterTypes, Object... setValue) {
+            Method method;
+            try {
+                method = setObj.getClass().getMethod(setMethodName, parameterTypes);
+                method.setAccessible(true);
+                T invoke = (T) method.invoke(setObj, setValue);//调用方法
+                if (returnType != null && !"void".equals(returnType.toString())) {
+                    return invoke;
+                } else {
+                    return (T) "true";
+                }
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                GT.err("e:" + e);
+                e.printStackTrace();
+            }
+            if (returnType != null) {
+                return null;
+            } else {
+                return (T) "false";
+            }
+        }
 
         /**
          * 获取反射方法的返回值
@@ -25765,7 +26416,7 @@ public class GT {
     //Thread 更新UI线程
     public static class Thread {
 
-        private static final Handler UTIL_HANDLER = new Handler(Looper.getMainLooper());
+        private static final Handler uiThread = new Handler(Looper.getMainLooper());
 
         /**
          * 更新 主线程 UI
@@ -25776,7 +26427,7 @@ public class GT {
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 runnable.run();
             } else {
-                Thread.UTIL_HANDLER.post(runnable);
+                Thread.uiThread.post(runnable);
             }
         }
 
@@ -25800,7 +26451,7 @@ public class GT {
          * @主线程
          */
         public static void runAndroid(Runnable runnable, int delayMillis) {
-            Thread.UTIL_HANDLER.postDelayed(runnable, delayMillis);
+            Thread.uiThread.postDelayed(runnable, delayMillis);
         }
 
         /**
@@ -25843,7 +26494,6 @@ public class GT {
                 e.printStackTrace();
             }
         }
-
 
         /**
          * 循环 计时器
@@ -25936,7 +26586,6 @@ public class GT {
 
 
         }
-
 
         /**
          * AsyncTask 封装
@@ -26050,6 +26699,109 @@ public class GT {
 
             }
         }
+
+        //增加线程池
+
+        //这种线程池比较灵活，也就是说它的池里的线程数量并不是固定的，理论上可以无限大，任务不需要排队，如果有空闲的线程，则复用，无则新建线程。
+        private static final ExecutorService executor = Executors.newCachedThreadPool();//默认使用这种
+
+        //如字面意思，这是一个单例化的线程池，他只有一个线程去执行任务。最常见的一个例子就是我们的UI线程啦。它就是典型的单线程模型。
+        private static final ExecutorService executorSingle = Executors.newSingleThreadExecutor();
+
+        //这个算是一个中规中矩，也是Android sdk的源码中用的比较多的，它的池子里的线程数有个最大值，可以自己设置，如果超过这个最大值，那么任务就会加入任务队列去等待。
+        private static ExecutorService executorSize;
+
+        //这也是一个定长的线程池，但是可以支持周期性的任务,以下例子表示延迟一秒过后，每两秒执行一次。
+        private static ScheduledExecutorService scheduledThreadPool;
+
+        //判断当前获取实例是否进行创建新的线程池对象
+        private volatile static boolean isNew = false;
+
+        /**
+         * 获取不同类型的线程池
+         *
+         * @param threadSize
+         * @return
+         */
+        public synchronized static ExecutorService getInstance(int threadSize, boolean... isNews) {
+            if (isNews != null && isNews.length >= 1) isNew = isNews[0];
+            if (threadSize <= 0) {
+                if (isNew) return Executors.newCachedThreadPool();
+                return executor;
+            } else if (threadSize == 1) {
+                if (isNew) return Executors.newSingleThreadExecutor();
+                return executorSingle;
+            } else {
+                if (isNew) return Executors.newFixedThreadPool(threadSize);
+                if (executorSize == null) executorSize = Executors.newFixedThreadPool(threadSize);
+                return executorSize;
+            }
+        }
+
+        /**
+         * 获取特殊的循环线程池
+         *
+         * @param corePoolSize
+         * @return
+         */
+        public static ScheduledExecutorService getScheduledInstance(int corePoolSize) {
+            if (scheduledThreadPool == null)
+                scheduledThreadPool = Executors.newScheduledThreadPool(corePoolSize);
+            return null;
+        }
+
+        //判断当前线程是否为主线程
+        public static boolean isMainThread() {
+            return Looper.myLooper() == Looper.getMainLooper();
+        }
+
+        public static Handler getUiThread() {
+            return uiThread;
+        }
+
+        //使用教程
+        //这种线程池比较灵活，也就是说它的池里的线程数量并不是固定的，理论上可以无限大，任务不需要排队，如果有空闲的线程，则复用，无则新建线程。
+        /*ExecutorService cachedThreadPool = Executors.newCachedThreadPool();
+        cachedThreadPool.execute(new Runnable() {
+            @Override
+            public void run() {
+
+
+            }
+        });*/
+
+
+        //这个算是一个中规中矩，也是Android sdk的源码中用的比较多的，它的池子里的线程数有个最大值，可以自己设置，如果超过这个最大值，那么任务就会加入任务队列去等待。
+       /* ExecutorService fixedThreadPool = Executors.newFixedThreadPool(2);
+        fixedThreadPool.execute(new Runnable() {
+
+            @Override
+            public void run() {
+
+            }
+        });*/
+
+
+        //如字面意思，这是一个单例化的线程池，他只有一个线程去执行任务。最常见的一个例子就是我们的UI线程啦。它就是典型的单线程模型。
+       /* ExecutorService singleThreadExecutor = Executors.newSingleThreadExecutor();
+        singleThreadExecutor.execute(new Runnable() {
+
+            @Override
+            public void run() {
+
+            }
+        });*/
+
+
+        //这也是一个定长的线程池，但是可以支持周期性的任务,以下例子表示延迟一秒过后，每两秒执行一次。
+        /*ScheduledExecutorService scheduledThreadPool = Executors.newScheduledThreadPool(5);
+        scheduledThreadPool.scheduleAtFixedRate(new Runnable() {
+
+            @Override
+            public void run() {
+
+            }
+        },1, 2, TimeUnit.SECONDS);*/
 
 
     }

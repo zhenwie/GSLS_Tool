@@ -24,7 +24,6 @@ public class DataBindingUtils {
     public static void startLog(Elements mElementsUtil, TypeElement element) {
         logTypeSpec = TypeSpec.annotationBuilder("GT_Log").build();
         builder = JavaFile.builder(getPackageName(mElementsUtil, element), logTypeSpec);
-
     }
 
     /**
@@ -73,7 +72,6 @@ public class DataBindingUtils {
             // 解析完成
         }
     }
-
 
     /**
      * 解析xml
@@ -252,6 +250,25 @@ public class DataBindingUtils {
         } else {
             return data;
         }
+    }
+
+    /**
+     * 获取 Android 的包名
+     * @param data
+     * @return
+     */
+    public static String pageName(String data){
+        if(data == null) return null;
+            String packName = data;
+            if (data.contains(".")) {
+                String[] split = data.split("\\.");
+                if (split.length <= 3) {
+                    packName = data;
+                } else {
+                    packName = split[0] + "." + split[1] + "."+ split[2];
+                }
+            }
+        return packName;
     }
 
 }
