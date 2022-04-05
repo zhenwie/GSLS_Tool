@@ -233,6 +233,7 @@ import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -265,10 +266,26 @@ import okhttp3.Response;
  * 更新时间:2022.4.1
  * CSDN 博客/官网教程:https://blog.csdn.net/qq_39799899
  * GitHub https://github.com/1079374315/GT
- * 更新内容：（v1.3.7 版本 大爆料：新增 GT.EventBus 框架）
+ * 更新内容：（1.3.7.1 版本 大爆料：新增 MVC、MVP、MVVM 辅助框架、GT.EventBus (数据传递)框架、Observable (异步)框架）
  * 内容如下：
- * 1.GT.Thread 增加线程池管理功能
- * 2.新增 GT.EventBus 类，具体使用教程清参考官网教程
+ * 1.新增 GT_PopupWindow 类
+ * 2.LOG 类新增 GT.logt("标记日志"); GT.errt("标记日志");
+ * 3.优化 时间与时间戳互转的方法 GT.GT_Date.timeToTimestampToTime(String timeOrTimestamp, String timeFormat)
+ * 4.新增 编程辅助框架 MVC/MVP/MVVM/GT/GT_Binding模式
+ * 5.增强 AnnotationAssist 反射、注解工具类,新增以下功能方法
+ * (1).获取类的泛类型
+ * (2).反射类中方法进行赋值
+ * (3).获取反射方法的返回值
+ * (4).获取反射变量的值(可私用变量)
+ * (5).利用反射给变量设置值(可私有变量)
+ * (6).反射该类所有的变量值 (可接受类型 class、String(类包名)、实体类)
+ * (7).字符串转Class
+ * 6.增强分享功能
+ * 7.优化所有的 DataBinding自动生成类 ，增强 GT_BindingViewModel 并支持 通过泛类映射实例化 ，增加了 适配器的 DataBinding
+ * 8.增加 WebViewUtils 类
+ * 9.GT.Thread 增加线程池管理功能
+ * 10.新增 GT.EventBus 类，具体使用教程清参考官网教程
+ * 11.新增异步操作的框架 Observable 具体使用教程清参考官网
  * <p>
  * <p>
  * 小提示：(用于 AndroidStudio )
@@ -10608,7 +10625,6 @@ public class GT {
             }
         }
 
-
         /**
          * 下载工具
          */
@@ -10725,7 +10741,6 @@ public class GT {
                 void onDownloadFailed(Exception e);
             }
         }
-
 
     }
 
@@ -18627,9 +18642,54 @@ public class GT {
             protected void createView(View view) {
             }
 
+            /**
+             * 获取组件
+             *
+             * @param id
+             * @return
+             */
             protected View findViewById(int id) {
                 if (view == null) return null;
                 return view.findViewById(id);
+            }
+
+
+            /**
+             * 根据 Fragment 容器 ID来获取该 Fragment
+             *
+             * @param layoutId 容器 ID
+             * @param t        Fragment 类型
+             * @param <T>
+             * @return
+             */
+            protected <T> T getFragmentID(int layoutId, T t) {
+                FragmentManager fragmentManager = getFragmentManager();
+                if (fragmentManager == null) return null;
+                try {
+                    t = (T) fragmentManager.findFragmentById(layoutId);
+                } catch (Exception e) {
+
+                }
+                return t;
+            }
+
+            /**
+             * 根据 Fragment 容器 标签来获取该 Fragment
+             *
+             * @param tag 切换Fragment 时定义的标签，(注意：GT_Fragment 切换默认的标签为 class.getName())
+             * @param t   Fragment 类型
+             * @param <T>
+             * @return
+             */
+            protected <T> T getFragmentTag(String tag, T t) {
+                FragmentManager fragmentManager = getFragmentManager();
+                if (fragmentManager == null) return null;
+                try {
+                    t = (T) fragmentManager.findFragmentByTag(tag);
+                } catch (Exception e) {
+
+                }
+                return t;
             }
 
             /**
@@ -26413,7 +26473,9 @@ public class GT {
 
 //========================================== 线程 ==============================================
 
-    //Thread 更新UI线程
+    /**
+     * Thread 更新UI线程
+     */
     public static class Thread {
 
         private static final Handler uiThread = new Handler(Looper.getMainLooper());
@@ -26701,38 +26763,44 @@ public class GT {
         }
 
         //增加线程池
+        /*1.shutDown()  关闭线程池，不影响已经提交的任务
+        2.shutDownNow() 关闭线程池，并尝试去终止正在执行的线程
+        3.allowCoreThreadTimeOut(boolean value) 允许核心线程闲置超时时被回收
+        4.submit 一般情况下我们使用execute来提交任务，但是有时候可能也会用到submit，使用submit的好处是submit有返回值。
+        5.beforeExecute() - 任务执行前执行的方法
+        6.afterExecute() -任务执行结束后执行的方法
+        7.terminated() -线程池关闭后执行的方法*/
 
         //这种线程池比较灵活，也就是说它的池里的线程数量并不是固定的，理论上可以无限大，任务不需要排队，如果有空闲的线程，则复用，无则新建线程。
-        private static final ExecutorService executor = Executors.newCachedThreadPool();//默认使用这种
-
+        private static ExecutorService executor;//默认使用这种
         //如字面意思，这是一个单例化的线程池，他只有一个线程去执行任务。最常见的一个例子就是我们的UI线程啦。它就是典型的单线程模型。
-        private static final ExecutorService executorSingle = Executors.newSingleThreadExecutor();
-
+        private static ExecutorService executorSingle;
         //这个算是一个中规中矩，也是Android sdk的源码中用的比较多的，它的池子里的线程数有个最大值，可以自己设置，如果超过这个最大值，那么任务就会加入任务队列去等待。
         private static ExecutorService executorSize;
-
         //这也是一个定长的线程池，但是可以支持周期性的任务,以下例子表示延迟一秒过后，每两秒执行一次。
         private static ScheduledExecutorService scheduledThreadPool;
-
-        //判断当前获取实例是否进行创建新的线程池对象
-        private volatile static boolean isNew = false;
 
         /**
          * 获取不同类型的线程池
          *
-         * @param threadSize
+         * @param threadSize 获取线程池内线程数量
+         * @param isNews     是否获取一个新的线程池
          * @return
          */
         public synchronized static ExecutorService getInstance(int threadSize, boolean... isNews) {
-            if (isNews != null && isNews.length >= 1) isNew = isNews[0];
             if (threadSize <= 0) {
-                if (isNew) return Executors.newCachedThreadPool();
+                if (isNews != null && isNews.length >= 1)
+                    if (isNews[0]) return Executors.newCachedThreadPool();
+                if (executor == null) executor = Executors.newCachedThreadPool();//默认使用这种
                 return executor;
             } else if (threadSize == 1) {
-                if (isNew) return Executors.newSingleThreadExecutor();
+                if (isNews != null && isNews.length >= 1)
+                    if (isNews[0]) return Executors.newSingleThreadExecutor();
+                if (executorSingle == null) executorSingle = Executors.newSingleThreadExecutor();
                 return executorSingle;
             } else {
-                if (isNew) return Executors.newFixedThreadPool(threadSize);
+                if (isNews != null && isNews.length >= 1)
+                    if (isNews[0]) return Executors.newFixedThreadPool(threadSize);
                 if (executorSize == null) executorSize = Executors.newFixedThreadPool(threadSize);
                 return executorSize;
             }
@@ -26744,7 +26812,7 @@ public class GT {
          * @param corePoolSize
          * @return
          */
-        public static ScheduledExecutorService getScheduledInstance(int corePoolSize) {
+        public static ScheduledExecutorService getCirculationInstance(int corePoolSize) {
             if (scheduledThreadPool == null)
                 scheduledThreadPool = Executors.newScheduledThreadPool(corePoolSize);
             return null;
@@ -26803,6 +26871,482 @@ public class GT {
             }
         },1, 2, TimeUnit.SECONDS);*/
 
+
+    }
+
+    /**
+     * 用于异步操作的一个框架
+     * 使用教程:https://blog.csdn.net/qq_39799899/article/details/123871288?spm=1001.2014.3001.5501
+     */
+    public static class Observable {
+
+        //是否执行完毕
+        private static volatile Observable observable;
+        //非单例参数
+        private static volatile AtomicBoolean isSuccess;
+        private static volatile ExecutorService instance;
+        private static volatile Object obj;
+        private static int sleepTime = 10;//默认延迟等待时间
+
+        /**
+         * 设置UI线程等待延时间隔
+         *
+         * @param sleepTime
+         */
+        public static void setSleepTime(int sleepTime) {
+            Observable.sleepTime = sleepTime;
+        }
+
+        /**
+         * 手动设置本次UI线程延时通过 ()
+         *
+         * @param
+         */
+        public static void setIsSuccess(boolean isSuccess) {
+            Observable.isSuccess.set(isSuccess);
+        }
+
+        private Observable() {
+        }//单例
+
+        /**
+         * 获取实例
+         *
+         * @param isCache 是否使用缓存(大多数情况下是不使用缓存的)
+         * @return
+         */
+        public static Observable getDefault(boolean... isCache) {
+            if (observable == null) {
+                synchronized (Observable.class) {
+                    if (observable == null) {
+                        observable = new Observable();
+                    }
+                }
+            }
+            //是否使用单例,默认不使用缓存
+            if (isCache.length >= 1) {
+                if (isCache[0]) {//如果是使用缓存
+                    if (instance == null) instance = GT.Thread.getInstance(1, true);
+                    if (instance == null) isSuccess = new AtomicBoolean(false);
+                } else {//不使用缓存
+                    instance = GT.Thread.getInstance(1, true);
+                    isSuccess = new AtomicBoolean(false);
+                }
+            } else {//不使用缓存的
+                instance = GT.Thread.getInstance(1, true);
+                isSuccess = new AtomicBoolean(false);
+            }
+            return observable;
+        }
+
+        /**
+         * 停止当前异步处理
+         *
+         * @param isCompleted 是否强制执行(默认是强制执行)
+         */
+        public static void stop(boolean... isCompleted) {
+            if (instance != null && !instance.isShutdown()) {
+                if (isCompleted.length >= 1 && !isCompleted[0]) {
+                    instance.shutdown();
+                } else {
+                    instance.shutdownNow();
+
+                }
+            }
+        }
+
+        //释放资源
+        public static void close() {
+            Observable.isSuccess = null;
+            Observable.obj = null;
+            Observable.instance = null;
+            Observable.observable = null;
+        }
+
+        /**
+         * 执行:无参数 无返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunJava<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.getInstance(0).execute(runnable::run);
+                    } else {
+                        isSuccess.set(false);
+                        instance.execute(() -> {
+                            GT.Thread.getInstance(0).execute(() -> {
+                                isSuccess.set(true);
+                                runnable.run();
+                            });
+
+                            while (!isSuccess.get()) {
+                                GT.Thread.sleep(sleepTime);
+                            }
+                        });
+                    }
+                } else {
+                    instance.execute(runnable::run);
+                }
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        /**
+         * 执行:有参数 无返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunJavaV<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.getInstance(0).execute(() -> runnable.run(returnT()));
+                    } else {
+                        isSuccess.set(false);
+                        instance.execute(() -> {
+                            GT.Thread.getInstance(0).execute(() -> {
+                                isSuccess.set(true);
+                                runnable.run(returnT());
+                            });
+
+                            while (!isSuccess.get()) {
+                                GT.Thread.sleep(sleepTime);
+                            }
+
+                        });
+                    }
+                } else {
+                    instance.execute(() -> {
+                        runnable.run(returnT());
+                    });
+                }
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        /**
+         * 执行:无参数 有返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunJavaR<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.getInstance(0).execute(() -> obj = runnable.run());
+                    } else {
+                        isSuccess.set(false);
+                        instance.execute(() -> {
+                            GT.Thread.getInstance(0).execute(() -> {
+                                isSuccess.set(true);
+                                obj = runnable.run();
+                            });
+
+                            while (!isSuccess.get()) {
+                                GT.Thread.sleep(sleepTime);
+                            }
+
+                        });
+                    }
+                } else {
+                    instance.execute(() -> {
+                        obj = runnable.run();
+                    });
+                }
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        /**
+         * 执行:有参数 有返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunJavaVR<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.getInstance(0).execute(() -> obj = runnable.run(returnT()));
+                    } else {
+                        isSuccess.set(false);
+                        instance.execute(() -> {
+                            GT.Thread.getInstance(0).execute(() -> {
+                                isSuccess.set(true);
+                                obj = runnable.run(returnT());
+                            });
+
+                            while (!isSuccess.get()) {
+                                GT.Thread.sleep(sleepTime);
+                            }
+
+                        });
+                    }
+                } else {
+                    instance.execute(() -> {
+                        obj = runnable.run(returnT());
+                    });
+                }
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        /**
+         * 执行:无参数 无返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序 (默认为 true)
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunAndroid<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.runAndroid(() -> runnable.run());
+                        return observable;
+                    }
+                }
+
+                instance.execute(() -> {
+                    isSuccess.set(false);
+                    GT.Thread.getUiThread().post(() -> {
+                        runnable.run();
+                        isSuccess.set(true);
+                    });
+                    while (!isSuccess.get()) {
+                        GT.Thread.sleep(sleepTime);
+                    }
+                });
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        /**
+         * 执行:有参数 无返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序 (默认为 true)
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunAndroidV<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.runAndroid(() -> runnable.run(returnT()));
+                        return observable;
+                    }
+                }
+
+                instance.execute(() -> {
+                    isSuccess.set(false);
+                    GT.Thread.getUiThread().post(() -> {
+                        runnable.run(returnT());
+                        isSuccess.set(true);
+                    });
+                    while (!isSuccess.get()) {
+                        GT.Thread.sleep(sleepTime);
+                    }
+                });
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        /**
+         * 执行:无参数 有返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序 (默认为 true)
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunAndroidR<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.runAndroid(() -> obj = runnable.run());
+                        return observable;
+                    }
+                }
+
+                instance.execute(() -> {
+                    isSuccess.set(false);
+                    GT.Thread.getUiThread().post(() -> {
+                        obj = runnable.run();
+                        isSuccess.set(true);
+                    });
+                    while (!isSuccess.get()) {
+                        GT.Thread.sleep(sleepTime);
+                    }
+                });
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        /**
+         * 执行:有参数 有返回值 的事件
+         *
+         * @param runnable
+         * @param isWaitFinish 跳过该事件的耗时后,是否保证该事件顺序 (默认为 true)
+         * @param <T>          事件数据类型
+         * @return
+         */
+        public <T> Observable execute(Observable.RunAndroidVR<T> runnable, boolean... isWaitFinish) {
+            try {
+                if (isWaitFinish.length >= 1) {
+                    if (!isWaitFinish[0]) {
+                        GT.Thread.runAndroid(() -> obj = runnable.run(returnT()));
+                        return observable;
+                    }
+                }
+
+                instance.execute(() -> {
+                    isSuccess.set(false);
+                    GT.Thread.getUiThread().post(() -> {
+                        obj = runnable.run(returnT());
+                        isSuccess.set(true);
+                    });
+                    while (!isSuccess.get()) {
+                        GT.Thread.sleep(sleepTime);
+                    }
+                });
+            } catch (Exception e) {
+
+            }
+            return observable;
+        }
+
+        public abstract static class Runnable<T> {
+
+            public T getData() {
+                return (T) obj;
+            }
+
+            public void setData(Object t) {
+                obj = t;
+            }
+
+            public void stop(boolean... isCompleted) {
+                Observable.stop(isCompleted);
+            }
+
+            public Observable execute(Observable.RunJava<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            public Observable execute(Observable.RunJavaV<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            public Observable execute(Observable.RunJavaR<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            public Observable execute(Observable.RunJavaVR<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            public Observable execute(Observable.RunAndroid<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            public Observable execute(Observable.RunAndroidV<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            public Observable execute(Observable.RunAndroidR<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            public Observable execute(Observable.RunAndroidVR<T> runnable, boolean... isWaitFinish) {
+                observable.execute(runnable, isWaitFinish);
+                return observable;
+            }
+
+            //释放资源
+            public void close() {
+                Observable.close();
+            }
+
+        }
+
+        public static abstract class RunJava<T> extends Observable.Runnable<T> {
+            public abstract void run();
+        }
+
+        public static abstract class RunJavaV<T> extends Observable.Runnable<T> {
+            public abstract void run(T t);
+        }
+
+        public static abstract class RunJavaR<T> extends Observable.Runnable<T> {
+            public abstract T run();
+        }
+
+        public static abstract class RunJavaVR<T> extends Observable.Runnable<T> {
+            public abstract T run(T t);
+        }
+
+        public static abstract class RunAndroid<T> extends Observable.Runnable<T> {
+            public abstract void run();
+        }
+
+        public static abstract class RunAndroidV<T> extends Observable.Runnable<T> {
+            public abstract void run(T t);
+        }
+
+        public static abstract class RunAndroidR<T> extends Observable.Runnable<T> {
+            public abstract T run();
+        }
+
+        public static abstract class RunAndroidVR<T> extends Observable.Runnable<T> {
+            public abstract T run(T t);
+        }
+
+        //设置值
+        private <T> T returnT() {
+            T t = null;
+            try {
+                t = (T) Observable.obj;
+            } catch (Exception e) {
+
+            }
+            return t;
+        }
 
     }
 
